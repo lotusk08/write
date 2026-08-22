@@ -1,0 +1,145 @@
+# write
+
+A quiet, Tiptap-based writing app for [stevehoang.com](https://stevehoang.com):
+draft in the browser, fold sections away while you work, export to Markdown or
+Word, and publish straight to the blog repository — text and images in a single
+commit.
+
+It runs entirely on Cloudflare: the SPA is served from Workers static assets and
+a small Worker handles publishing.
+
+```
+apps/write
+├── src/          the editor app (React + Tiptap 3)
+├── worker/       the Cloudflare Worker: /api/config, /api/publish, /api/posts
+├── shared/       code both sides use (GitHub commit flow, types, base64)
+└── wrangler.jsonc
+```
+
+## What it does
+
+- **Collapsible sections.** Type `>>> ` (or `::: `) at the start of a line, or
+  press `⌘⇧D`. Each section folds with the caret in the margin, and the toolbar
+  has *Collapse all* / *Expand all*. They export as
+  `<details markdown="1">…</details>`, which Jekyll renders as a real disclosure
+  widget.
+- **Drafts.** Everything is stored locally in IndexedDB and autosaves ~600 ms
+  after you stop typing. Drafts are searchable, duplicable and deletable; images
+  are kept as blobs so drafts stay small and survive reloads.
+- **Front matter.** Title, description, slug, date, author, categories, tags,
+  cover image, and the `pin` / `toc` / `math` / `mermaid` switches the blog
+  already uses. It is written the way the blog's own `update-lqip.js` would
+  write it — block sequences, no unnecessary quoting, empty fields omitted — so
+  a site build never rewrites a published post's front matter.
+- **Callouts.** Quotes can carry the blog's five note styles, exported as
+  `{: .note-info }` and friends. Body headings start at H2, since the title
+  lives in front matter.
+- **Export.** Markdown (with front matter), Word `.docx` (images embedded), a
+  self-contained HTML file, or Markdown straight to the clipboard.
+- **Publish.** Commits `_posts/YYYY-MM-DD-slug.md` — or `_drafts/…` — plus every
+  image, in one commit. Images are re-encoded to WebP and renamed to the blog's
+  flat convention (`assets/img/post/<slug>.webp`, `<slug>-1.webp`, …), and the
+  Markdown is rewritten to point at those paths. Optionally opens a pull request
+  on a `post/<slug>` branch instead of committing to `main`.
+
+Drafts sit as vertical tabs along the left edge, Obsidian-style: the draft you
+are editing spells out its title, and the rest tuck behind each other like
+sheets in a deck, showing only their edges. Reaching for the rail fans them
+back out to full size. The formatting toolbar is docked inside the bottom of the editor
+frame, and the menu at its right end holds front matter, settings, export and
+publish — so nothing sits above the page.
+
+Shortcuts: `⌘S` save now · `⌘⇧N` new draft · `⌘\` open/close the menu ·
+`⌘⇧C` copy Markdown · plus the usual Markdown input rules (`#`, `-`, `1.`, `>`,
+` ``` `, `---`).
+
+## Local development
+
+```bash
+cd apps/write
+npm install
+npm run dev          # http://localhost:5173 — Vite plus the Worker in workerd
+```
+
+To exercise server-side publishing locally, copy `.dev.vars.example` to
+`.dev.vars` and fill it in. `.dev.vars` is git-ignored.
+
+```bash
+npm run typecheck    # tsc across app, worker and shared
+npm run build        # dist/client (SPA) + dist/write (Worker)
+```
+
+## Deploying to Cloudflare
+
+```bash
+npx wrangler login
+npm run deploy       # builds, then uploads the Worker and the static assets
+```
+
+That publishes to `https://write.<your-subdomain>.workers.dev`. To use your own
+hostname, add a route to `wrangler.jsonc`:
+
+```jsonc
+"routes": [{ "pattern": "write.stevehoang.com", "custom_domain": true }]
+```
+
+### Choose how the GitHub token is held
+
+**Server-side (recommended).** The token lives as a Worker secret and never
+reaches the browser; the app just sends a password.
+
+```bash
+npx wrangler secret put GITHUB_TOKEN     # fine-grained PAT, see below
+npx wrangler secret put WRITE_PASSWORD   # a password you type into Settings
+```
+
+Both are required together: with a token but no password, the Worker refuses to
+publish rather than leave an open write endpoint on the internet, and says so in
+the app.
+
+**Browser-side.** Deploy with no secrets at all and paste a fine-grained token
+into Settings; it is kept in that browser's local storage and talks to
+`api.github.com` directly. Fine for a private machine, and it is also what makes
+the app work on any static host (including Cloudflare Pages via
+`npx wrangler pages deploy dist/client`).
+
+The token needs **Contents: Read & write** on `lotusk08/stevehoang.com` only.
+
+### Continuous deploys
+
+Connect the repository in the Cloudflare dashboard (Workers → Builds) with root
+directory `apps/write`, build command `npm run build`, deploy command
+`npx wrangler deploy`.
+
+### Configuration
+
+Non-secret settings live in `wrangler.jsonc` under `vars`, and the app reads
+them from `/api/config` at boot:
+
+| Var | Default |
+| --- | --- |
+| `BLOG_REPO` | `lotusk08/stevehoang.com` |
+| `BLOG_BRANCH` | `main` |
+| `POSTS_DIR` | `_posts` |
+| `DRAFTS_DIR` | `_drafts` |
+| `IMAGES_DIR` | `assets/img/post` |
+
+The Worker will only ever write inside those three directories, and only to
+`BLOG_REPO` — a request cannot point it somewhere else.
+
+## Notes
+
+- The interface is deliberately neutral — monochrome greys, hairline borders,
+  one violet accent, icon-only toolbar — and rides on the system sans (SF on
+  Apple devices, Inter where installed), so no web fonts are downloaded.
+- Front matter, settings and draft management share one drawer rather than a
+  sidebar, a top bar and two dialogs; only the publish confirmation is still a
+  modal. The drawer's Drafts tab is for searching and housekeeping — the rail
+  handles switching.
+- Publishing through the GitHub API bypasses the blog's local pre-commit hook,
+  so images are converted to WebP here instead — which also keeps them eligible
+  for the LQIP pass, whose regex only matches `.webp` under `assets/img`.
+  Placeholders and intrinsic sizes are still filled in by the blog's own
+  `npm run build`.
+- The app is a standalone npm project inside this repository; it does not join
+  the BlockNote pnpm workspace and has no dependency on the packages around it.

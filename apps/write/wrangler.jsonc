@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "write",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-06-01",
+  "assets": {
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "observability": {
+    "enabled": true
+  },
+  "vars": {
+    // Public defaults. Override per-environment in the Cloudflare dashboard.
+    "BLOG_REPO": "lotusk08/stevehoang.com",
+    "BLOG_BRANCH": "main",
+    "POSTS_DIR": "_posts",
+    "DRAFTS_DIR": "_drafts",
+    "IMAGES_DIR": "assets/img/post"
+  }
+  // Secrets (never put these in this file — use `wrangler secret put NAME`):
+  //   GITHUB_TOKEN  – fine-grained PAT with Contents: read & write on the blog repo
+  //   WRITE_PASSWORD – optional shared password gating the publish API
+}
