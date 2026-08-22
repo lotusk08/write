@@ -38,8 +38,9 @@ apps/write
   on a `post/<slug>` branch instead of committing to `main`.
 
 Drafts sit as vertical tabs along the left edge, Obsidian-style: the draft you
-are editing spells out its title, the rest collapse into a stack of layers
-behind it. The formatting toolbar is docked inside the bottom of the editor
+are editing spells out its title, and the rest tuck behind each other like
+sheets in a deck, showing only their edges. Reaching for the rail fans them
+back out to full size. The formatting toolbar is docked inside the bottom of the editor
 frame, and the menu at its right end holds front matter, settings, export and
 publish — so nothing sits above the page.
 

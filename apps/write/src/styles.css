@@ -294,8 +294,7 @@ textarea {
   min-height: 0;
   flex-direction: column;
   align-items: center;
-  gap: 2px;
-  padding-bottom: 8px;
+  padding-bottom: 10px;
   overflow-y: auto;
   scrollbar-width: none;
 }
@@ -305,41 +304,65 @@ textarea {
 }
 
 .rail-tab {
+  position: relative;
+  z-index: var(--z, 1);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 9px;
   padding: 10px 5px 12px;
-  border: 1px solid transparent;
+  border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: none;
+  background: var(--panel);
   color: var(--faint);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+  transition: transform 130ms ease, margin-top 150ms ease, border-color 130ms ease,
+    background 130ms ease, color 130ms ease;
 }
 
-/* The draft being edited: the only one that spells out its title. */
+/* The draft being edited sits on top of the deck, and is the only one that
+   spells out its title. */
 .rail-tab.is-open {
-  border-color: var(--border);
-  background: var(--panel);
+  z-index: 900;
+  margin: 7px 0;
   color: var(--text);
   box-shadow: var(--shadow-card);
 }
 
-/* Everything else collapses into a stack of layers behind it. */
+/* The rest are sheets in that deck: at rest each tucks under the one above it
+   so only its edge shows. */
 .rail-tab.is-layer {
   width: 30px;
   height: 26px;
   justify-content: center;
   padding: 0;
-  border-color: var(--border);
-  background: var(--panel);
+  margin-top: -16px;
+}
+
+/* Reaching for the rail fans the deck open, so every sheet is a full target
+   rather than a 10px sliver. */
+.rail-tabs:hover .rail-tab.is-layer {
+  margin-top: 3px;
+}
+
+/* Keyboard focus fans it too — but `:focus-visible`, so the deck restacks
+   after a mouse click instead of staying open. Kept in its own rule so older
+   parsers that drop `:has()` still get the hover behaviour. */
+.rail-tabs:has(:focus-visible) .rail-tab.is-layer {
+  margin-top: 3px;
+}
+
+.rail-tabs .rail-tab:first-child,
+.rail-tabs .rail-tab.is-open + .rail-tab.is-layer {
+  margin-top: 0;
 }
 
 .rail-tab.is-layer:hover {
+  z-index: 901;
   border-color: var(--border-strong);
   background: var(--hover);
   color: var(--text);
+  transform: translateX(3px);
 }
 
 .rail-tab.is-layer .dot {
