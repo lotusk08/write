@@ -163,12 +163,13 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
       }
       case "blockquote": {
         const inner = blocks(node.content, options).join("\n\n");
-        out.push(
-          inner
-            .split("\n")
-            .map((line) => (line ? `> ${line}` : ">"))
-            .join("\n"),
-        );
+        const quoted = inner
+          .split("\n")
+          .map((line) => (line ? `> ${line}` : ">"))
+          .join("\n");
+        // Kramdown attaches the class to the block on the following line.
+        const note = node.attrs?.note ? `\n{: .note-${String(node.attrs.note)} }` : "";
+        out.push(quoted + note);
         break;
       }
       case "bulletList":
@@ -235,35 +236,70 @@ export function docToPlainText(doc: JSONContent): string {
   return parts.join(" ");
 }
 
+/**
+ * YAML 1.1 timestamps, as js-yaml recognises them. A plain scalar matching
+ * these would load back as a Date instead of a string, so it has to be quoted.
+ */
+const YAML_TIMESTAMP =
+  /^\d{4}-\d{2}-\d{2}$|^\d{4}-\d{1,2}-\d{1,2}(?:[Tt]|[ \t]+)\d{1,2}:\d{2}:\d{2}(?:\.\d*)?(?:[ \t]*(?:Z|[-+]\d{1,2}(?::\d{2})?))?$/;
+
+const YAML_NUMBER = /^[-+]?(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][-+]?\d+)?$|^[-+]?0[xob][0-9a-fA-F_]+$|^[-+]?\.(?:inf|Inf|INF)$|^\.(?:nan|NaN|NAN)$/;
+
+const YAML_BOOL_OR_NULL = /^(?:y|Y|yes|Yes|YES|n|N|no|No|NO|true|True|TRUE|false|False|FALSE|on|On|ON|off|Off|OFF|null|Null|NULL|~)$/;
+
+/**
+ * Quotes only what YAML actually requires, matching js-yaml's plain-scalar
+ * rules. The blog's `update-lqip.js` re-serialises front matter with js-yaml
+ * on every build, so anything we quote unnecessarily comes back unquoted as a
+ * spurious diff.
+ */
 function yamlString(value: string): string {
-  if (value === "") {
-    return "";
+  const text = value.replace(/\s*\n\s*/g, " ").trim();
+  const plainIsSafe =
+    text !== "" &&
+    !/^[-?:,[\]{}#&*!|>'"%@`]/.test(text) &&
+    // A `#` only opens a comment after whitespace, so "C# and F#" is fine.
+    !/:\s|\s#/.test(text) &&
+    !/[\t\n]/.test(text) &&
+    !text.endsWith(":") &&
+    !YAML_TIMESTAMP.test(text) &&
+    !YAML_NUMBER.test(text) &&
+    !YAML_BOOL_OR_NULL.test(text);
+  return plainIsSafe ? text : `"${text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+}
+
+/** Block sequences — the shape js-yaml writes, so builds leave them alone. */
+function yamlList(key: string, values: string[]): string[] {
+  if (values.length === 0) {
+    return [`${key}: []`];
   }
-  const needsQuotes = /^[\s>|&*!%@`{}[\]#-]|[:#]\s|["']|\n|:$/.test(value);
-  return needsQuotes ? `"${value.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"` : value;
+  return [`${key}:`, ...values.map((value) => `  - ${yamlString(value)}`)];
 }
 
-function yamlList(values: string[]): string {
-  return `[${values.map((value) => yamlString(value)).join(", ")}]`;
-}
-
-/** Builds the Jekyll front matter block the blog expects. */
+/**
+ * Builds the Jekyll front matter block the blog expects. Empty optional fields
+ * are left out rather than written blank: the blog's LQIP pass parses the YAML,
+ * and a bare `description:` would come back as the literal string `null`.
+ */
 export function buildFrontMatter(meta: PostMeta): string {
-  const lines = [
-    "---",
-    `title: ${yamlString(meta.title)}`,
-    `description: ${yamlString(meta.description)}`,
-    `author: ${yamlString(meta.author)}`,
-    `date: ${meta.date}`,
-    `categories: ${yamlList(meta.categories)}`,
-    `tags: ${yamlList(meta.tags)}`,
+  const lines = ["---", `title: ${yamlString(meta.title)}`];
+  if (meta.description.trim()) {
+    lines.push(`description: ${yamlString(meta.description)}`);
+  }
+  lines.push(`author: ${yamlString(meta.author)}`, `date: ${yamlString(meta.date)}`);
+  lines.push(...yamlList("categories", meta.categories));
+  lines.push(...yamlList("tags", meta.tags));
+  lines.push(
     `pin: ${meta.pin}`,
     `toc: ${meta.toc}`,
     `math: ${meta.math}`,
     `mermaid: ${meta.mermaid}`,
-  ];
+  );
   if (meta.cover?.path) {
-    lines.push("image:", `  path: ${yamlString(meta.cover.path)}`, `  alt: ${yamlString(meta.cover.alt)}`);
+    lines.push("image:", `  path: ${yamlString(meta.cover.path)}`);
+    if (meta.cover.alt.trim()) {
+      lines.push(`  alt: ${yamlString(meta.cover.alt)}`);
+    }
   }
   lines.push("---");
   return lines.join("\n");

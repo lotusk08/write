@@ -2,7 +2,9 @@ import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
 import type { ReactNode } from "react";
 import { useRef } from "react";
+import type { NoteType } from "../editor/extensions/noteQuote.ts";
 import { Icon, type IconName } from "./Icons.tsx";
+import { NoteMenu } from "./NoteMenu.tsx";
 
 interface ToolbarProps {
   editor: Editor;
@@ -45,13 +47,14 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
       code: instance.isActive("code"),
       highlight: instance.isActive("highlight"),
       link: instance.isActive("link"),
-      h1: instance.isActive("heading", { level: 1 }),
       h2: instance.isActive("heading", { level: 2 }),
       h3: instance.isActive("heading", { level: 3 }),
+      h4: instance.isActive("heading", { level: 4 }),
       bullet: instance.isActive("bulletList"),
       ordered: instance.isActive("orderedList"),
       task: instance.isActive("taskList"),
       quote: instance.isActive("blockquote"),
+      note: (instance.getAttributes("blockquote").note ?? null) as NoteType | null,
       codeBlock: instance.isActive("codeBlock"),
       collapsible: instance.isActive("collapsible"),
     }),
@@ -73,12 +76,14 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
   return (
     <div className="toolbar" role="toolbar" aria-label="Formatting">
       <div className="tool-group">
-        {([1, 2, 3] as const).map((level) => (
+        {/* The post title is front matter, so the body starts at H2 — the
+            level the blog's own posts and table of contents use. */}
+        {([2, 3, 4] as const).map((level) => (
           <Tool
             key={level}
             label={`H${level}`}
             title={`Heading ${level}`}
-            active={state[`h${level}` as "h1" | "h2" | "h3"]}
+            active={state[`h${level}` as "h2" | "h3" | "h4"]}
             onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
           />
         ))}
@@ -101,7 +106,7 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
         <Tool icon="bulletList" title="Bullet list" active={state.bullet} onClick={() => editor.chain().focus().toggleBulletList().run()} />
         <Tool icon="orderedList" title="Numbered list" active={state.ordered} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
         <Tool icon="taskList" title="Task list" active={state.task} onClick={() => editor.chain().focus().toggleTaskList().run()} />
-        <Tool icon="quote" title="Quote" active={state.quote} onClick={() => editor.chain().focus().toggleBlockquote().run()} />
+        <NoteMenu editor={editor} active={state.quote} note={state.note} />
         <Tool icon="codeBlock" title="Code block" active={state.codeBlock} onClick={() => editor.chain().focus().toggleCodeBlock().run()} />
       </div>
 

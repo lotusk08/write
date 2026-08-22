@@ -5,6 +5,7 @@ import { TableKit } from "@tiptap/extension-table";
 import Typography from "@tiptap/extension-typography";
 import StarterKit from "@tiptap/starter-kit";
 import { collapsibleExtensions } from "./extensions/collapsible.ts";
+import { NoteQuote } from "./extensions/noteQuote.ts";
 import { LocalImage } from "./extensions/localImage.ts";
 
 /** The editor's whole feature set, in one place. */
@@ -13,7 +14,10 @@ export const editorExtensions = [
     link: { openOnClick: false, autolink: true, defaultProtocol: "https" },
     heading: { levels: [1, 2, 3, 4] },
     codeBlock: { languageClassPrefix: "language-" },
+    // Replaced by NoteQuote, which adds the blog's callout styles.
+    blockquote: false,
   }),
+  NoteQuote,
   TaskList,
   TaskItem.configure({ nested: true }),
   TableKit.configure({ table: { resizable: true } }),

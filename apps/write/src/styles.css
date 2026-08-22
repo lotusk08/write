@@ -802,6 +802,59 @@ input[type="file"].input::file-selector-button:hover {
   color: var(--muted);
 }
 
+/* Callouts, tinted with the blog's own note colours. */
+.ProseMirror blockquote[data-note] {
+  padding: 0.6em 1em;
+  border-left-width: 3px;
+  border-radius: 0 var(--radius-sm) var(--radius-sm) 0;
+  background: var(--note-bg);
+  border-left-color: var(--note-color);
+  color: var(--text);
+}
+
+[data-note="tip"] {
+  --note-color: #238636;
+  --note-bg: rgb(35 134 54 / 7%);
+}
+
+[data-note="info"] {
+  --note-color: #1f6feb;
+  --note-bg: rgb(31 111 235 / 7%);
+}
+
+[data-note="important"] {
+  --note-color: #8957e5;
+  --note-bg: rgb(137 87 229 / 7%);
+}
+
+[data-note="warning"] {
+  --note-color: #ef9c03;
+  --note-bg: rgb(239 156 3 / 8%);
+}
+
+[data-note="danger"] {
+  --note-color: #da3633;
+  --note-bg: rgb(218 54 51 / 7%);
+}
+
+.swatch-label {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.swatch {
+  width: 3px;
+  height: 14px;
+  border-radius: 2px;
+  background: var(--note-color, var(--border-strong));
+}
+
+.menu .check {
+  color: var(--accent);
+  font-size: 11px;
+}
+
 .ProseMirror code {
   padding: 0.15em 0.35em;
   border: 1px solid var(--border);
@@ -1092,6 +1145,7 @@ input[type="file"].input::file-selector-button:hover {
   z-index: 30;
   top: calc(100% + 6px);
   right: 0;
+  left: auto;
   min-width: 200px;
   padding: 5px;
   border: 1px solid var(--border);
@@ -1112,6 +1166,14 @@ input[type="file"].input::file-selector-button:hover {
   cursor: pointer;
   font-size: 13px;
   text-align: left;
+}
+
+/* Portalled above its anchor, for menus inside the scrolling toolbar. */
+.menu.floating {
+  position: fixed;
+  right: auto;
+  min-width: 168px;
+  transform: translateY(-100%);
 }
 
 .menu button:hover {

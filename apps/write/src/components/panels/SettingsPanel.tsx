@@ -140,6 +140,11 @@ export function SettingsPanel({ settings, config, onChange }: SettingsPanelProps
           />
           Convert uploads to WebP before publishing
         </label>
+        <p className="hint">
+          The blog only generates LQIP placeholders and intrinsic sizes for
+          <code> .webp</code> images, so leaving this off means published images
+          load without either.
+        </p>
       </div>
 
       <div className="field">
