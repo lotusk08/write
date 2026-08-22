@@ -1,6 +1,7 @@
 import type { Draft } from "../lib/db.ts";
 import { draftLabel } from "../lib/draft.ts";
 import { relativeTime } from "../lib/text.ts";
+import { Icon } from "./Icons.tsx";
 
 interface SidebarProps {
   drafts: Draft[];
@@ -32,11 +33,9 @@ export function Sidebar({
   return (
     <aside className="sidebar">
       <div className="sidebar-head">
-        <div className="brand">
-          write<span>.</span>
-        </div>
-        <button type="button" className="btn icon" title="New draft — ⌘⇧N" onClick={onNew}>
-          ＋
+        <div className="brand">write</div>
+        <button type="button" className="btn icon ghost" title="New draft — ⌘⇧N" aria-label="New draft" onClick={onNew}>
+          <Icon name="plus" />
         </button>
       </div>
 
@@ -55,25 +54,25 @@ export function Sidebar({
           <p className="empty">No drafts yet.</p>
         ) : (
           drafts.map((draft) => (
-            <div key={draft.id} style={{ position: "relative" }}>
+            <div key={draft.id} className="draft-row">
               <button
                 type="button"
                 className="draft-item"
                 aria-current={draft.id === currentId}
                 onClick={() => onSelect(draft.id)}
               >
-                <div className="draft-item-title">{draftLabel(draft)}</div>
-                <div className="draft-item-meta">
+                <span className="draft-item-title">{draftLabel(draft)}</span>
+                <span className="draft-item-meta">
                   {draft.publishedPath ? <span className="dot" title={`Published to ${draft.publishedPath}`} /> : null}
-                  <span>{relativeTime(draft.updatedAt)}</span>
-                </div>
+                  {relativeTime(draft.updatedAt)}
+                </span>
               </button>
               {draft.id === currentId ? (
-                <div style={{ display: "flex", gap: 4, padding: "2px 10px 8px" }}>
-                  <button type="button" className="btn ghost" onClick={() => onDuplicate(draft.id)}>
+                <div className="draft-actions">
+                  <button type="button" className="btn ghost tiny" onClick={() => onDuplicate(draft.id)}>
                     Duplicate
                   </button>
-                  <button type="button" className="btn ghost danger" onClick={() => onDelete(draft.id)}>
+                  <button type="button" className="btn ghost tiny danger" onClick={() => onDelete(draft.id)}>
                     Delete
                   </button>
                 </div>
@@ -85,16 +84,17 @@ export function Sidebar({
 
       <div className="sidebar-foot">
         <button type="button" className="btn ghost" onClick={onOpenSettings}>
+          <Icon name="settings" />
           Settings
         </button>
         <button
           type="button"
-          className="btn ghost"
-          title="Toggle theme"
+          className="btn icon ghost"
+          title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
+          aria-label="Toggle theme"
           onClick={onToggleTheme}
-          style={{ marginLeft: "auto" }}
         >
-          {theme === "dark" ? "☾" : "☀"}
+          <Icon name={theme === "dark" ? "sun" : "moon"} />
         </button>
       </div>
     </aside>

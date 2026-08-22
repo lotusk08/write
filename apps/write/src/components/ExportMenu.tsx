@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { Icon } from "./Icons.tsx";
 
 interface ExportMenuProps {
   onExport: (format: "markdown" | "docx" | "html" | "copy") => void;
@@ -30,7 +31,8 @@ export function ExportMenu({ onExport, busy }: ExportMenuProps) {
   return (
     <div className="menu-wrap" ref={wrap}>
       <button type="button" className="btn" disabled={busy} onClick={() => setOpen((value) => !value)}>
-        {busy ? "Exporting…" : "Export"} ▾
+        {busy ? "Exporting…" : "Export"}
+        <Icon name="chevronDown" size={14} />
       </button>
       {open ? (
         <div className="menu" role="menu">

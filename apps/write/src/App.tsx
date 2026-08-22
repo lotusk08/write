@@ -3,7 +3,7 @@ import { BubbleMenu } from "@tiptap/react/menus";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppConfig, PostMeta, PublishResult } from "../shared/types.ts";
 import { ExportMenu } from "./components/ExportMenu.tsx";
-import { LinkIcon } from "./components/Icons.tsx";
+import { Icon } from "./components/Icons.tsx";
 import { MetaPanel } from "./components/MetaPanel.tsx";
 import { PublishDialog } from "./components/PublishDialog.tsx";
 import { SettingsDialog } from "./components/SettingsDialog.tsx";
@@ -36,6 +36,7 @@ export default function App() {
   const [toast, setToast] = useState<Toast>(null);
   const [exporting, setExporting] = useState(false);
   const [ready, setReady] = useState(false);
+  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
 
   const draftsRef = useRef<Draft[]>([]);
   const currentIdRef = useRef<string | null>(null);
@@ -147,6 +148,7 @@ export default function App() {
     const apply = () => {
       const dark = settings.theme === "dark" || (settings.theme === "system" && media.matches);
       document.documentElement.dataset.theme = dark ? "dark" : "light";
+      setResolvedTheme(dark ? "dark" : "light");
     };
     apply();
     media.addEventListener("change", apply);
@@ -371,10 +373,8 @@ export default function App() {
           onDuplicate={(id) => void duplicateDraft(id)}
           onDelete={(id) => void deleteDraft(id)}
           onOpenSettings={() => setDialog("settings")}
-          onToggleTheme={() =>
-            updateSettings({ theme: document.documentElement.dataset.theme === "dark" ? "light" : "dark" })
-          }
-          theme={document.documentElement.dataset.theme ?? "light"}
+          onToggleTheme={() => updateSettings({ theme: resolvedTheme === "dark" ? "light" : "dark" })}
+          theme={resolvedTheme}
         />
       ) : null}
 
@@ -384,9 +384,10 @@ export default function App() {
             type="button"
             className="btn icon ghost"
             title="Toggle drafts — ⌘\"
+            aria-label="Toggle drafts"
             onClick={() => updateSettings({ sidebarOpen: !settings.sidebarOpen })}
           >
-            ☰
+            <Icon name="panel" />
           </button>
           <div className="topbar-title">{draftLabel(current)}</div>
           <div className="topbar-tools">
@@ -408,26 +409,37 @@ export default function App() {
             </button>
             <button
               type="button"
-              className="btn icon ghost optional"
+              className={settings.focusMode ? "btn icon ghost optional is-on" : "btn icon ghost optional"}
               title="Focus mode"
+              aria-label="Focus mode"
+              aria-pressed={settings.focusMode}
               onClick={() =>
                 updateSettings({ focusMode: !settings.focusMode, sidebarOpen: settings.focusMode })
               }
             >
-              {settings.focusMode ? "◧" : "◨"}
+              <Icon name="focus" />
             </button>
           </div>
         </header>
 
-        {editor && !settings.focusMode ? (
-          <Toolbar
-            editor={editor}
-            onToggleAllCollapsibles={(open) => editor.commands.setAllCollapsiblesOpen(open)}
-          />
-        ) : null}
-
         <div className="editor-scroll">
           <div className="editor-page">
+            <div className="editor-card">
+              {editor && !settings.focusMode ? (
+                <Toolbar
+                  editor={editor}
+                  onToggleAllCollapsibles={(open) => editor.commands.setAllCollapsiblesOpen(open)}
+                />
+              ) : null}
+              <div
+                className="editor-body"
+                onMouseDown={(event) => {
+                  if (event.target === event.currentTarget) {
+                    event.preventDefault();
+                    editor?.commands.focus("end");
+                  }
+                }}
+              >
             <input
               className="title-input"
               placeholder="Title"
@@ -444,35 +456,42 @@ export default function App() {
             {editor ? (
               <>
                 <BubbleMenu editor={editor} className="bubble">
-                  <button type="button" className="tool" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleBold().run()}>
-                    B
-                  </button>
-                  <button type="button" className="tool" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleItalic().run()}>
-                    I
-                  </button>
-                  <button type="button" className="tool" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleHighlight().run()}>
-                    ◍
-                  </button>
-                  <button type="button" className="tool" onMouseDown={(e) => e.preventDefault()} onClick={() => editor.chain().focus().toggleCode().run()}>
-                    ‹›
-                  </button>
-                  <button
-                    type="button"
-                    className="tool"
-                    onMouseDown={(e) => e.preventDefault()}
-                    onClick={() => {
-                      const href = window.prompt("Link URL", "https://");
-                      if (href) {
-                        editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
-                      }
-                    }}
-                  >
-                    <LinkIcon />
-                  </button>
+                  {(
+                    [
+                      ["bold", "Bold", () => editor.chain().focus().toggleBold().run()],
+                      ["italic", "Italic", () => editor.chain().focus().toggleItalic().run()],
+                      ["highlight", "Highlight", () => editor.chain().focus().toggleHighlight().run()],
+                      ["code", "Inline code", () => editor.chain().focus().toggleCode().run()],
+                      [
+                        "link",
+                        "Link",
+                        () => {
+                          const href = window.prompt("Link URL", "https://");
+                          if (href) {
+                            editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+                          }
+                        },
+                      ],
+                    ] as const
+                  ).map(([icon, label, action]) => (
+                    <button
+                      key={icon}
+                      type="button"
+                      className={editor.isActive(icon === "highlight" ? "highlight" : icon) ? "tool is-active" : "tool"}
+                      title={label}
+                      aria-label={label}
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={action}
+                    >
+                      <Icon name={icon} />
+                    </button>
+                  ))}
                 </BubbleMenu>
                 <EditorContent editor={editor} />
               </>
             ) : null}
+              </div>
+            </div>
           </div>
         </div>
       </div>

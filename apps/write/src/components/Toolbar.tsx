@@ -1,32 +1,34 @@
 import type { Editor } from "@tiptap/react";
-import { ImageIcon, LinkIcon, TableIcon } from "./Icons.tsx";
 import { useEditorState } from "@tiptap/react";
-import type React from "react";
+import type { ReactNode } from "react";
 import { useRef } from "react";
+import { Icon, type IconName } from "./Icons.tsx";
 
 interface ToolbarProps {
   editor: Editor;
   onToggleAllCollapsibles: (open: boolean) => void;
 }
 
-interface ToolButtonProps {
-  label: React.ReactNode;
+interface ToolProps {
   title: string;
-  active?: boolean;
   onClick: () => void;
+  icon?: IconName;
+  label?: ReactNode;
+  active?: boolean;
 }
 
-function Tool({ label, title, active, onClick }: ToolButtonProps) {
+function Tool({ title, onClick, icon, label, active }: ToolProps) {
   return (
     <button
       type="button"
       className={active ? "tool is-active" : "tool"}
       title={title}
+      aria-label={title}
       aria-pressed={active}
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
     >
-      {label}
+      {icon ? <Icon name={icon} /> : <span className="tool-text">{label}</span>}
     </button>
   );
 }
@@ -69,40 +71,69 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
   };
 
   return (
-    <div className="toolbar">
-      <Tool label="H1" title="Heading 1" active={state.h1} onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()} />
-      <Tool label="H2" title="Heading 2" active={state.h2} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()} />
-      <Tool label="H3" title="Heading 3" active={state.h3} onClick={() => editor.chain().focus().toggleHeading({ level: 3 }).run()} />
+    <div className="toolbar" role="toolbar" aria-label="Formatting">
+      <div className="tool-group">
+        {([1, 2, 3] as const).map((level) => (
+          <Tool
+            key={level}
+            label={`H${level}`}
+            title={`Heading ${level}`}
+            active={state[`h${level}` as "h1" | "h2" | "h3"]}
+            onClick={() => editor.chain().focus().toggleHeading({ level }).run()}
+          />
+        ))}
+      </div>
+
       <span className="tool-sep" />
-      <Tool label="B" title="Bold — ⌘B" active={state.bold} onClick={() => editor.chain().focus().toggleBold().run()} />
-      <Tool label="I" title="Italic — ⌘I" active={state.italic} onClick={() => editor.chain().focus().toggleItalic().run()} />
-      <Tool label="S" title="Strikethrough" active={state.strike} onClick={() => editor.chain().focus().toggleStrike().run()} />
-      <Tool label="◍" title="Highlight" active={state.highlight} onClick={() => editor.chain().focus().toggleHighlight().run()} />
-      <Tool label="‹›" title="Inline code" active={state.code} onClick={() => editor.chain().focus().toggleCode().run()} />
-      <Tool label={<LinkIcon />} title="Link" active={state.link} onClick={setLink} />
+
+      <div className="tool-group">
+        <Tool icon="bold" title="Bold — ⌘B" active={state.bold} onClick={() => editor.chain().focus().toggleBold().run()} />
+        <Tool icon="italic" title="Italic — ⌘I" active={state.italic} onClick={() => editor.chain().focus().toggleItalic().run()} />
+        <Tool icon="strike" title="Strikethrough" active={state.strike} onClick={() => editor.chain().focus().toggleStrike().run()} />
+        <Tool icon="highlight" title="Highlight" active={state.highlight} onClick={() => editor.chain().focus().toggleHighlight().run()} />
+        <Tool icon="code" title="Inline code" active={state.code} onClick={() => editor.chain().focus().toggleCode().run()} />
+        <Tool icon="link" title="Link" active={state.link} onClick={setLink} />
+      </div>
+
       <span className="tool-sep" />
-      <Tool label="•" title="Bullet list" active={state.bullet} onClick={() => editor.chain().focus().toggleBulletList().run()} />
-      <Tool label="1." title="Numbered list" active={state.ordered} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
-      <Tool label="☑" title="Task list" active={state.task} onClick={() => editor.chain().focus().toggleTaskList().run()} />
-      <Tool label="❝" title="Quote" active={state.quote} onClick={() => editor.chain().focus().toggleBlockquote().run()} />
-      <Tool label="{ }" title="Code block" active={state.codeBlock} onClick={() => editor.chain().focus().toggleCodeBlock().run()} />
+
+      <div className="tool-group">
+        <Tool icon="bulletList" title="Bullet list" active={state.bullet} onClick={() => editor.chain().focus().toggleBulletList().run()} />
+        <Tool icon="orderedList" title="Numbered list" active={state.ordered} onClick={() => editor.chain().focus().toggleOrderedList().run()} />
+        <Tool icon="taskList" title="Task list" active={state.task} onClick={() => editor.chain().focus().toggleTaskList().run()} />
+        <Tool icon="quote" title="Quote" active={state.quote} onClick={() => editor.chain().focus().toggleBlockquote().run()} />
+        <Tool icon="codeBlock" title="Code block" active={state.codeBlock} onClick={() => editor.chain().focus().toggleCodeBlock().run()} />
+      </div>
+
       <span className="tool-sep" />
-      <Tool
-        label="▾ Section"
-        title="Collapsible section — ⌘⇧D (or type >>> )"
-        active={state.collapsible}
-        onClick={() =>
-          state.collapsible
-            ? editor.chain().focus().unsetCollapsible().run()
-            : editor.chain().focus().setCollapsible().run()
-        }
-      />
-      <Tool label="Collapse all" title="Collapse every section" onClick={() => onToggleAllCollapsibles(false)} />
-      <Tool label="Expand all" title="Expand every section" onClick={() => onToggleAllCollapsibles(true)} />
+
+      <div className="tool-group">
+        <Tool
+          icon="section"
+          title="Collapsible section — ⌘⇧D, or type >>>"
+          active={state.collapsible}
+          onClick={() =>
+            state.collapsible
+              ? editor.chain().focus().unsetCollapsible().run()
+              : editor.chain().focus().setCollapsible().run()
+          }
+        />
+        <Tool icon="collapseAll" title="Collapse every section" onClick={() => onToggleAllCollapsibles(false)} />
+        <Tool icon="expandAll" title="Expand every section" onClick={() => onToggleAllCollapsibles(true)} />
+      </div>
+
       <span className="tool-sep" />
-      <Tool label={<ImageIcon />} title="Insert image" onClick={() => fileInput.current?.click()} />
-      <Tool label={<TableIcon />} title="Insert table" onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()} />
-      <Tool label="―" title="Divider" onClick={() => editor.chain().focus().setHorizontalRule().run()} />
+
+      <div className="tool-group">
+        <Tool icon="image" title="Insert image" onClick={() => fileInput.current?.click()} />
+        <Tool
+          icon="table"
+          title="Insert table"
+          onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+        />
+        <Tool icon="rule" title="Divider" onClick={() => editor.chain().focus().setHorizontalRule().run()} />
+      </div>
+
       <input
         ref={fileInput}
         type="file"
