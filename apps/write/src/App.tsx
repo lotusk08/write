@@ -3,7 +3,7 @@ import { BubbleMenu } from "@tiptap/react/menus";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppConfig, PostMeta, PublishResult } from "../shared/types.ts";
 import { DraftRail } from "./components/DraftRail.tsx";
-import { EditorMenu, type ExportFormat } from "./components/EditorMenu.tsx";
+import { EditorPopover, type ExportFormat } from "./components/EditorPopover.tsx";
 import { Icon } from "./components/Icons.tsx";
 import { PublishDialog } from "./components/PublishDialog.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
@@ -31,6 +31,7 @@ export default function App() {
   const [query, setQuery] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [publishOpen, setPublishOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const [exporting, setExporting] = useState(false);
   const [ready, setReady] = useState(false);
@@ -39,6 +40,7 @@ export default function App() {
   const currentIdRef = useRef<string | null>(null);
   const pendingRef = useRef<Partial<Draft>>({});
   const timerRef = useRef<number | undefined>(undefined);
+  const menuButton = useRef<HTMLButtonElement>(null);
 
   draftsRef.current = drafts;
   currentIdRef.current = currentId;
@@ -323,7 +325,7 @@ export default function App() {
         void flush().then(() => setToast({ message: "Saved.", kind: "info" }));
       } else if (event.key === "\\") {
         event.preventDefault();
-        updateSettings({ menuOpen: !settings.menuOpen });
+        setMenuOpen((value) => !value);
       } else if (event.shiftKey && event.key.toLowerCase() === "n") {
         event.preventDefault();
         void newDraft();
@@ -334,21 +336,9 @@ export default function App() {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [exportAs, flush, newDraft, settings.menuOpen, updateSettings]);
+  }, [exportAs, flush, newDraft, updateSettings]);
 
   /* ---------------------------------------------------------------- render */
-
-  const visibleDrafts = useMemo(() => {
-    const needle = query.trim().toLowerCase();
-    if (!needle) {
-      return drafts;
-    }
-    return drafts.filter((draft) =>
-      `${draftLabel(draft)} ${draft.meta.tags.join(" ")} ${draft.meta.categories.join(" ")}`
-        .toLowerCase()
-        .includes(needle),
-    );
-  }, [drafts, query]);
 
   const words = useMemo(() => (current ? countWords(docToPlainText(current.doc)) : 0), [current]);
 
@@ -362,19 +352,24 @@ export default function App() {
         <DraftRail
           drafts={drafts}
           currentId={currentId}
+          query={query}
+          onQuery={setQuery}
           onSelect={(id) => void selectDraft(id)}
           onNew={() => void newDraft()}
+          onDuplicate={(id) => void duplicateDraft(id)}
+          onDelete={(id) => void deleteDraft(id)}
         />
       )}
 
       <div className="main">
-        {settings.focusMode && !settings.menuOpen ? (
+        {settings.focusMode ? (
           <button
+            ref={menuButton}
             type="button"
             className="menu-btn"
             title="Menu — ⌘\\"
             aria-label="Open menu"
-            onClick={() => updateSettings({ menuOpen: true })}
+            onClick={() => setMenuOpen(true)}
           >
             <Icon name="menu" />
           </button>
@@ -455,12 +450,13 @@ export default function App() {
                   </span>
                   <span className="tool-sep" />
                   <button
+                    ref={menuButton}
                     type="button"
-                    className={settings.menuOpen ? "tool is-active" : "tool"}
+                    className={menuOpen ? "tool is-active" : "tool"}
                     title="Menu — ⌘\\"
                     aria-label="Open menu"
-                    aria-expanded={settings.menuOpen}
-                    onClick={() => updateSettings({ menuOpen: !settings.menuOpen })}
+                    aria-expanded={menuOpen}
+                    onClick={() => setMenuOpen((value) => !value)}
                   >
                     <Icon name="menu" />
                   </button>
@@ -471,21 +467,12 @@ export default function App() {
         </div>
       </div>
 
-      <EditorMenu
-        open={settings.menuOpen}
+      <EditorPopover
+        open={menuOpen}
+        anchorRef={menuButton}
         tab={settings.menuTab}
         onTab={(menuTab) => updateSettings({ menuTab })}
-        onClose={() => updateSettings({ menuOpen: false })}
-        drafts={{
-          drafts: visibleDrafts,
-          currentId,
-          query,
-          onQuery: setQuery,
-          onSelect: (id) => void selectDraft(id),
-          onNew: () => void newDraft(),
-          onDuplicate: (id) => void duplicateDraft(id),
-          onDelete: (id) => void deleteDraft(id),
-        }}
+        onClose={() => setMenuOpen(false)}
         post={{
           meta: current.meta,
           slug: current.slug,
@@ -509,7 +496,8 @@ export default function App() {
           onPublished={onPublished}
           onOpenSettings={() => {
             setPublishOpen(false);
-            updateSettings({ menuOpen: true, menuTab: "settings" });
+            updateSettings({ menuTab: "settings" });
+            setMenuOpen(true);
           }}
         />
       ) : null}

@@ -118,50 +118,35 @@ textarea {
   color: var(--text);
 }
 
-/* --------------------------------------------------------------- drawer */
-.drawer-scrim {
+/* -------------------------------------------------------------- pop-up */
+.popover {
   position: fixed;
-  z-index: 28;
-  background: rgb(13 13 13 / 22%);
-  inset: 0;
-}
-
-.drawer {
-  position: fixed;
-  z-index: 30;
-  top: 0;
-  right: 0;
-  bottom: 0;
+  z-index: 40;
   display: flex;
-  width: 360px;
+  width: min(380px, calc(100vw - 24px));
   flex-direction: column;
-  border-left: 1px solid var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
   background: var(--panel);
   box-shadow: var(--shadow-pop);
+  overflow: hidden;
 }
 
-.drawer-head {
+.popover-head {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 12px 8px 18px;
-}
-
-.brand {
-  font-size: 14px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-}
-
-.drawer-tabs {
-  display: flex;
-  gap: 2px;
-  padding: 0 12px;
+  padding: 5px 6px 0 12px;
   border-bottom: 1px solid var(--border);
 }
 
-.drawer-tab {
-  padding: 7px 10px 9px;
+.popover-tabs {
+  display: flex;
+  gap: 2px;
+}
+
+.popover-tab {
+  padding: 8px 10px 10px;
   border: none;
   border-bottom: 2px solid transparent;
   margin-bottom: -1px;
@@ -172,25 +157,25 @@ textarea {
   font-weight: 500;
 }
 
-.drawer-tab:hover {
+.popover-tab:hover {
   color: var(--text);
 }
 
-.drawer-tab.is-active {
+.popover-tab.is-active {
   border-bottom-color: var(--accent);
   color: var(--text);
 }
 
-.drawer-body {
+.popover-body {
   flex: 1;
-  padding: 14px 18px 28px;
+  padding: 14px 16px 18px;
   overflow-y: auto;
 }
 
-.drawer-foot {
+.popover-foot {
   display: grid;
   gap: 10px;
-  padding: 12px 18px 14px;
+  padding: 11px 16px 13px;
   border-top: 1px solid var(--border);
   background: var(--panel);
 }
@@ -202,26 +187,66 @@ textarea {
   gap: 10px;
 }
 
-.chips {
-  display: flex;
-  gap: 4px;
-}
-
 .btn.block {
   width: 100%;
   justify-content: center;
 }
 
-/* ---------------------------------------------------------- drafts list */
-.panel-toolbar {
+/* ------------------------------------------------------------ draft list */
+.rail-panel {
+  position: absolute;
+  z-index: 26;
+  top: 8px;
+  left: calc(100% + 6px);
   display: flex;
-  gap: 6px;
-  align-items: center;
-  margin-bottom: 10px;
+  width: 268px;
+  max-height: min(72vh, calc(100vh - 32px));
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px 10px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: var(--panel);
+  box-shadow: var(--shadow-pop);
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-6px);
+  transition: opacity 140ms ease, transform 140ms ease;
 }
 
-.draft-list {
-  margin: 0 -8px;
+/* Peek on hover; a text field inside keeps it open while you type. */
+.rail:hover .rail-panel {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.rail:has(:focus-visible) .rail-panel {
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.rail-panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.rail-panel-head h2 {
+  margin: 0 0 0 4px;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.rail-panel-list {
+  min-height: 0;
+  margin: 0 -4px;
+  overflow-y: auto;
+}
+
+.draft-row {
+  position: relative;
 }
 
 .draft-row + .draft-row {
@@ -233,7 +258,7 @@ textarea {
   width: 100%;
   flex-direction: column;
   gap: 2px;
-  padding: 8px 9px;
+  padding: 8px 62px 8px 9px;
   border: none;
   border-radius: var(--radius);
   background: none;
@@ -241,10 +266,7 @@ textarea {
   text-align: left;
 }
 
-.draft-item:hover {
-  background: var(--hover);
-}
-
+.draft-item:hover,
 .draft-item[aria-current="true"] {
   background: var(--hover);
 }
@@ -272,14 +294,6 @@ textarea {
   background: var(--accent);
 }
 
-.draft-row {
-  position: relative;
-}
-
-.draft-item {
-  padding-right: 62px;
-}
-
 /* Row actions sit on the row itself rather than pushing the list around. */
 .draft-row-actions {
   position: absolute;
@@ -303,6 +317,7 @@ textarea {
 
 /* ------------------------------------------------------- draft tab rail */
 .rail {
+  position: relative;
   display: flex;
   width: 46px;
   flex-shrink: 0;
@@ -1035,12 +1050,6 @@ textarea {
 }
 
 /* --------------------------------------------------------- panel pieces */
-.drawer-lede {
-  margin: -2px 0 16px;
-  color: var(--faint);
-  font-size: 12px;
-}
-
 .section + .section {
   padding-top: 18px;
   border-top: 1px solid var(--border);
@@ -1241,9 +1250,8 @@ textarea {
   font-variant-numeric: tabular-nums;
 }
 
-.drawer-tab.is-active .count {
-  background: var(--accent-soft);
-  color: var(--accent);
+.rail-panel-head .count {
+  margin-left: 4px;
 }
 
 .publish-target {
@@ -1426,8 +1434,8 @@ textarea {
     width: 38px;
   }
 
-  .drawer {
-    width: min(360px, 100vw);
+  .rail-panel {
+    width: min(268px, calc(100vw - 60px));
   }
 
   .editor-page {

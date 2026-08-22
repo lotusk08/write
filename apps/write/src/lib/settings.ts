@@ -16,14 +16,13 @@ export interface Settings {
   publishTarget: "posts" | "drafts";
   openPullRequest: boolean;
   convertImagesToWebp: boolean;
-  /** The single right-hand menu that holds drafts, front matter and settings. */
-  menuOpen: boolean;
+  /** Which tab the pop-up menu opens on. */
   menuTab: MenuTab;
   /** Hides the bottom toolbar. */
   focusMode: boolean;
 }
 
-export type MenuTab = "drafts" | "post" | "settings";
+export type MenuTab = "post" | "settings";
 
 const KEY = "write:settings";
 
@@ -41,15 +40,17 @@ export const defaultSettings: Settings = {
   publishTarget: "posts",
   openPullRequest: false,
   convertImagesToWebp: true,
-  menuOpen: false,
-  menuTab: "drafts",
+  menuTab: "post",
   focusMode: false,
 };
 
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
-    return raw ? { ...defaultSettings, ...(JSON.parse(raw) as Partial<Settings>) } : { ...defaultSettings };
+    const stored = raw ? { ...defaultSettings, ...(JSON.parse(raw) as Partial<Settings>) } : defaultSettings;
+    // "drafts" was a tab before drafts moved onto the rail.
+    const menuTab: MenuTab = stored.menuTab === "settings" ? "settings" : "post";
+    return { ...stored, menuTab };
   } catch {
     return { ...defaultSettings };
   }
