@@ -37,10 +37,11 @@ apps/write
   Markdown is rewritten to point at those paths. Optionally opens a pull request
   on a `post/<slug>` branch instead of committing to `main`.
 
-Drafts sit as vertical tabs along the left edge, Obsidian-style, so switching
-between them is one click. The formatting toolbar is docked inside the bottom of
-the editor frame, and one icon in the top-right opens the menu holding front
-matter, settings, export and publish.
+Drafts sit as vertical tabs along the left edge, Obsidian-style: the draft you
+are editing spells out its title, the rest collapse into a stack of layers
+behind it. The formatting toolbar is docked inside the bottom of the editor
+frame, and the menu at its right end holds front matter, settings, export and
+publish — so nothing sits above the page.
 
 Shortcuts: `⌘S` save now · `⌘⇧N` new draft · `⌘\` open/close the menu ·
 `⌘⇧C` copy Markdown · plus the usual Markdown input rules (`#`, `-`, `1.`, `>`,

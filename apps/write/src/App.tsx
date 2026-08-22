@@ -368,7 +368,7 @@ export default function App() {
       )}
 
       <div className="main">
-        {settings.menuOpen ? null : (
+        {settings.focusMode && !settings.menuOpen ? (
           <button
             type="button"
             className="menu-btn"
@@ -378,7 +378,7 @@ export default function App() {
           >
             <Icon name="menu" />
           </button>
-        )}
+        ) : null}
 
         <div className="editor-scroll">
           <div className="editor-page">
@@ -453,6 +453,17 @@ export default function App() {
                   <span className="status">
                     {saveState === "saving" ? "Saving…" : `${words} words`}
                   </span>
+                  <span className="tool-sep" />
+                  <button
+                    type="button"
+                    className={settings.menuOpen ? "tool is-active" : "tool"}
+                    title="Menu — ⌘\\"
+                    aria-label="Open menu"
+                    aria-expanded={settings.menuOpen}
+                    onClick={() => updateSettings({ menuOpen: !settings.menuOpen })}
+                  >
+                    <Icon name="menu" />
+                  </button>
                 </div>
               ) : null}
             </div>

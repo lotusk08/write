@@ -294,7 +294,7 @@ textarea {
   min-height: 0;
   flex-direction: column;
   align-items: center;
-  gap: 4px;
+  gap: 2px;
   padding-bottom: 8px;
   overflow-y: auto;
   scrollbar-width: none;
@@ -315,19 +315,36 @@ textarea {
   background: none;
   color: var(--faint);
   cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 
-.rail-tab:hover {
-  background: var(--hover);
-  color: var(--text);
-}
-
-.rail-tab[aria-current="true"] {
+/* The draft being edited: the only one that spells out its title. */
+.rail-tab.is-open {
   border-color: var(--border);
   background: var(--panel);
   color: var(--text);
   box-shadow: var(--shadow-card);
+}
+
+/* Everything else collapses into a stack of layers behind it. */
+.rail-tab.is-layer {
+  width: 30px;
+  height: 26px;
+  justify-content: center;
+  padding: 0;
+  border-color: var(--border);
+  background: var(--panel);
+}
+
+.rail-tab.is-layer:hover {
+  border-color: var(--border-strong);
+  background: var(--hover);
+  color: var(--text);
+}
+
+.rail-tab.is-layer .dot {
+  position: absolute;
+  margin: 16px 0 0 18px;
 }
 
 .rail-tab-label {
@@ -625,9 +642,9 @@ input[type="file"].input::file-selector-button:hover {
 }
 
 .editor-page {
-  max-width: 780px;
+  max-width: 840px;
   margin: 0 auto;
-  padding: 60px 20px 64px;
+  padding: 32px 20px 64px;
 }
 
 .editor-card {
@@ -639,8 +656,13 @@ input[type="file"].input::file-selector-button:hover {
 
 .editor-body {
   min-height: 55vh;
-  padding: 32px 40px 40px;
+  padding: 36px 40px 40px;
   cursor: text;
+}
+
+.editor-body > * {
+  max-width: 700px;
+  margin-inline: auto;
 }
 
 .title-input {
@@ -1122,7 +1144,7 @@ input[type="file"].input::file-selector-button:hover {
   }
 
   .editor-page {
-    padding: 56px 12px 40px;
+    padding: 20px 12px 40px;
   }
 
   .editor-body {

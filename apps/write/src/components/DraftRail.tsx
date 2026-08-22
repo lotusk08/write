@@ -11,7 +11,9 @@ interface DraftRailProps {
 
 /**
  * Drafts as vertical tabs along the edge, so switching between them never
- * needs the menu. Ordered by creation so tabs keep their place while you type.
+ * needs the menu. Only the open draft shows its title; the rest collapse into
+ * a stack of layers behind it. Ordered by creation so tabs keep their place
+ * while you type.
  */
 export function DraftRail({ drafts, currentId, onSelect, onNew }: DraftRailProps) {
   return (
@@ -23,20 +25,25 @@ export function DraftRail({ drafts, currentId, onSelect, onNew }: DraftRailProps
       <div className="rail-tabs">
         {[...drafts]
           .sort((a, b) => a.createdAt - b.createdAt)
-          .map((draft) => (
-            <button
-              key={draft.id}
-              type="button"
-              className="rail-tab"
-              aria-current={draft.id === currentId}
-              title={draftLabel(draft)}
-              onClick={() => onSelect(draft.id)}
-            >
-              <Icon name="file" size={13} />
-              <span className="rail-tab-label">{draftLabel(draft)}</span>
-              {draft.publishedPath ? <span className="dot" title={`Published to ${draft.publishedPath}`} /> : null}
-            </button>
-          ))}
+          .map((draft) => {
+            const open = draft.id === currentId;
+            return (
+              <button
+                key={draft.id}
+                type="button"
+                className={open ? "rail-tab is-open" : "rail-tab is-layer"}
+                aria-current={open}
+                title={draftLabel(draft)}
+                onClick={() => onSelect(draft.id)}
+              >
+                <Icon name="file" size={13} />
+                {open ? <span className="rail-tab-label">{draftLabel(draft)}</span> : null}
+                {draft.publishedPath ? (
+                  <span className="dot" title={`Published to ${draft.publishedPath}`} />
+                ) : null}
+              </button>
+            );
+          })}
       </div>
     </nav>
   );
