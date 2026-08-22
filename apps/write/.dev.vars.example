@@ -1,0 +1,5 @@
+# Copy to `.dev.vars` for local development (`.dev.vars` is git-ignored).
+# Fine-grained GitHub PAT, scoped to the blog repo, with Contents: Read & write.
+GITHUB_TOKEN=github_pat_xxx
+# Optional: require this password before the app may publish through the worker.
+WRITE_PASSWORD=
