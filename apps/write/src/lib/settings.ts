@@ -16,10 +16,14 @@ export interface Settings {
   publishTarget: "posts" | "drafts";
   openPullRequest: boolean;
   convertImagesToWebp: boolean;
-  sidebarOpen: boolean;
-  metaOpen: boolean;
+  /** The single right-hand menu that holds drafts, front matter and settings. */
+  menuOpen: boolean;
+  menuTab: MenuTab;
+  /** Hides the bottom toolbar. */
   focusMode: boolean;
 }
+
+export type MenuTab = "drafts" | "post" | "settings";
 
 const KEY = "write:settings";
 
@@ -37,8 +41,8 @@ export const defaultSettings: Settings = {
   publishTarget: "posts",
   openPullRequest: false,
   convertImagesToWebp: true,
-  sidebarOpen: true,
-  metaOpen: false,
+  menuOpen: false,
+  menuTab: "drafts",
   focusMode: false,
 };
 

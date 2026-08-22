@@ -1,13 +1,12 @@
 import { useEffect, useState } from "react";
-import type { PostMeta } from "../../shared/types.ts";
-import { isLocalSrc, resolveLocalSrc, storeImageFile } from "../lib/db.ts";
+import type { PostMeta } from "../../../shared/types.ts";
+import { isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
 
-interface MetaPanelProps {
+export interface PostPanelProps {
   meta: PostMeta;
   slug: string;
   onChange: (patch: Partial<PostMeta>) => void;
   onSlugChange: (slug: string) => void;
-  onClose: () => void;
 }
 
 function parseList(value: string): string[] {
@@ -17,7 +16,7 @@ function parseList(value: string): string[] {
     .filter(Boolean);
 }
 
-export function MetaPanel({ meta, slug, onChange, onSlugChange, onClose }: MetaPanelProps) {
+export function PostPanel({ meta, slug, onChange, onSlugChange }: PostPanelProps) {
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
 
   useEffect(() => {
@@ -34,14 +33,7 @@ export function MetaPanel({ meta, slug, onChange, onSlugChange, onClose }: MetaP
   }, [meta.cover?.path]);
 
   return (
-    <aside className="meta-panel">
-      <div className="panel-head">
-        <h2>Front matter</h2>
-        <button type="button" className="btn ghost" onClick={onClose}>
-          Close
-        </button>
-      </div>
-
+    <>
       <div className="field">
         <label htmlFor="meta-slug">Slug</label>
         <input
@@ -96,7 +88,7 @@ export function MetaPanel({ meta, slug, onChange, onSlugChange, onClose }: MetaP
         />
       </div>
 
-      <div className="field">
+      <div className="field post-cover">
         <span className="field-label">Cover image</span>
         {coverUrl ? <img className="cover-preview" src={coverUrl} alt={meta.cover?.alt ?? ""} /> : null}
         <input
@@ -153,6 +145,6 @@ export function MetaPanel({ meta, slug, onChange, onSlugChange, onClose }: MetaP
           Mermaid diagrams
         </label>
       </div>
-    </aside>
+    </>
   );
 }

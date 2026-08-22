@@ -2,12 +2,9 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppConfig, PostMeta, PublishResult } from "../shared/types.ts";
-import { ExportMenu } from "./components/ExportMenu.tsx";
+import { EditorMenu, type ExportFormat } from "./components/EditorMenu.tsx";
 import { Icon } from "./components/Icons.tsx";
-import { MetaPanel } from "./components/MetaPanel.tsx";
 import { PublishDialog } from "./components/PublishDialog.tsx";
-import { SettingsDialog } from "./components/SettingsDialog.tsx";
-import { Sidebar } from "./components/Sidebar.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
 import { editorExtensions } from "./editor/extensions.ts";
 import { fetchAppConfig } from "./lib/api.ts";
@@ -32,11 +29,10 @@ export default function App() {
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
-  const [dialog, setDialog] = useState<null | "publish" | "settings">(null);
+  const [publishOpen, setPublishOpen] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const [exporting, setExporting] = useState(false);
   const [ready, setReady] = useState(false);
-  const [resolvedTheme, setResolvedTheme] = useState<"light" | "dark">("light");
 
   const draftsRef = useRef<Draft[]>([]);
   const currentIdRef = useRef<string | null>(null);
@@ -148,7 +144,6 @@ export default function App() {
     const apply = () => {
       const dark = settings.theme === "dark" || (settings.theme === "system" && media.matches);
       document.documentElement.dataset.theme = dark ? "dark" : "light";
-      setResolvedTheme(dark ? "dark" : "light");
     };
     apply();
     media.addEventListener("change", apply);
@@ -261,7 +256,7 @@ export default function App() {
   );
 
   const exportAs = useCallback(
-    async (format: "markdown" | "docx" | "html" | "copy") => {
+    async (format: ExportFormat) => {
       if (!current || !editor) {
         return;
       }
@@ -300,7 +295,7 @@ export default function App() {
 
   const onPublished = useCallback(
     (result: PublishResult, plan: PublishPlan) => {
-      setDialog(null);
+      setPublishOpen(false);
       queueSave({ publishedPath: plan.markdownPath, publishedAt: Date.now() });
       void flush();
       setToast({
@@ -327,7 +322,7 @@ export default function App() {
         void flush().then(() => setToast({ message: "Saved.", kind: "info" }));
       } else if (event.key === "\\") {
         event.preventDefault();
-        updateSettings({ sidebarOpen: !settings.sidebarOpen });
+        updateSettings({ menuOpen: !settings.menuOpen });
       } else if (event.shiftKey && event.key.toLowerCase() === "n") {
         event.preventDefault();
         void newDraft();
@@ -338,7 +333,7 @@ export default function App() {
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
-  }, [exportAs, flush, newDraft, settings.sidebarOpen, updateSettings]);
+  }, [exportAs, flush, newDraft, settings.menuOpen, updateSettings]);
 
   /* ---------------------------------------------------------------- render */
 
@@ -361,76 +356,23 @@ export default function App() {
   }
 
   return (
-    <div className="app" data-sidebar={settings.sidebarOpen ? "open" : "closed"} data-focus={settings.focusMode}>
-      {settings.sidebarOpen ? (
-        <Sidebar
-          drafts={visibleDrafts}
-          currentId={currentId}
-          query={query}
-          onQuery={setQuery}
-          onSelect={(id) => void selectDraft(id)}
-          onNew={() => void newDraft()}
-          onDuplicate={(id) => void duplicateDraft(id)}
-          onDelete={(id) => void deleteDraft(id)}
-          onOpenSettings={() => setDialog("settings")}
-          onToggleTheme={() => updateSettings({ theme: resolvedTheme === "dark" ? "light" : "dark" })}
-          theme={resolvedTheme}
-        />
-      ) : null}
-
+    <div className="app" data-focus={settings.focusMode}>
       <div className="main">
-        <header className="topbar">
+        {settings.menuOpen ? null : (
           <button
             type="button"
-            className="btn icon ghost"
-            title="Toggle drafts — ⌘\"
-            aria-label="Toggle drafts"
-            onClick={() => updateSettings({ sidebarOpen: !settings.sidebarOpen })}
+            className="menu-btn"
+            title="Menu — ⌘\\"
+            aria-label="Open menu"
+            onClick={() => updateSettings({ menuOpen: true })}
           >
-            <Icon name="panel" />
+            <Icon name="menu" />
           </button>
-          <div className="topbar-title">{draftLabel(current)}</div>
-          <div className="topbar-tools">
-            <span className="status">
-              {saveState === "saving" ? "Saving…" : saveState === "saved" ? "Saved" : ""}
-              {saveState === "idle" ? "" : " · "}
-              {words} words
-            </span>
-            <button
-              type="button"
-              className="btn optional"
-              onClick={() => updateSettings({ metaOpen: !settings.metaOpen })}
-            >
-              Front matter
-            </button>
-            <ExportMenu busy={exporting} onExport={(format) => void exportAs(format)} />
-            <button type="button" className="btn primary" onClick={() => setDialog("publish")}>
-              Publish
-            </button>
-            <button
-              type="button"
-              className={settings.focusMode ? "btn icon ghost optional is-on" : "btn icon ghost optional"}
-              title="Focus mode"
-              aria-label="Focus mode"
-              aria-pressed={settings.focusMode}
-              onClick={() =>
-                updateSettings({ focusMode: !settings.focusMode, sidebarOpen: settings.focusMode })
-              }
-            >
-              <Icon name="focus" />
-            </button>
-          </div>
-        </header>
+        )}
 
         <div className="editor-scroll">
           <div className="editor-page">
             <div className="editor-card">
-              {editor && !settings.focusMode ? (
-                <Toolbar
-                  editor={editor}
-                  onToggleAllCollapsibles={(open) => editor.commands.setAllCollapsiblesOpen(open)}
-                />
-              ) : null}
               <div
                 className="editor-body"
                 onMouseDown={(event) => {
@@ -440,90 +382,114 @@ export default function App() {
                   }
                 }}
               >
-            <input
-              className="title-input"
-              placeholder="Title"
-              value={current.meta.title}
-              onChange={(event) => updateMeta({ title: event.target.value })}
-            />
-            <textarea
-              className="description-input"
-              placeholder="A one-line description for the post card and SEO"
-              rows={2}
-              value={current.meta.description}
-              onChange={(event) => updateMeta({ description: event.target.value })}
-            />
-            {editor ? (
-              <>
-                <BubbleMenu editor={editor} className="bubble">
-                  {(
-                    [
-                      ["bold", "Bold", () => editor.chain().focus().toggleBold().run()],
-                      ["italic", "Italic", () => editor.chain().focus().toggleItalic().run()],
-                      ["highlight", "Highlight", () => editor.chain().focus().toggleHighlight().run()],
-                      ["code", "Inline code", () => editor.chain().focus().toggleCode().run()],
-                      [
-                        "link",
-                        "Link",
-                        () => {
-                          const href = window.prompt("Link URL", "https://");
-                          if (href) {
-                            editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
-                          }
-                        },
-                      ],
-                    ] as const
-                  ).map(([icon, label, action]) => (
-                    <button
-                      key={icon}
-                      type="button"
-                      className={editor.isActive(icon === "highlight" ? "highlight" : icon) ? "tool is-active" : "tool"}
-                      title={label}
-                      aria-label={label}
-                      onMouseDown={(event) => event.preventDefault()}
-                      onClick={action}
-                    >
-                      <Icon name={icon} />
-                    </button>
-                  ))}
-                </BubbleMenu>
-                <EditorContent editor={editor} />
-              </>
-            ) : null}
+                <input
+                  className="title-input"
+                  placeholder="Title"
+                  value={current.meta.title}
+                  onChange={(event) => updateMeta({ title: event.target.value })}
+                />
+                <textarea
+                  className="description-input"
+                  placeholder="A one-line description for the post card and SEO"
+                  rows={2}
+                  value={current.meta.description}
+                  onChange={(event) => updateMeta({ description: event.target.value })}
+                />
+                {editor ? (
+                  <>
+                    <BubbleMenu editor={editor} className="bubble">
+                      {(
+                        [
+                          ["bold", "Bold", () => editor.chain().focus().toggleBold().run()],
+                          ["italic", "Italic", () => editor.chain().focus().toggleItalic().run()],
+                          ["highlight", "Highlight", () => editor.chain().focus().toggleHighlight().run()],
+                          ["code", "Inline code", () => editor.chain().focus().toggleCode().run()],
+                          [
+                            "link",
+                            "Link",
+                            () => {
+                              const href = window.prompt("Link URL", "https://");
+                              if (href) {
+                                editor.chain().focus().extendMarkRange("link").setLink({ href }).run();
+                              }
+                            },
+                          ],
+                        ] as const
+                      ).map(([icon, label, action]) => (
+                        <button
+                          key={icon}
+                          type="button"
+                          className={editor.isActive(icon) ? "tool is-active" : "tool"}
+                          title={label}
+                          aria-label={label}
+                          onMouseDown={(event) => event.preventDefault()}
+                          onClick={action}
+                        >
+                          <Icon name={icon} />
+                        </button>
+                      ))}
+                    </BubbleMenu>
+                    <EditorContent editor={editor} />
+                  </>
+                ) : null}
               </div>
             </div>
           </div>
         </div>
+
+        {editor && !settings.focusMode ? (
+          <div className="dock">
+            <Toolbar
+              editor={editor}
+              onToggleAllCollapsibles={(open) => editor.commands.setAllCollapsiblesOpen(open)}
+            />
+            <span className="status">
+              {saveState === "saving" ? "Saving…" : `${saveState === "saved" ? "Saved · " : ""}${words} words`}
+            </span>
+          </div>
+        ) : null}
       </div>
 
-      {settings.metaOpen ? (
-        <MetaPanel
-          meta={current.meta}
-          slug={current.slug}
-          onChange={updateMeta}
-          onSlugChange={setSlug}
-          onClose={() => updateSettings({ metaOpen: false })}
-        />
-      ) : null}
+      <EditorMenu
+        open={settings.menuOpen}
+        tab={settings.menuTab}
+        onTab={(menuTab) => updateSettings({ menuTab })}
+        onClose={() => updateSettings({ menuOpen: false })}
+        drafts={{
+          drafts: visibleDrafts,
+          currentId,
+          query,
+          onQuery: setQuery,
+          onSelect: (id) => void selectDraft(id),
+          onNew: () => void newDraft(),
+          onDuplicate: (id) => void duplicateDraft(id),
+          onDelete: (id) => void deleteDraft(id),
+        }}
+        post={{
+          meta: current.meta,
+          slug: current.slug,
+          onChange: updateMeta,
+          onSlugChange: setSlug,
+        }}
+        settings={{ settings, config, onChange: updateSettings }}
+        onPublish={() => setPublishOpen(true)}
+        onExport={(format) => void exportAs(format)}
+        exporting={exporting}
+        escapeCloses={!publishOpen}
+      />
 
-      {dialog === "publish" ? (
+      {publishOpen ? (
         <PublishDialog
           draft={current}
           settings={settings}
           config={config}
           onSettingsChange={updateSettings}
-          onClose={() => setDialog(null)}
+          onClose={() => setPublishOpen(false)}
           onPublished={onPublished}
-          onOpenSettings={() => setDialog("settings")}
-        />
-      ) : null}
-
-      {dialog === "settings" ? (
-        <SettingsDialog
-          settings={settings}
-          config={config}
-          onChange={updateSettings}
-          onClose={() => setDialog(null)}
+          onOpenSettings={() => {
+            setPublishOpen(false);
+            updateSettings({ menuOpen: true, menuTab: "settings" });
+          }}
         />
       ) : null}
 

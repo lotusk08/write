@@ -1,9 +1,9 @@
-import type { Draft } from "../lib/db.ts";
-import { draftLabel } from "../lib/draft.ts";
-import { relativeTime } from "../lib/text.ts";
-import { Icon } from "./Icons.tsx";
+import type { Draft } from "../../lib/db.ts";
+import { draftLabel } from "../../lib/draft.ts";
+import { relativeTime } from "../../lib/text.ts";
+import { Icon } from "../Icons.tsx";
 
-interface SidebarProps {
+export interface DraftsPanelProps {
   drafts: Draft[];
   currentId: string | null;
   query: string;
@@ -12,12 +12,9 @@ interface SidebarProps {
   onNew: () => void;
   onDuplicate: (id: string) => void;
   onDelete: (id: string) => void;
-  onOpenSettings: () => void;
-  onToggleTheme: () => void;
-  theme: string;
 }
 
-export function Sidebar({
+export function DraftsPanel({
   drafts,
   currentId,
   query,
@@ -26,20 +23,10 @@ export function Sidebar({
   onNew,
   onDuplicate,
   onDelete,
-  onOpenSettings,
-  onToggleTheme,
-  theme,
-}: SidebarProps) {
+}: DraftsPanelProps) {
   return (
-    <aside className="sidebar">
-      <div className="sidebar-head">
-        <div className="brand">write</div>
-        <button type="button" className="btn icon ghost" title="New draft — ⌘⇧N" aria-label="New draft" onClick={onNew}>
-          <Icon name="plus" />
-        </button>
-      </div>
-
-      <div className="sidebar-search">
+    <>
+      <div className="panel-toolbar">
         <input
           className="input"
           type="search"
@@ -47,13 +34,16 @@ export function Sidebar({
           value={query}
           onChange={(event) => onQuery(event.target.value)}
         />
+        <button type="button" className="btn icon" title="New draft — ⌘⇧N" aria-label="New draft" onClick={onNew}>
+          <Icon name="plus" />
+        </button>
       </div>
 
-      <div className="sidebar-list">
-        {drafts.length === 0 ? (
-          <p className="empty">No drafts yet.</p>
-        ) : (
-          drafts.map((draft) => (
+      {drafts.length === 0 ? (
+        <p className="empty">No drafts match.</p>
+      ) : (
+        <div className="draft-list">
+          {drafts.map((draft) => (
             <div key={draft.id} className="draft-row">
               <button
                 type="button"
@@ -78,25 +68,9 @@ export function Sidebar({
                 </div>
               ) : null}
             </div>
-          ))
-        )}
-      </div>
-
-      <div className="sidebar-foot">
-        <button type="button" className="btn ghost" onClick={onOpenSettings}>
-          <Icon name="settings" />
-          Settings
-        </button>
-        <button
-          type="button"
-          className="btn icon ghost"
-          title={theme === "dark" ? "Switch to light theme" : "Switch to dark theme"}
-          aria-label="Toggle theme"
-          onClick={onToggleTheme}
-        >
-          <Icon name={theme === "dark" ? "sun" : "moon"} />
-        </button>
-      </div>
-    </aside>
+          ))}
+        </div>
+      )}
+    </>
   );
 }

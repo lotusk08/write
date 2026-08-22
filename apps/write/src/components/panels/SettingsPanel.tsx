@@ -1,33 +1,23 @@
-import type { AppConfig } from "../../shared/types.ts";
-import { usesServerPublishing } from "../lib/api.ts";
-import type { Settings } from "../lib/settings.ts";
-import { Dialog } from "./Dialog.tsx";
+import type { AppConfig } from "../../../shared/types.ts";
+import { usesServerPublishing } from "../../lib/api.ts";
+import type { Settings } from "../../lib/settings.ts";
 
-interface SettingsDialogProps {
+export interface SettingsPanelProps {
   settings: Settings;
   config: AppConfig | null;
   onChange: (patch: Partial<Settings>) => void;
-  onClose: () => void;
 }
 
-export function SettingsDialog({ settings, config, onChange, onClose }: SettingsDialogProps) {
+export function SettingsPanel({ settings, config, onChange }: SettingsPanelProps) {
   const serverMode = usesServerPublishing(config);
 
   return (
-    <Dialog
-      title="Settings"
-      subtitle={
-        serverMode
+    <>
+      <p className="hint" style={{ marginBottom: 14 }}>
+        {serverMode
           ? "This deployment publishes through its Cloudflare Worker, so no GitHub token is stored in your browser."
-          : "No worker token found, so this browser talks to GitHub directly."
-      }
-      onClose={onClose}
-      footer={
-        <button type="button" className="btn primary" onClick={onClose}>
-          Done
-        </button>
-      }
-    >
+          : "No worker token found, so this browser talks to GitHub directly."}
+      </p>
       {config?.warning ? <div className="notice warn">{config.warning}</div> : null}
 
       <div className="row">
@@ -165,6 +155,18 @@ export function SettingsDialog({ settings, config, onChange, onClose }: Settings
           <option value="dark">Dark</option>
         </select>
       </div>
-    </Dialog>
+
+      <div className="field">
+        <span className="field-label">Editor</span>
+        <label className="switch">
+          <input
+            type="checkbox"
+            checked={settings.focusMode}
+            onChange={(event) => onChange({ focusMode: event.target.checked })}
+          />
+          Focus mode — hide the bottom toolbar
+        </label>
+      </div>
+    </>
   );
 }
