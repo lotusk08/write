@@ -76,15 +76,18 @@ export function EditorPopover({
       }
       onClose();
     };
-    // The pop-up is placed once, so anything that moves the anchor closes it.
-    const onResize = () => onClose();
+    // The pop-up is placed once, so anything that moves the anchor closes it —
+    // the toolbar it hangs from is sticky, and settles as the document ends.
+    const onMove = () => onClose();
     document.addEventListener("keydown", onKey);
     document.addEventListener("mousedown", onDown);
-    window.addEventListener("resize", onResize);
+    window.addEventListener("resize", onMove);
+    window.addEventListener("scroll", onMove, true);
     return () => {
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("mousedown", onDown);
-      window.removeEventListener("resize", onResize);
+      window.removeEventListener("resize", onMove);
+      window.removeEventListener("scroll", onMove, true);
     };
   }, [open, escapeCloses, onClose, anchorRef]);
 

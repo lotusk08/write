@@ -214,11 +214,13 @@ textarea {
   transition: opacity 140ms ease, transform 140ms ease;
 }
 
-/* Peek on hover; a text field inside keeps it open while you type. */
+/* Peek on hover — after a beat, so crossing the rail does not flash it open —
+   and a text field inside keeps it open while you type. */
 .rail:hover .rail-panel {
   opacity: 1;
   pointer-events: auto;
   transform: none;
+  transition-delay: 160ms;
 }
 
 .rail:has(:focus-visible) .rail-panel {
@@ -504,14 +506,8 @@ textarea {
   color: var(--danger);
 }
 
-.btn.is-on {
-  background: var(--accent-soft);
-  color: var(--accent);
-}
-
 .input,
-.select,
-.textarea {
+.select {
   width: 100%;
   height: 34px;
   padding: 0 10px;
@@ -533,23 +529,12 @@ textarea {
   cursor: pointer;
 }
 
-.textarea {
-  height: auto;
-  min-height: 68px;
-  padding: 8px 10px;
-  font-family: var(--font-ui);
-  line-height: 1.5;
-  resize: vertical;
-}
-
-.input::placeholder,
-.textarea::placeholder {
+.input::placeholder {
   color: var(--faint);
 }
 
 .input:focus,
-.select:focus,
-.textarea:focus {
+.select:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--ring);
   outline: none;
@@ -1346,10 +1331,6 @@ textarea {
 }
 
 /* ----------------------------------------------------------------- menu */
-.menu-wrap {
-  position: relative;
-}
-
 .menu {
   position: absolute;
   z-index: 30;

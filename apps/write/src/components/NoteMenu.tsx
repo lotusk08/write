@@ -97,7 +97,7 @@ export function NoteMenu({ editor, active, note }: NoteMenuProps) {
               {NOTE_TYPES.map((type) => (
                 <button key={type} type="button" onClick={() => pick(type)}>
                   <span className="swatch-label">
-                    <span className={`swatch note-${type}`} data-note={type} />
+                    <span className="swatch" data-note={type} />
                     {LABELS[type]}
                   </span>
                   {note === type ? <span className="check">✓</span> : null}
