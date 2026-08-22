@@ -1,3 +1,0 @@
-> Parent quote
-
-Nested paragraph

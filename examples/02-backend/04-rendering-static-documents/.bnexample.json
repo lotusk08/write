@@ -1,9 +1,0 @@
-{
-  "playground": true,
-  "docs": true,
-  "author": "yousefed",
-  "tags": ["server"],
-  "dependencies": {
-    "@blocknote/server-util": "latest"
-  }
-}

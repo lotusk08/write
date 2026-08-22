@@ -1,107 +1,152 @@
-<p align="center">
-  <a href="https://www.blocknotejs.org">
-    <img alt="TypeCell" src="https://github.com/TypeCellOS/BlockNote/raw/main/docs/public/img/logos/banner.svg?raw=true" width="300" />
-  </a>
-</p>
+# write
 
-<p align="center">
-Welcome to BlockNote! The open source Block-Based
-React rich text editor. Easily add a modern text editing experience to your app.
-</p>
+A quiet, Tiptap-based writing app for [stevehoang.com](https://stevehoang.com):
+draft in the browser, fold sections away while you work, export to Markdown or
+Word, and publish straight to the blog repository — text and images in a single
+commit.
 
-<p align="center">
-  <a href="https://www.blocknotejs.org">
-    Homepage
-  </a> - <a href="https://www.blocknotejs.org/docs">
-    Documentation
-  </a> - <a href="https://www.blocknotejs.org/docs/getting-started">
-    Quickstart
-  </a>- <a href="https://www.blocknotejs.org/examples">
-    Examples
-  </a>
-</p>
+It runs entirely on Cloudflare: the SPA is served from Workers static assets and
+a small Worker handles publishing.
 
-# Live demo
-
-See our homepage @ [https://www.blocknotejs.org](https://www.blocknotejs.org/) or browse the [examples](https://www.blocknotejs.org/examples).
-
-# Example code (React)
-
-[![npm version](https://badge.fury.io/js/%40blocknote%2Freact.svg)](https://badge.fury.io/js/%40blocknote%2Freact)
-
-```typescript
-import { useCreateBlockNote } from "@blocknote/react";
-import { BlockNoteView } from "@blocknote/mantine";
-import "@blocknote/core/fonts/inter.css";
-import "@blocknote/mantine/style.css";
-
-function App() {
-  const editor = useCreateBlockNote();
-
-  return <BlockNoteView editor={editor} />;
-}
+```
+.
+├── src/          the editor app (React + Tiptap 3)
+├── worker/       the Cloudflare Worker: /api/config, /api/publish, /api/posts
+├── shared/       code both sides use (GitHub commit flow, types, base64)
+└── wrangler.jsonc
 ```
 
-`@blocknote/react` comes with a fully styled UI that makes it an instant, polished editor ready to use in your app.
+> This repository began as a fork of [BlockNote](https://github.com/TypeCellOS/BlockNote).
+> That tree now lives on the `blocknote-upstream` branch; `main` is this app.
 
-# Features
+## What it does
 
-BlockNote comes with a number of features and components to make it easy to embed a high-quality block-based editor in your app:
+- **Collapsible sections.** Type `>>> ` (or `::: `) at the start of a line, or
+  press `⌘⇧D`. Each section folds with the caret in the margin, and the toolbar
+  has *Collapse all* / *Expand all*. They export as
+  `<details markdown="1">…</details>`, which Jekyll renders as a real disclosure
+  widget.
+- **Drafts.** Everything is stored locally in IndexedDB and autosaves ~600 ms
+  after you stop typing. Drafts are searchable, duplicable and deletable; images
+  are kept as blobs so drafts stay small and survive reloads.
+- **Front matter.** Title, description, slug, date, author, categories, tags,
+  cover image, and the `pin` / `toc` / `math` / `mermaid` switches the blog
+  already uses. It is written the way the blog's own `update-lqip.js` would
+  write it — block sequences, no unnecessary quoting, empty fields omitted — so
+  a site build never rewrites a published post's front matter.
+- **Callouts.** Quotes can carry the blog's five note styles, exported as
+  `{: .note-info }` and friends. Body headings start at H2, since the title
+  lives in front matter.
+- **Export.** Markdown (with front matter), Word `.docx` (images embedded), a
+  self-contained HTML file, or Markdown straight to the clipboard.
+- **Publish.** Commits `_posts/YYYY-MM-DD-slug.md` — or `_drafts/…` — plus every
+  image, in one commit. Images are re-encoded to WebP and renamed to the blog's
+  flat convention (`assets/img/post/<slug>.webp`, `<slug>-1.webp`, …), and the
+  Markdown is rewritten to point at those paths. Optionally opens a pull request
+  on a `post/<slug>` branch instead of committing to `main`.
 
-### Animations:
+Drafts sit as vertical tabs along the left edge, Obsidian-style: the draft you
+are editing spells out its title, and the rest tuck behind each other like
+sheets in a deck, showing only their edges. Reaching for the rail fans them
+back out to full size. The formatting toolbar is docked inside the bottom of the editor
+frame, and the menu at its right end holds front matter, settings, export and
+publish — so nothing sits above the page.
 
-<img src="https://github.com/TypeCellOS/BlockNote/blob/readme/.resources/animations.gif?raw=true" width="400" />
+Shortcuts: `⌘S` save now · `⌘⇧N` new draft · `⌘\` open/close the menu ·
+`⌘⇧C` copy Markdown · plus the usual Markdown input rules (`#`, `-`, `1.`, `>`,
+` ``` `, `---`).
 
-### Helpful placeholders:
+## Local development
 
-<img src="https://github.com/TypeCellOS/BlockNote/blob/readme/.resources/placeholders.gif?raw=true" width="400" />
+```bash
+npm install
+npm run dev          # http://localhost:5173 — Vite plus the Worker in workerd
+```
 
-### Drag and drop blocks:
+To exercise server-side publishing locally, copy `.dev.vars.example` to
+`.dev.vars` and fill it in. `.dev.vars` is git-ignored.
 
-<img src="https://github.com/TypeCellOS/BlockNote/blob/readme/.resources/dragdrop.gif?raw=true" width="400" />
+```bash
+npm run typecheck    # tsc across app, worker and shared
+npm run build        # dist/client (SPA) + dist/write (Worker)
+```
 
-### Nesting / indentation with tab and shift+tab:
+## Deploying to Cloudflare
 
-<img src="https://github.com/TypeCellOS/BlockNote/blob/readme/.resources/nesting.gif?raw=true" width="400" />
+```bash
+npx wrangler login
+npm run deploy       # builds, then uploads the Worker and the static assets
+```
 
-### Slash (/) menu:
+That publishes to `https://write.<your-subdomain>.workers.dev`. To use your own
+hostname, add a route to `wrangler.jsonc`:
 
-<img src="https://github.com/TypeCellOS/BlockNote/blob/readme/.resources/slashmenu.gif?raw=true" width="400" />
+```jsonc
+"routes": [{ "pattern": "write.stevehoang.com", "custom_domain": true }]
+```
 
-### Format menu:
+### Choose how the GitHub token is held
 
-<img src="https://github.com/TypeCellOS/BlockNote/blob/readme/.resources/selectmenu.gif?raw=true" width="400" />
+**Server-side (recommended).** The token lives as a Worker secret and never
+reaches the browser; the app just sends a password.
 
-### Real-time collaboration:
+```bash
+npx wrangler secret put GITHUB_TOKEN     # fine-grained PAT, see below
+npx wrangler secret put WRITE_PASSWORD   # a password you type into Settings
+```
 
-<img src="https://github.com/TypeCellOS/BlockNote/blob/readme/.resources/collaboration.gif?raw=true" width="400" />
+Both are required together: with a token but no password, the Worker refuses to
+publish rather than leave an open write endpoint on the internet, and says so in
+the app.
 
-# Feedback 🙋‍♂️🙋‍♀️
+**Browser-side.** Deploy with no secrets at all and paste a fine-grained token
+into Settings; it is kept in that browser's local storage and talks to
+`api.github.com` directly. Fine for a private machine, and it is also what makes
+the app work on any static host (including Cloudflare Pages via
+`npx wrangler pages deploy dist/client`).
 
-We'd love to hear your thoughts and see your experiments, so [come and say hi on Discord](https://discord.gg/Qc2QTTH5dF).
+The token needs **Contents: Read & write** on `lotusk08/stevehoang.com` only.
 
-# Contributing 🙌
+### Continuous deploys
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for more info and guidance on how to run the project (TLDR: just use `pnpm start`).
+Connect the repository in the Cloudflare dashboard under Workers → Builds. The
+defaults are right for this repo — root directory `/`, build command
+`npm run build`, deploy command `npx wrangler deploy` — because the app sits at
+the repository root with its own npm lockfile. Node comes from `.node-version`.
 
-The codebase is automatically tested using Vitest and Playwright.
+### Configuration
 
-# License 📃
+Non-secret settings live in `wrangler.jsonc` under `vars`, and the app reads
+them from `/api/config` at boot:
 
-BlockNote is 100% Open Source Software. The majority of BlockNote is licensed under the [MPL-2.0 license](LICENSE-MPL.txt), which allows you to use BlockNote in commercial (and closed-source) applications. If you make changes to the BlockNote source files, you're expected to publish these changes so the wider community can benefit as well. [Learn more](https://fossa.com/blog/open-source-software-licenses-101-mozilla-public-license-2-0/).
+| Var | Default |
+| --- | --- |
+| `BLOG_REPO` | `lotusk08/stevehoang.com` |
+| `BLOG_BRANCH` | `main` |
+| `POSTS_DIR` | `_posts` |
+| `DRAFTS_DIR` | `_drafts` |
+| `IMAGES_DIR` | `assets/img/post` |
 
-The XL packages (source code in the `packages/xl-*` directories and published in NPM as `@blocknote/xl-*`) are licensed under the GPL-3.0. If you cannot comply with this license and want to use the XL libraries, you'll need a commercial license. Refer to [our website](https://www.blocknotejs.org/pricing) for more information.
+The Worker will only ever write inside those three directories, and only to
+`BLOG_REPO` — a request cannot point it somewhere else.
 
-# Credits ❤️
+## Notes
 
-BlockNote builds directly on two awesome projects; [Prosemirror](https://prosemirror.net/) by Marijn Haverbeke and [Tiptap](https://tiptap.dev/). Consider sponsoring those libraries when using BlockNote: [Prosemirror](https://marijnhaverbeke.nl/fund/), [Tiptap](https://github.com/sponsors/ueberdosis).
-
-BlockNote is built as part of [TypeCell](https://www.typecell.org). TypeCell is proudly sponsored by the renowned [NLNet foundation](https://nlnet.nl/foundation/) who are on a mission to support an open internet, and protect the privacy and security of internet users. Check them out!
-
-<a href="https://nlnet.nl"><img src="https://nlnet.nl/image/logos/NGIAssure_tag.svg" alt="NLNet" width="100"></a>
-
-Hosting and deployments powered by Vercel:
-
-<a href="https://vercel.com/?utm_source=TypeCell&utm_campaign=oss"><img src="https://images.ctfassets.net/e5382hct74si/78Olo8EZRdUlcDUFQvnzG7/fa4cdb6dc04c40fceac194134788a0e2/1618983297-powered-by-vercel.svg" alt="NLNet" width="150"></a>
-
-This project is tested with BrowserStack
+- The build writes two directories: `dist/client` (the SPA) and `dist/write`
+  (the Worker plus a generated `wrangler.json` pointing at those assets). The
+  deploy script passes that generated config to Wrangler explicitly, so a CI
+  job can build and deploy in separate steps.
+- The interface is deliberately neutral — monochrome greys, hairline borders,
+  one violet accent, icon-only toolbar — and rides on the system sans (SF on
+  Apple devices, Inter where installed), so no web fonts are downloaded.
+- Front matter, settings and draft management share one drawer rather than a
+  sidebar, a top bar and two dialogs; only the publish confirmation is still a
+  modal. The drawer's Drafts tab is for searching and housekeeping — the rail
+  handles switching.
+- Publishing through the GitHub API bypasses the blog's local pre-commit hook,
+  so images are converted to WebP here instead — which also keeps them eligible
+  for the LQIP pass, whose regex only matches `.webp` under `assets/img`.
+  Placeholders and intrinsic sizes are still filled in by the blog's own
+  `npm run build`.
+- The app is a standalone npm project inside this repository; it does not join
+  the BlockNote pnpm workspace and has no dependency on the packages around it.

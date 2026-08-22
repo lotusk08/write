@@ -1,3 +1,0 @@
-## Toggle Heading
-
-Child content

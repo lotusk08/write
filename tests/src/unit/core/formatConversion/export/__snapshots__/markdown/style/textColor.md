@@ -1,1 +1,0 @@
-Colored text

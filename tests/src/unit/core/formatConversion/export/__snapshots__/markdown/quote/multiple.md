@@ -1,3 +1,0 @@
-> First quote
-
-> Second quote
