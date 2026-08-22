@@ -2,6 +2,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppConfig, PostMeta, PublishResult } from "../shared/types.ts";
+import { DraftRail } from "./components/DraftRail.tsx";
 import { EditorMenu, type ExportFormat } from "./components/EditorMenu.tsx";
 import { Icon } from "./components/Icons.tsx";
 import { PublishDialog } from "./components/PublishDialog.tsx";
@@ -357,6 +358,15 @@ export default function App() {
 
   return (
     <div className="app" data-focus={settings.focusMode}>
+      {settings.focusMode ? null : (
+        <DraftRail
+          drafts={drafts}
+          currentId={currentId}
+          onSelect={(id) => void selectDraft(id)}
+          onNew={() => void newDraft()}
+        />
+      )}
+
       <div className="main">
         {settings.menuOpen ? null : (
           <button
@@ -433,21 +443,21 @@ export default function App() {
                   </>
                 ) : null}
               </div>
+
+              {editor && !settings.focusMode ? (
+                <div className="card-dock">
+                  <Toolbar
+                    editor={editor}
+                    onToggleAllCollapsibles={(open) => editor.commands.setAllCollapsiblesOpen(open)}
+                  />
+                  <span className="status">
+                    {saveState === "saving" ? "Saving…" : `${words} words`}
+                  </span>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
-
-        {editor && !settings.focusMode ? (
-          <div className="dock">
-            <Toolbar
-              editor={editor}
-              onToggleAllCollapsibles={(open) => editor.commands.setAllCollapsiblesOpen(open)}
-            />
-            <span className="status">
-              {saveState === "saving" ? "Saving…" : `${saveState === "saved" ? "Saved · " : ""}${words} words`}
-            </span>
-          </div>
-        ) : null}
       </div>
 
       <EditorMenu
