@@ -28,6 +28,12 @@ const TABS: { id: MenuTab; label: string }[] = [
   { id: "settings", label: "Settings" },
 ];
 
+const TAB_HINTS: Record<MenuTab, string> = {
+  drafts: "Everything kept in this browser",
+  post: "Front matter for the open draft",
+  settings: "Where and how posts are published",
+};
+
 const EXPORTS: { id: ExportFormat; label: string }[] = [
   { id: "markdown", label: "Markdown" },
   { id: "docx", label: "Word" },
@@ -69,6 +75,13 @@ export function EditorMenu({
     return null;
   }
 
+  const publishRepo = settings.config?.repo || settings.settings.repo;
+  const publishDir = (
+    settings.settings.publishTarget === "drafts"
+      ? settings.settings.draftsDir
+      : settings.settings.postsDir
+  ).replace(/^\/+|\/+$/g, "");
+
   return (
     <>
       <div className="drawer-scrim" role="presentation" onMouseDown={onClose} />
@@ -91,11 +104,13 @@ export function EditorMenu({
               onClick={() => onTab(id)}
             >
               {label}
+              {id === "drafts" ? <span className="count">{drafts.drafts.length}</span> : null}
             </button>
           ))}
         </div>
 
         <div className="drawer-body">
+          <p className="drawer-lede">{TAB_HINTS[tab]}</p>
           {tab === "drafts" ? <DraftsPanel {...drafts} /> : null}
           {tab === "post" ? <PostPanel {...post} /> : null}
           {tab === "settings" ? <SettingsPanel {...settings} /> : null}
@@ -103,16 +118,10 @@ export function EditorMenu({
 
         <footer className="drawer-foot">
           <div className="export-row">
-            <span className="field-label">Export</span>
-            <div className="chips">
+            <span className="field-label">Download</span>
+            <div className="segmented">
               {EXPORTS.map(({ id, label }) => (
-                <button
-                  key={id}
-                  type="button"
-                  className="btn tiny"
-                  disabled={exporting}
-                  onClick={() => onExport(id)}
-                >
+                <button key={id} type="button" disabled={exporting} onClick={() => onExport(id)}>
                   {label}
                 </button>
               ))}
@@ -122,6 +131,9 @@ export function EditorMenu({
             <Icon name="upload" />
             Publish to blog
           </button>
+          <p className="hint publish-target">
+            {publishRepo} · <span className="mono">{publishDir}/</span>
+          </p>
         </footer>
       </aside>
     </>

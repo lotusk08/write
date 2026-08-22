@@ -133,7 +133,7 @@ textarea {
   right: 0;
   bottom: 0;
   display: flex;
-  width: 340px;
+  width: 360px;
   flex-direction: column;
   border-left: 1px solid var(--border);
   background: var(--panel);
@@ -183,15 +183,16 @@ textarea {
 
 .drawer-body {
   flex: 1;
-  padding: 16px 18px 24px;
+  padding: 14px 18px 28px;
   overflow-y: auto;
 }
 
 .drawer-foot {
   display: grid;
   gap: 10px;
-  padding: 12px 18px 16px;
+  padding: 12px 18px 14px;
   border-top: 1px solid var(--border);
+  background: var(--panel);
 }
 
 .export-row {
@@ -271,10 +272,33 @@ textarea {
   background: var(--accent);
 }
 
-.draft-actions {
+.draft-row {
+  position: relative;
+}
+
+.draft-item {
+  padding-right: 62px;
+}
+
+/* Row actions sit on the row itself rather than pushing the list around. */
+.draft-row-actions {
+  position: absolute;
+  top: 50%;
+  right: 5px;
   display: flex;
-  gap: 2px;
-  padding: 2px 6px 6px;
+  gap: 1px;
+  opacity: 0;
+  transform: translateY(-50%);
+  transition: opacity 120ms ease;
+}
+
+.draft-row:hover .draft-row-actions,
+.draft-row:focus-within .draft-row-actions {
+  opacity: 1;
+}
+
+.tool.danger:hover {
+  color: var(--danger);
 }
 
 /* ------------------------------------------------------- draft tab rail */
@@ -503,31 +527,6 @@ textarea {
   resize: vertical;
 }
 
-input[type="file"].input {
-  display: flex;
-  align-items: center;
-  padding-left: 6px;
-  color: var(--muted);
-  font-size: 12.5px;
-}
-
-input[type="file"].input::file-selector-button {
-  height: 24px;
-  padding: 0 9px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  margin-right: 9px;
-  background: var(--panel);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 500;
-}
-
-input[type="file"].input::file-selector-button:hover {
-  background: var(--hover);
-}
-
 .input::placeholder,
 .textarea::placeholder {
   color: var(--faint);
@@ -570,23 +569,14 @@ input[type="file"].input::file-selector-button:hover {
   line-height: 1.5;
 }
 
-.switch {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  font-size: 13px;
-}
-
-.switch input {
-  width: 15px;
-  height: 15px;
-  accent-color: var(--accent);
-}
-
 .row {
   display: grid;
   gap: 12px;
   grid-template-columns: 1fr 1fr;
+}
+
+.row.wide-first {
+  grid-template-columns: 1.7fr 1fr;
 }
 
 /* -------------------------------------------------------------- toolbar */
@@ -1045,13 +1035,225 @@ input[type="file"].input::file-selector-button:hover {
 }
 
 /* --------------------------------------------------------- panel pieces */
-.cover-preview {
-  width: 100%;
-  max-height: 130px;
+.drawer-lede {
+  margin: -2px 0 16px;
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.section + .section {
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+  margin-top: 18px;
+}
+
+.section-title {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.section-hint {
+  margin: -8px 0 12px;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Chips for categories and tags. */
+.tokens {
+  display: flex;
+  min-height: 34px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 6px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  margin-bottom: 8px;
+  background: var(--panel);
+  cursor: text;
+}
+
+.tokens:focus-within {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+.token {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  padding: 2px 3px 2px 8px;
+  border-radius: 999px;
+  background: var(--hover);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.token button {
+  display: flex;
+  width: 15px;
+  height: 15px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.token button:hover {
+  background: var(--border-strong);
+  color: var(--text);
+}
+
+.token-input {
+  min-width: 80px;
+  flex: 1;
+  padding: 3px 2px;
+  border: none;
+  background: none;
+  font-size: 13px;
+  outline: none;
+}
+
+/* Cover image. */
+.cover-card {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.cover-card img {
+  display: block;
+  width: 100%;
+  height: 132px;
   object-fit: cover;
+}
+
+.cover-card figcaption {
+  display: flex;
+  gap: 6px;
+  padding: 7px 8px;
+  border-top: 1px solid var(--border);
+  background: var(--sunken);
+}
+
+.cover-empty {
+  width: 100%;
+  padding: 26px 12px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.cover-empty:hover {
+  border-color: var(--accent);
+  background: var(--hover);
+  color: var(--text);
+}
+
+/* Switch rows with a secondary line. */
+.switch-list {
+  display: grid;
+  gap: 12px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+
+.switch {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.switch input {
+  width: 15px;
+  height: 15px;
+  margin-top: 1px;
+  accent-color: var(--accent);
+}
+
+.switch em {
+  display: block;
+  color: var(--faint);
+  font-size: 11.5px;
+  font-style: normal;
+  line-height: 1.45;
+}
+
+/* Joined buttons for the export formats. */
+.segmented {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.segmented button {
+  padding: 5px 9px;
+  border: none;
+  border-left: 1px solid var(--border);
+  background: var(--panel);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.segmented button:first-child {
+  border-left: none;
+}
+
+.segmented button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.segmented button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.count {
+  min-width: 17px;
+  padding: 0 4px;
+  border-radius: 999px;
+  margin-left: 6px;
+  background: var(--hover);
+  color: var(--faint);
+  font-size: 10.5px;
+  font-variant-numeric: tabular-nums;
+}
+
+.drawer-tab.is-active .count {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.publish-target {
+  margin-top: -2px;
+  text-align: center;
+}
+
+.notice.ok {
+  border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
+  background: color-mix(in srgb, var(--accent) 5%, var(--panel));
 }
 
 /* --------------------------------------------------------------- dialog */
@@ -1225,7 +1427,7 @@ input[type="file"].input::file-selector-button:hover {
   }
 
   .drawer {
-    width: min(340px, 100vw);
+    width: min(360px, 100vw);
   }
 
   .editor-page {

@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { PostMeta } from "../../../shared/types.ts";
 import { isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
+import { TokenInput } from "../TokenInput.tsx";
+import { Section } from "./Section.tsx";
 
 export interface PostPanelProps {
   meta: PostMeta;
@@ -9,15 +11,16 @@ export interface PostPanelProps {
   onSlugChange: (slug: string) => void;
 }
 
-function parseList(value: string): string[] {
-  return value
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-}
+const OPTIONS: { key: "toc" | "pin" | "math" | "mermaid"; label: string; hint: string }[] = [
+  { key: "toc", label: "Table of contents", hint: "Sidebar outline on the post page" },
+  { key: "pin", label: "Pin to home", hint: "Keeps the post at the top of the index" },
+  { key: "math", label: "Math", hint: "Loads KaTeX for this post" },
+  { key: "mermaid", label: "Diagrams", hint: "Loads Mermaid for this post" },
+];
 
 export function PostPanel({ meta, slug, onChange, onSlugChange }: PostPanelProps) {
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const coverInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     const path = meta.cover?.path;
@@ -32,119 +35,148 @@ export function PostPanel({ meta, slug, onChange, onSlugChange }: PostPanelProps
     }
   }, [meta.cover?.path]);
 
+  const pickCover = async (file: File | undefined) => {
+    if (!file) {
+      return;
+    }
+    const stored = await storeImageFile(file);
+    onChange({ cover: { path: `local:${stored.id}`, alt: meta.cover?.alt ?? "" } });
+  };
+
   return (
     <>
-      <div className="field">
-        <label htmlFor="meta-slug">Slug</label>
-        <input
-          id="meta-slug"
-          className="input"
-          value={slug}
-          onChange={(event) => onSlugChange(event.target.value)}
-        />
-        <p className="hint">Used for the file name and image names.</p>
-      </div>
-
-      <div className="field">
-        <label htmlFor="meta-date">Date</label>
-        <input
-          id="meta-date"
-          className="input"
-          value={meta.date}
-          onChange={(event) => onChange({ date: event.target.value })}
-        />
-        <p className="hint">Front matter format, e.g. 2026-08-22 09:30:00 +0700.</p>
-      </div>
-
-      <div className="field">
-        <label htmlFor="meta-author">Author</label>
-        <input
-          id="meta-author"
-          className="input"
-          value={meta.author}
-          onChange={(event) => onChange({ author: event.target.value })}
-        />
-      </div>
-
-      <div className="field">
-        <label htmlFor="meta-categories">Categories</label>
-        <input
-          id="meta-categories"
-          className="input"
-          value={meta.categories.join(", ")}
-          placeholder="Vietnamese, Essays"
-          onChange={(event) => onChange({ categories: parseList(event.target.value) })}
-        />
-      </div>
-
-      <div className="field">
-        <label htmlFor="meta-tags">Tags</label>
-        <input
-          id="meta-tags"
-          className="input"
-          value={meta.tags.join(", ")}
-          placeholder="coffee, experience"
-          onChange={(event) => onChange({ tags: parseList(event.target.value) })}
-        />
-      </div>
-
-      <div className="field post-cover">
-        <span className="field-label">Cover image</span>
-        {coverUrl ? <img className="cover-preview" src={coverUrl} alt={meta.cover?.alt ?? ""} /> : null}
-        <input
-          className="input"
-          type="file"
-          accept="image/*"
-          onChange={async (event) => {
-            const file = event.target.files?.[0];
-            event.target.value = "";
-            if (!file) {
-              return;
-            }
-            const stored = await storeImageFile(file);
-            onChange({ cover: { path: `local:${stored.id}`, alt: meta.cover?.alt ?? "" } });
-          }}
-        />
-        {meta.cover ? (
-          <>
-            <input
-              className="input"
-              placeholder="Cover alt text"
-              value={meta.cover.alt}
-              onChange={(event) =>
-                onChange({ cover: { path: meta.cover?.path ?? "", alt: event.target.value } })
-              }
-            />
-            <button type="button" className="btn ghost danger" onClick={() => onChange({ cover: null })}>
-              Remove cover
-            </button>
-          </>
-        ) : null}
-      </div>
-
-      <div className="field">
-        <span className="field-label">Options</span>
-        <label className="switch">
-          <input type="checkbox" checked={meta.toc} onChange={(event) => onChange({ toc: event.target.checked })} />
-          Table of contents
-        </label>
-        <label className="switch">
-          <input type="checkbox" checked={meta.pin} onChange={(event) => onChange({ pin: event.target.checked })} />
-          Pin to home
-        </label>
-        <label className="switch">
-          <input type="checkbox" checked={meta.math} onChange={(event) => onChange({ math: event.target.checked })} />
-          Math (KaTeX)
-        </label>
-        <label className="switch">
-          <input
-            type="checkbox"
-            checked={meta.mermaid}
-            onChange={(event) => onChange({ mermaid: event.target.checked })}
+      <Section title="Taxonomy" hint="Comma or Enter adds one.">
+        <div className="field">
+          <label htmlFor="meta-categories">Categories</label>
+          <TokenInput
+            id="meta-categories"
+            values={meta.categories}
+            placeholder="Vietnamese"
+            onChange={(categories) => onChange({ categories })}
           />
-          Mermaid diagrams
-        </label>
-      </div>
+        </div>
+        <div className="field">
+          <label htmlFor="meta-tags">Tags</label>
+          <TokenInput
+            id="meta-tags"
+            values={meta.tags}
+            placeholder="coffee, morning"
+            onChange={(tags) => onChange({ tags })}
+          />
+        </div>
+      </Section>
+
+      <Section title="Cover image">
+        <div className="field post-cover">
+          {coverUrl ? (
+            <figure className="cover-card">
+              <img src={coverUrl} alt={meta.cover?.alt ?? ""} />
+              <figcaption>
+                <button
+                  type="button"
+                  className="btn tiny"
+                  onClick={() => coverInput.current?.click()}
+                >
+                  Replace
+                </button>
+                <button
+                  type="button"
+                  className="btn tiny danger"
+                  onClick={() => onChange({ cover: null })}
+                >
+                  Remove
+                </button>
+              </figcaption>
+            </figure>
+          ) : (
+            <button
+              type="button"
+              className="cover-empty"
+              onClick={() => coverInput.current?.click()}
+            >
+              Choose an image
+            </button>
+          )}
+          <input
+            ref={coverInput}
+            type="file"
+            accept="image/*"
+            hidden
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              event.target.value = "";
+              void pickCover(file);
+            }}
+          />
+          {meta.cover ? (
+            <>
+              <label htmlFor="meta-cover-alt">Alt text</label>
+              <input
+                id="meta-cover-alt"
+                className="input"
+                placeholder="Describes the image"
+                value={meta.cover.alt}
+                onChange={(event) =>
+                  onChange({ cover: { path: meta.cover?.path ?? "", alt: event.target.value } })
+                }
+              />
+            </>
+          ) : null}
+        </div>
+      </Section>
+
+      <Section title="Post file">
+        <div className="field">
+          <label htmlFor="meta-slug">Slug</label>
+          <input
+            id="meta-slug"
+            className="input"
+            value={slug}
+            onChange={(event) => onSlugChange(event.target.value)}
+          />
+          <p className="hint">Names the Markdown file and its images.</p>
+        </div>
+        <div className="field">
+          <label htmlFor="meta-date">Date</label>
+          <input
+            id="meta-date"
+            className="input mono"
+            value={meta.date}
+            onChange={(event) => onChange({ date: event.target.value })}
+          />
+        </div>
+        <div className="field">
+          <label htmlFor="meta-author">Author</label>
+          <input
+            id="meta-author"
+            className="input"
+            value={meta.author}
+            onChange={(event) => onChange({ author: event.target.value })}
+          />
+        </div>
+      </Section>
+
+      <Section title="Options">
+        <ul className="switch-list">
+          {OPTIONS.map(({ key, label, hint }) => (
+            <li key={key}>
+              <label className="switch">
+                <input
+                  type="checkbox"
+                  checked={meta[key]}
+                  onChange={(event) =>
+                    onChange({ [key]: event.target.checked } as Partial<PostMeta>)
+                  }
+                />
+                <span>
+                  {label}
+                  <em>{hint}</em>
+                </span>
+              </label>
+            </li>
+          ))}
+        </ul>
+      </Section>
     </>
   );
 }

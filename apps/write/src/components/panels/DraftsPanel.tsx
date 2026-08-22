@@ -57,16 +57,26 @@ export function DraftsPanel({
                   {relativeTime(draft.updatedAt)}
                 </span>
               </button>
-              {draft.id === currentId ? (
-                <div className="draft-actions">
-                  <button type="button" className="btn ghost tiny" onClick={() => onDuplicate(draft.id)}>
-                    Duplicate
-                  </button>
-                  <button type="button" className="btn ghost tiny danger" onClick={() => onDelete(draft.id)}>
-                    Delete
-                  </button>
-                </div>
-              ) : null}
+              <div className="draft-row-actions">
+                <button
+                  type="button"
+                  className="tool"
+                  title="Duplicate"
+                  aria-label={`Duplicate ${draftLabel(draft)}`}
+                  onClick={() => onDuplicate(draft.id)}
+                >
+                  <Icon name="copy" size={14} />
+                </button>
+                <button
+                  type="button"
+                  className="tool danger"
+                  title="Delete"
+                  aria-label={`Delete ${draftLabel(draft)}`}
+                  onClick={() => onDelete(draft.id)}
+                >
+                  <Icon name="trash" size={14} />
+                </button>
+              </div>
             </div>
           ))}
         </div>
