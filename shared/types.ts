@@ -38,8 +38,21 @@ export interface PostMeta {
   mermaid: boolean;
   /** Chirpy's `chart:` key — loads Chart.js for this post. */
   chart: boolean;
-  /** Cover image, rendered as the `image:` front matter block. */
-  cover: { path: string; alt: string } | null;
+  /**
+   * Cover image, rendered as the `image:` front matter block.
+   *
+   * `lqip` is the blog build's own work — `update-lqip.js` writes it into every
+   * published post — so it is read back and written out again untouched. An
+   * editor that dropped it would blank the placeholder on every post it saved,
+   * until the next build put it back.
+   */
+  cover: { path: string; alt: string; lqip?: string } | null;
+  /**
+   * Front matter keys this app has no field for, kept as the raw lines they
+   * arrived on. `redirect_from` is the one the blog uses today, and losing it
+   * on an edit would break every old URL pointing at that post.
+   */
+  extra?: string[];
 }
 
 /** One file in a publish request. Content is always base64 of the raw bytes. */

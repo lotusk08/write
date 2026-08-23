@@ -1179,8 +1179,37 @@ textarea {
 
 .ProseMirror .editor-image[data-join] img,
 .ProseMirror .editor-image:has(+ .editor-image[data-join]) img {
-  width: auto;
+  width: 100%;
+  height: auto;
   max-height: 210px;
+}
+
+/* The blog lays a run out with flex, which shrinks every photo until the whole
+   row fits one line. Here they are separate block nodes with no container to
+   flex, so each is given its share of the line instead — and the share depends
+   on how many there are, which `:has()` can count. Sized by height alone they
+   came out ~380px wide and stacked one per line, which is the thing this
+   fixes.
+
+   Runs stop at ROW_LIMIT (4), so there are three lengths. Each length lists
+   its members, longest last: a run of four also matches the rules for shorter
+   ones, and equal specificity means the last match wins. */
+.ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join]),
+.ProseMirror .editor-image:not([data-join]) + .editor-image[data-join] {
+  max-width: calc(50% - 4px);
+}
+
+.ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join]),
+.ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join]) + .editor-image[data-join],
+.ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join]) + .editor-image[data-join] + .editor-image[data-join] {
+  max-width: calc(33.333% - 4px);
+}
+
+.ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join] + .editor-image[data-join]),
+.ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join] + .editor-image[data-join]) + .editor-image[data-join],
+.ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join] + .editor-image[data-join]) + .editor-image[data-join] + .editor-image[data-join],
+.ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join] + .editor-image[data-join]) + .editor-image[data-join] + .editor-image[data-join] + .editor-image[data-join] {
+  max-width: calc(25% - 4px);
 }
 
 .ProseMirror .editor-image.is-shadowed img {

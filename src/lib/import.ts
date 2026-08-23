@@ -28,6 +28,13 @@ function scalar(raw: string): string {
   if (/^'[\s\S]*'$/.test(value)) {
     return value.slice(1, -1).replace(/''/g, "'");
   }
+  // A bare `null` or `~` is YAML's null, not the word. The blog's build writes
+  // one wherever a post has no description — reading it as text put "null" in
+  // the description, and writing it back quoted it, which made it permanent.
+  // Quoted stays text: `description: "null"` is someone meaning it.
+  if (/^(null|~)$/i.test(value)) {
+    return "";
+  }
   return value;
 }
 
@@ -42,9 +49,11 @@ function boolean(raw: string): boolean {
 export function parseFrontMatter(yaml: string): Partial<PostMeta> {
   const meta: Partial<PostMeta> = {};
   const lines = yaml.split(/\r?\n/);
-  let cover: { path: string; alt: string } | null = null;
+  let cover: PostMeta["cover"] = null;
+  const extra: string[] = [];
 
   for (let i = 0; i < lines.length; i++) {
+    const start = i;
     const match = /^([A-Za-z_][\w-]*):[^\S\n]*(.*)$/.exec(lines[i]);
     if (!match) {
       continue;
@@ -67,7 +76,13 @@ export function parseFrontMatter(yaml: string): Partial<PostMeta> {
           }
         }
         if (nested.path) {
-          cover = { path: nested.path, alt: nested.alt ?? "" };
+          // lqip is the blog build's, not ours: carried through untouched so
+          // re-publishing a post does not blank its placeholder.
+          cover = {
+            path: nested.path,
+            alt: nested.alt ?? "",
+            ...(nested.lqip ? { lqip: nested.lqip } : {}),
+          };
         }
         continue;
       }
@@ -109,12 +124,18 @@ export function parseFrontMatter(yaml: string): Partial<PostMeta> {
         }
         break;
       default:
+        // Whatever this is, it is the blog's and not ours: kept verbatim,
+        // continuation lines and all.
+        extra.push(...lines.slice(start, i + 1));
         break;
     }
   }
 
   if (cover) {
     meta.cover = cover;
+  }
+  if (extra.length) {
+    meta.extra = extra;
   }
   return meta;
 }

@@ -366,6 +366,11 @@ function yamlString(value: string): string {
     !YAML_TIMESTAMP.test(text) &&
     !YAML_NUMBER.test(text) &&
     !YAML_BOOL_OR_NULL.test(text);
+  // js-yaml writes an empty string as '' — matching it keeps this a fixed
+  // point of the build's re-serialisation for a post with no title.
+  if (text === "") {
+    return "''";
+  }
   return plainIsSafe ? text : `"${text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
@@ -390,18 +395,35 @@ export function buildFrontMatter(meta: PostMeta): string {
   lines.push(`author: ${yamlString(meta.author)}`, `date: ${yamlString(meta.date)}`);
   lines.push(...yamlList("categories", meta.categories));
   lines.push(...yamlList("tags", meta.tags));
+  // Coerced rather than interpolated: a draft stored before one of these
+  // switches existed, or a post whose front matter never carried the key,
+  // would otherwise write the word `undefined` — which YAML reads back as a
+  // string, and a string is true.
   lines.push(
-    `pin: ${meta.pin}`,
-    `toc: ${meta.toc}`,
-    `math: ${meta.math}`,
-    `mermaid: ${meta.mermaid}`,
-    `chart: ${meta.chart}`,
+    `pin: ${Boolean(meta.pin)}`,
+    `toc: ${Boolean(meta.toc)}`,
+    `math: ${Boolean(meta.math)}`,
+    `mermaid: ${Boolean(meta.mermaid)}`,
+    `chart: ${Boolean(meta.chart)}`,
   );
   if (meta.cover?.path) {
+    // path, alt, lqip. `update-lqip.js` does `frontMatter.image.lqip = …` on
+    // the map it parsed, and a new key in JavaScript lands at the end — so
+    // that is the order a post published from here comes back in, and writing
+    // it the same way means re-publishing moves nothing.
     lines.push("image:", `  path: ${yamlString(meta.cover.path)}`);
     if (meta.cover.alt.trim()) {
       lines.push(`  alt: ${yamlString(meta.cover.alt)}`);
     }
+    if (meta.cover.lqip?.trim()) {
+      lines.push(`  lqip: ${yamlString(meta.cover.lqip)}`);
+    }
+  }
+  // Keys this app does not model — `redirect_from`, and whatever the blog
+  // grows next — sit at the end rather than being dropped. Editing a post
+  // must not silently take its redirects with it.
+  if (meta.extra?.length) {
+    lines.push(...meta.extra);
   }
   lines.push("---");
   return lines.join("\n");

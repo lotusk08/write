@@ -117,6 +117,21 @@ Things that took a bug to learn, and that a change here can quietly undo:
 - Code spans are literal: escaping them writes the backslashes into the code.
   A link wraps its emphasis, not the other way round.
 - Footnote references are syntax, not text to escape.
+- Front matter the app has no field for survives anyway. `image.lqip` and
+  `redirect_from` are the two the blog actually uses, and both are written by
+  something other than this app — losing them on an edit would blank a
+  placeholder or break every old URL into a post. Unknown top-level keys are
+  kept as their raw lines and written back at the end.
+- `image:` is written `path, alt, lqip`, because `update-lqip.js` does
+  `frontMatter.image.lqip = …` and a new key in JavaScript lands last. That is
+  the order a post published from here comes back in, so re-publishing moves
+  nothing.
+- A bare `null` in front matter is YAML's null, not the word: reading it as
+  text put "null" in the description of every post that had none, and writing
+  it back quoted made it permanent. Quoted `"null"` is still text.
+- The five switches are coerced with `Boolean()` before interpolation. A draft
+  saved before one of them existed writes `undefined` otherwise, which YAML
+  reads back as a string — and a string is true.
 
 ## Editing a published post
 
