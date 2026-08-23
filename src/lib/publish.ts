@@ -2,7 +2,7 @@ import type { JSONContent } from "@tiptap/core";
 import type { PublishFile } from "../../shared/types.ts";
 import type { Draft, StoredImage } from "./db.ts";
 import { imageStore, isLocalSrc, localId } from "./db.ts";
-import { blobToBase64, extensionFor, toWebp, type EncodeOutcome } from "./images.ts";
+import { blobToBase64, extensionFor } from "./images.ts";
 import { buildPostFile } from "./markdown.ts";
 import type { Settings } from "./settings.ts";
 import { datePrefix, slugify } from "./text.ts";
@@ -17,13 +17,6 @@ export interface PublishPlan {
   imageUrls: Map<string, string>;
   /** Images referenced by the document but no longer in this browser. */
   skippedImages: string[];
-  /** Images going up in the format they arrived in, and why. */
-  keptImages: KeptImage[];
-}
-
-export interface KeptImage {
-  path: string;
-  reason: EncodeOutcome;
 }
 
 interface PlannedImage {
@@ -98,10 +91,6 @@ async function planImages(draft: Draft, slug: string): Promise<PlannedImage[]> {
   return planned;
 }
 
-function passthroughType(type: string): boolean {
-  return type === "image/gif" || type === "image/svg+xml";
-}
-
 function metaWithCover(draft: Draft, imageUrls: Map<string, string>) {
   const cover = draft.meta.cover;
   if (!cover?.path) {
@@ -129,14 +118,10 @@ export async function markdownForExport(draft: Draft, settings: Settings): Promi
   const imageUrls = new Map<string, string>();
 
   for (const image of await planImages(draft, slug)) {
-    if (!image.stored) {
-      continue;
+    if (image.stored) {
+      const extension = extensionFor(image.stored.type, image.stored.name);
+      imageUrls.set(image.src, `/${imagesDir}/${image.baseName}.${extension}`);
     }
-    const extension =
-      settings.convertImagesToWebp && !passthroughType(image.stored.type)
-        ? "webp"
-        : extensionFor(image.stored.type, image.stored.name);
-    imageUrls.set(image.src, `/${imagesDir}/${image.baseName}.${extension}`);
   }
 
   return buildPostFile(metaWithCover(draft, imageUrls), draft.doc, {
@@ -154,27 +139,17 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
   const files: PublishFile[] = [];
   const imageUrls = new Map<string, string>();
   const skippedImages: string[] = [];
-  const keptImages: KeptImage[] = [];
 
+  // Uploaded as they came in. The blog's build is what turns them into the
+  // WebP the rest of its pipeline expects, and repoints the post at them.
   for (const image of await planImages(draft, slug)) {
     if (!image.stored) {
       skippedImages.push(image.src);
       continue;
     }
-    const encoded = settings.convertImagesToWebp
-      ? await toWebp(image.stored.blob, image.stored.name)
-      : {
-          blob: image.stored.blob,
-          extension: extensionFor(image.stored.type, image.stored.name),
-          outcome: "kept" as const,
-        };
-    const path = `${imagesDir}/${image.baseName}.${encoded.extension}`;
-    // Worth saying out loud: the blog builds its placeholders and its sizes
-    // from `.webp` alone, so anything else goes up without them.
-    if (encoded.extension !== "webp" && !passthroughType(image.stored.type)) {
-      keptImages.push({ path, reason: encoded.outcome });
-    }
-    files.push({ path, contentBase64: await blobToBase64(encoded.blob) });
+    const extension = extensionFor(image.stored.type, image.stored.name);
+    const path = `${imagesDir}/${image.baseName}.${extension}`;
+    files.push({ path, contentBase64: await blobToBase64(image.stored.blob) });
     imageUrls.set(image.src, `/${path}`);
   }
 
@@ -184,7 +159,7 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
   const markdownPath = markdownPathFor(draft, settings, slug);
   files.unshift({ path: markdownPath, contentBase64: await blobToBase64(new Blob([markdown])) });
 
-  return { slug, markdownPath, markdown, files, imageUrls, skippedImages, keptImages };
+  return { slug, markdownPath, markdown, files, imageUrls, skippedImages };
 }
 
 export function defaultCommitMessage(draft: Draft, isUpdate: boolean): string {

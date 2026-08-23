@@ -15,7 +15,6 @@ export interface Settings {
   githubToken: string;
   publishTarget: "posts" | "drafts";
   openPullRequest: boolean;
-  convertImagesToWebp: boolean;
   /** Which tab the pop-up menu opens on. */
   menuTab: MenuTab;
   /** Hides the bottom toolbar. */
@@ -39,7 +38,6 @@ export const defaultSettings: Settings = {
   githubToken: "",
   publishTarget: "posts",
   openPullRequest: false,
-  convertImagesToWebp: true,
   menuTab: "post",
   focusMode: false,
 };

@@ -116,24 +116,6 @@ export function SettingsPanel({ settings, config, onChange }: SettingsPanelProps
         </div>
       </Section>
       )}
-
-      <Section title="Editor">
-        <ul className="switch-list">
-          <li>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.convertImagesToWebp}
-                onChange={(event) => onChange({ convertImagesToWebp: event.target.checked })}
-              />
-              <span>
-                Convert images to WebP
-                <em>The blog only generates placeholders and sizes for .webp files</em>
-              </span>
-            </label>
-          </li>
-        </ul>
-      </Section>
     </>
   );
 }

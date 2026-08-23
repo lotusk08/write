@@ -43,17 +43,15 @@ fixed point of that pass: block sequences, js-yaml's plain-scalar quoting rules,
 and no empty keys (a bare `description:` would come back as the string `null`).
 Change it only alongside a round-trip check against those exact options.
 
-Body output follows the blog too: headings start at H2, images are WebP under
-`assets/img/post` so the LQIP pass picks them up, and blockquotes can carry the
-site's `{: .note-* }` callout classes.
+Body output follows the blog too: headings start at H2, images go under
+`assets/img/post`, and blockquotes can carry the site's `{: .note-* }` callout
+classes.
 
-WebKit has no WebP encoder behind its canvas — `toBlob` and `convertToBlob`
-hand back a PNG without saying so — so `images.ts` checks what came back and
-falls through to libwebp (`@jsquash/webp`, in `webpWorker.ts`) when it is not a
-WebP. That codec is a lazy chunk, fetched only on the browsers that need it,
-and runs off the main thread because a phone photo is a second or two of work.
-An image that still cannot be encoded is published as it arrived and the
-publish dialog says so, rather than going up as a `.png` the blog will skip.
+Images are published in the format they arrived in, named from it. The blog's
+build converts them — `convert-images.js` runs ahead of the LQIP pass, writes
+WebP and repoints the post that referenced them — because that is the one end
+with a real encoder: WebKit has none behind its canvas, so converting here
+never worked from an iPhone, which is where most of these photos come from.
 
 ## Round-tripping published posts
 
