@@ -1,6 +1,0 @@
-# Copy to `.dev.vars` for local development (`.dev.vars` is git-ignored).
-# Fine-grained GitHub PAT, listing the blog repo, with Contents: Read & write.
-GITHUB_TOKEN=github_pat_xxx
-# Required alongside the token: the worker refuses to publish without it, and
-# asks for it at the moment you publish. Also unlocks opening a published post.
-WRITE_PASSWORD=

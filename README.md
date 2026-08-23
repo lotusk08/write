@@ -5,14 +5,14 @@ draft in the browser, fold sections away while you work, export to Markdown or
 Word, and publish straight to the blog repository — text and images in a single
 commit. Posts already on the blog can be opened here and edited in place.
 
-It runs entirely on Cloudflare: the SPA is served from Workers static assets and
-a small Worker handles publishing.
+It is static files and nothing else — no server, no API of its own, nothing to
+pay for. Publishing is a GitHub call from the browser, with a fine-grained
+token you keep in Settings.
 
 ```
 .
 ├── src/          the editor app (React + Tiptap 3)
-├── worker/       the Cloudflare Worker: /api/config, /api/publish, /api/posts, /api/source
-├── shared/       code both sides use (GitHub commit flow, types, base64)
+├── shared/       the GitHub commit flow, the post types, base64
 └── wrangler.jsonc
 ```
 
@@ -75,105 +75,68 @@ Shortcuts: `⌘S` save now · `⌘⇧N` new draft · `⌘\` open/close the menu 
 
 ```bash
 npm install
-npm run dev          # http://localhost:5173 — Vite plus the Worker in workerd
+npm run dev          # http://localhost:5173
+npm run typecheck    # tsc across the app and shared
+npm run build        # dist
 ```
 
-To exercise server-side publishing locally, copy `.dev.vars.example` to
-`.dev.vars` and fill it in. `.dev.vars` is git-ignored.
+## Deploying
 
-```bash
-npm run typecheck    # tsc across app, worker and shared
-npm run build        # dist/client (SPA) + dist/write (Worker)
-```
-
-## Deploying to Cloudflare
+Any static host will do. On Cloudflare:
 
 ```bash
 npx wrangler login
-npm run deploy       # builds, then uploads the Worker and the static assets
+npm run deploy       # builds, then uploads dist as a Pages project
 ```
 
-`wrangler.jsonc` already claims `write.stevehoang.com` as a custom domain, which
-needs that zone on the same Cloudflare account. Drop the `routes` entry to
-publish to `https://write.<your-subdomain>.workers.dev` instead — but the blog's
-*Edit this post* button links to the custom name, so keep the two in step.
+Attach `write.stevehoang.com` to that project in the dashboard — the blog's
+*Edit this post* button links to that name, so keep the two in step. For
+deploys on push, connect the repository under Workers & Pages → Builds: root
+directory `/`, build command `npm run build`, output directory `dist`. Node
+comes from `.node-version`.
 
-### Choose how the GitHub token is held
+### The GitHub token
 
-**Server-side (recommended).** The token lives as a Worker secret and never
-reaches the browser; the app just sends a password.
+Publishing needs a fine-grained personal access token with **Contents: Read &
+write** on `lotusk08/stevehoang.com` and nothing else. Paste it into Settings.
 
-```bash
-npx wrangler secret put GITHUB_TOKEN     # fine-grained PAT, see below
-npx wrangler secret put WRITE_PASSWORD   # asked for when you publish
-```
+It is held in that browser's local storage and sent to `api.github.com`, never
+anywhere else — which also means it is only as private as the device it is on.
+On a phone, that is a device with a passcode; treat the token as something you
+can revoke and reissue in a minute, because that is the recovery plan.
 
-Both are required together: with a token but no password, the Worker refuses to
-publish rather than leave an open write endpoint on the internet, and says so in
-the app. The password is typed at the moment you publish and never stored, so
-writing and previewing need nothing at all.
+### Where posts go
 
-Paste the token at the prompt rather than piping it in — a trailing newline
-makes GitHub treat the request as anonymous, and a private repo answers that
-with a flat *not found*. If a post will not open, the app says whether the token
-was rejected outright or simply was never granted the repository.
+Repository, branch and the three directories are all in Settings, and they are
+the app's own — nothing hands them to it:
 
-**Browser-side.** Deploy with no secrets at all and paste a fine-grained token
-into Settings; it is kept in that browser's local storage and talks to
-`api.github.com` directly. Fine for a private machine, and it is also what makes
-the app work on any static host (including Cloudflare Pages via
-`npx wrangler pages deploy dist/client`).
-
-The token needs **Contents: Read & write** on `lotusk08/stevehoang.com` only.
-
-### Continuous deploys
-
-Connect the repository in the Cloudflare dashboard under Workers → Builds. The
-defaults are right for this repo — root directory `/`, build command
-`npm run build`, deploy command `npx wrangler deploy` — because the app sits at
-the repository root with its own npm lockfile. Node comes from `.node-version`.
-
-### Configuration
-
-Non-secret settings live in `wrangler.jsonc` under `vars`, and the app reads
-them from `/api/config` at boot:
-
-| Var | Default |
+| Setting | Default |
 | --- | --- |
-| `BLOG_REPO` | `lotusk08/stevehoang.com` |
-| `BLOG_BRANCH` | `blog` — the branch the posts are on |
-| `POSTS_DIR` | `_posts` |
-| `DRAFTS_DIR` | `_drafts` |
-| `IMAGES_DIR` | `assets/img/post` |
-| `SITE_URL` | `https://stevehoang.com` — where published images are previewed from |
-
-The Worker will only ever write inside those three directories, and only to
-`BLOG_REPO` — a request cannot point it somewhere else. `/api/source`, which
-reads a post back out for editing, is limited to the same directories and sits
-behind the same password, since the blog repository is private.
+| Repository | `lotusk08/stevehoang.com` |
+| Branch | `blog` — the branch the posts are on |
+| Posts | `_posts` |
+| Drafts | `_drafts` |
+| Images | `assets/img/post` |
+| Site URL | `https://stevehoang.com` — where published images are previewed from |
 
 ## Notes
 
-- The build writes two directories: `dist/client` (the SPA) and `dist/write`
-  (the Worker plus a generated `wrangler.json` pointing at those assets). The
-  deploy script passes that generated config to Wrangler explicitly, so a CI
-  job can build and deploy in separate steps.
 - The interface is deliberately neutral — monochrome greys, hairline borders,
   one violet accent, icon-only toolbar — and rides on the system sans (SF on
   Apple devices, Inter where installed), so no web fonts are downloaded.
 - Front matter and settings share one pop-up rather than a sidebar, a top bar
   and two dialogs; only publishing and opening a post are modals. Settings holds
-  what is yours to set — with a Worker publishing, there is no repository, token
-  or path to configure here.
+  what is yours to set: the repository, the token, the paths and the post
+  defaults.
 - Reading a published post back is the inverse of writing one, and is checked
   against the real blog: every post is parsed, re-serialised and rendered with
   kramdown, and 60 of 62 come out byte-identical. The two that differ have
   unbalanced `*` in the source. `CLAUDE.md` lists what that exercise taught.
-- Publishing through the GitHub API bypasses the blog's local pre-commit hook,
-  so images are converted to WebP here instead — which also keeps them eligible
-  for the LQIP pass, whose regex only matches `.webp` under `assets/img`.
-  Placeholders and intrinsic sizes are still filled in by the blog's own
-  `npm run build`.
+- Images go up in the format they arrived in. Converting them here meant
+  carrying a WebP encoder in the page, because WebKit has none behind its
+  canvas — and the blog's own build is better placed to do it: `npm run build`
+  there converts every post image to WebP and fills in the placeholders and
+  intrinsic sizes, on the way to the site and without writing back.
 - The app is a standalone npm project inside this repository; it does not join
   the BlockNote pnpm workspace and has no dependency on the packages around it.
 

@@ -189,7 +189,18 @@ export const LocalImage = Image.extend({
             figure.classList.toggle("is-missing", !url);
           });
         } else {
-          img.src = displaySrc(src);
+          const published = displaySrc(src);
+          // The blog's build converts every photo it is given and serves the
+          // WebP, so a post still pointing at the JPEG it was published with
+          // finds nothing at that address. It is the same picture.
+          img.onerror = () => {
+            const converted = published.replace(/\.(jpe?g|png|tiff?|bmp)$/i, ".webp");
+            img.onerror = null;
+            if (converted !== published) {
+              img.src = converted;
+            }
+          };
+          img.src = published;
         }
       };
       paint(node.attrs);

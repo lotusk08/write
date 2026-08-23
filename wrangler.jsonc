@@ -1,30 +1,10 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "write",
-  "main": "./worker/index.ts",
-  "compatibility_date": "2026-06-01",
-  "assets": {
-    "binding": "ASSETS",
-    "not_found_handling": "single-page-application"
-  },
-  "observability": {
-    "enabled": true
-  },
-  // The blog's edit button links here, so the Worker answers on this name.
-  // Needs stevehoang.com to be a zone on the same Cloudflare account.
-  "routes": [{ "pattern": "write.stevehoang.com", "custom_domain": true }],
-  "vars": {
-    // Public defaults. Override per-environment in the Cloudflare dashboard.
-    "BLOG_REPO": "lotusk08/stevehoang.com",
-    // The branch the posts live on — the site's `_posts` are on `blog`.
-    "BLOG_BRANCH": "blog",
-    // Where the blog is served, so images already published can be previewed.
-    "SITE_URL": "https://stevehoang.com",
-    "POSTS_DIR": "_posts",
-    "DRAFTS_DIR": "_drafts",
-    "IMAGES_DIR": "assets/img/post"
-  }
-  // Secrets (never put these in this file — use `wrangler secret put NAME`):
-  //   GITHUB_TOKEN  – fine-grained PAT with Contents: read & write on the blog repo
-  //   WRITE_PASSWORD – optional shared password gating the publish API
+  // Static files, nothing else: the app publishes to GitHub from the browser,
+  // so this deployment has no code of its own and no secrets to hold.
+  // `npm run deploy` uploads dist as a Pages project; the custom domain
+  // (write.stevehoang.com, which the blog's edit button links to) is attached
+  // to that project in the Cloudflare dashboard.
+  "pages_build_output_dir": "dist"
 }

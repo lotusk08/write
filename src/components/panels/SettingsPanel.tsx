@@ -1,61 +1,52 @@
-import type { AppConfig } from "../../../shared/types.ts";
-import { usesServerPublishing } from "../../lib/api.ts";
 import type { Settings } from "../../lib/settings.ts";
 import { Section } from "./Section.tsx";
 
 export interface SettingsPanelProps {
   settings: Settings;
-  config: AppConfig | null;
   onChange: (patch: Partial<Settings>) => void;
 }
 
-export function SettingsPanel({ settings, config, onChange }: SettingsPanelProps) {
-  const serverMode = usesServerPublishing(config);
-
+export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
   return (
     <>
-      {config?.warning ? <div className="notice warn">{config.warning}</div> : null}
-
-      {serverMode ? null : (
-        <Section title="Blog">
-          <div className="row wide-first">
-            <div className="field">
-              <label htmlFor="set-repo">Repository</label>
-              <input
-                id="set-repo"
-                className="input"
-                value={settings.repo}
-                onChange={(event) => onChange({ repo: event.target.value })}
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="set-branch">Branch</label>
-              <input
-                id="set-branch"
-                className="input"
-                value={settings.branch}
-                onChange={(event) => onChange({ branch: event.target.value })}
-              />
-            </div>
+      <Section title="Blog">
+        <div className="row wide-first">
+          <div className="field">
+            <label htmlFor="set-repo">Repository</label>
+            <input
+              id="set-repo"
+              className="input"
+              value={settings.repo}
+              onChange={(event) => onChange({ repo: event.target.value })}
+            />
           </div>
           <div className="field">
-            <label htmlFor="set-token">GitHub token</label>
+            <label htmlFor="set-branch">Branch</label>
             <input
-              id="set-token"
+              id="set-branch"
               className="input"
-              type="password"
-              autoComplete="off"
-              placeholder="github_pat_…"
-              value={settings.githubToken}
-              onChange={(event) => onChange({ githubToken: event.target.value })}
+              value={settings.branch}
+              onChange={(event) => onChange({ branch: event.target.value })}
             />
-            <p className="hint">
-              Only needed because this copy has no worker to publish for it — deploy one with a
-              GITHUB_TOKEN secret and this field disappears.
-            </p>
           </div>
-        </Section>
-      )}
+        </div>
+        <div className="field">
+          <label htmlFor="set-token">GitHub token</label>
+          <input
+            id="set-token"
+            className="input"
+            type="password"
+            autoComplete="off"
+            placeholder="github_pat_…"
+            value={settings.githubToken}
+            onChange={(event) => onChange({ githubToken: event.target.value })}
+          />
+          <p className="hint">
+            Fine-grained, Contents: read and write on the blog repo. It is kept in this
+            browser and sent to GitHub, nowhere else.
+          </p>
+        </div>
+      </Section>
 
       <Section title="Post defaults">
         <div className="row">
@@ -83,7 +74,6 @@ export function SettingsPanel({ settings, config, onChange }: SettingsPanelProps
         <p className="hint">Offset in minutes; +0700 is 420.</p>
       </Section>
 
-      {serverMode ? null : (
       <Section title="Repository paths">
         <div className="row">
           <div className="field">
@@ -115,7 +105,6 @@ export function SettingsPanel({ settings, config, onChange }: SettingsPanelProps
           />
         </div>
       </Section>
-      )}
     </>
   );
 }

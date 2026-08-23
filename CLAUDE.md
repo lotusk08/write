@@ -2,9 +2,15 @@
 
 A Tiptap-based writing app for [stevehoang.com](https://stevehoang.com): drafts
 live in the browser, posts are published to the Jekyll blog repository, and the
-whole thing runs on Cloudflare Workers. Published posts can be read back out of
-the repository and edited here, so the app has to be able to write a post it did
-not create without changing it.
+whole thing is static files — there is no server side of its own. Published
+posts can be read back out of the repository and edited here, so the app has to
+be able to write a post it did not create without changing it.
+
+The blog is reached straight from the browser with a fine-grained GitHub token
+kept in Settings. That token is the app's only piece of trust and never leaves
+the browser it was typed into; scope it to the blog repo, Contents: read and
+write. Everything to do with media — WebP, placeholders, sizes — belongs to the
+blog's own build, not here.
 
 This repository began as a fork of BlockNote. That tree is preserved on the
 `blocknote-upstream` branch — `main` is this app, at the repository root, with
@@ -12,12 +18,10 @@ its own npm lockfile.
 
 ## Commands
 
-- `npm run dev` — Vite on :5173, with `worker/index.ts` running in workerd, so
-  the `/api` routes behave as they do once deployed. Secrets come from
-  `.dev.vars`; without them the app reports `publishMode: "browser"`.
-- `npm run typecheck` — `tsc -b` across the app, the worker and `shared/`.
-- `npm run build` — emits `dist/client` (SPA) and `dist/write` (Worker).
-- `npm run deploy` — builds, then deploys with the generated Worker config.
+- `npm run dev` — Vite on :5173. Nothing else runs alongside it.
+- `npm run typecheck` — `tsc -b` across the app and `shared/`.
+- `npm run build` — emits `dist`.
+- `npm run deploy` — builds, then uploads `dist` as a Pages project.
 
 ## Layout
 
@@ -29,11 +33,8 @@ its own npm lockfile.
   post; `import.ts` reads one back and is the inverse of it. `viewport.ts`
   measures the part of the window a phone keyboard leaves on screen; the shell
   is pinned to it and every pop-up is placed against it, not `innerHeight`.
-- `worker/index.ts` — `/api/config`, `/api/publish`, `/api/posts`,
-  `/api/source`. It only ever writes inside the configured post/draft/image
-  directories, and only to `BLOG_REPO`; `/api/source` reads from the same
-  directories and is behind the same password, because the blog repo is private.
-- `shared/` — imported by both sides; keep it free of DOM APIs.
+- `shared/` — GitHub calls, base64 and the post types. No DOM in it, so it can
+  be read and tested on its own; `lib/api.ts` is the only door to the network.
 
 ## Publishing format
 
@@ -52,6 +53,11 @@ build converts them — `convert-images.js` runs ahead of the LQIP pass, writes
 WebP and repoints the post that referenced them — because that is the one end
 with a real encoder: WebKit has none behind its canvas, so converting here
 never worked from an iPhone, which is where most of these photos come from.
+
+Nothing is written back to the repository afterwards, so a published post keeps
+pointing at the file it was published with while the site serves the WebP made
+from it. The image node tries the WebP when the original 404s, which is what a
+photo published as a JPEG does once the site has been built.
 
 ## Round-tripping published posts
 

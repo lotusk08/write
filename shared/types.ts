@@ -1,4 +1,8 @@
-/** Types shared between the browser app and the Cloudflare Worker. */
+/**
+ * Types and helpers with no DOM in them, kept apart from the editor so they can
+ * be read — and tested — on their own. They were shared with a Worker once; the
+ * app talks to GitHub directly now.
+ */
 
 /** Jekyll (Chirpy) front matter for a post. */
 export interface PostMeta {
@@ -41,21 +45,4 @@ export interface PublishResult {
   commitUrl: string;
   paths: string[];
   pullRequestUrl?: string;
-}
-
-/** What the worker tells the app about itself on boot. */
-export interface AppConfig {
-  /** `server`: the worker holds the GitHub token. `browser`: the app must supply one. */
-  publishMode: "server" | "browser";
-  /** True when the worker requires a password before publishing. */
-  authRequired: boolean;
-  repo: string;
-  branch: string;
-  /** Where the blog is served, so published images can be previewed. */
-  siteUrl: string;
-  postsDir: string;
-  draftsDir: string;
-  imagesDir: string;
-  /** Set when the worker is configured in a way that blocks publishing. */
-  warning?: string;
 }

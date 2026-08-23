@@ -1441,42 +1441,6 @@ textarea {
 }
 
 /* --------------------------------------------------------------- dialog */
-/* A dialog that asks one thing: the file, one field, and a way in. */
-.dialog.is-compact {
-  width: min(400px, 100%);
-  padding: 20px 20px 16px;
-}
-
-.dialog.is-compact h2 {
-  margin-bottom: 12px;
-  font-size: 16px;
-}
-
-.unlock-path {
-  overflow: hidden;
-  margin: 0 0 14px;
-  color: var(--faint);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.unlock-field {
-  width: 100%;
-}
-
-.unlock-error {
-  margin: 10px 0 0;
-  color: var(--danger);
-  font-size: 12.5px;
-  line-height: 1.5;
-}
-
-.unlock-note {
-  margin: 12px 0 0;
-  text-align: center;
-}
-
 .scrim {
   position: fixed;
   z-index: 40;

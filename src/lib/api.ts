@@ -1,31 +1,16 @@
-import { commitFiles } from "../../shared/github.ts";
-import type { AppConfig, PublishRequest, PublishResult } from "../../shared/types.ts";
+import { commitFiles, readTextFile } from "../../shared/github.ts";
+import type { PublishRequest, PublishResult } from "../../shared/types.ts";
 import type { Settings } from "./settings.ts";
 
 /**
- * Asks the worker how this deployment is configured. Returns null when the app
- * is served as plain static files (no worker), in which case publishing falls
- * back to a token kept in the browser.
+ * The blog is reached straight from the browser with a fine-grained token.
+ *
+ * There is nothing of this app's own running anywhere: it is a page and a
+ * service worker's worth of static files, and the token in Settings is the one
+ * piece of trust it holds. That token never leaves this browser, and it is the
+ * only thing standing between it and the repository — so scope it to the blog
+ * repo, Contents: read and write, and nothing else.
  */
-export async function fetchAppConfig(): Promise<AppConfig | null> {
-  try {
-    const response = await fetch("/api/config", { headers: { accept: "application/json" } });
-    if (!response.ok) {
-      return null;
-    }
-    const type = response.headers.get("content-type") ?? "";
-    if (!type.includes("application/json")) {
-      return null;
-    }
-    return (await response.json()) as AppConfig;
-  } catch {
-    return null;
-  }
-}
-
-export function usesServerPublishing(config: AppConfig | null): boolean {
-  return config?.publishMode === "server";
-}
 
 export interface PostSource {
   path: string;
@@ -33,67 +18,30 @@ export interface PostSource {
   markdown: string;
 }
 
-/**
- * Fetches a published post's Markdown through the worker, which reads it with
- * its own token — the blog repo is private, so this needs the same password
- * publishing does.
- */
-export async function fetchPostSource(path: string, password: string): Promise<PostSource> {
-  const response = await fetch(`/api/source?path=${encodeURIComponent(path)}`, {
-    headers: {
-      accept: "application/json",
-      ...(password ? { "x-write-password": password } : {}),
-    },
-  });
-  const payload = (await response.json().catch(() => ({}))) as Partial<PostSource> & { error?: string };
-  if (!response.ok || typeof payload.markdown !== "string") {
-    throw new Error(payload.error || `Could not open ${path} (${response.status}).`);
-  }
-  return payload as PostSource;
-}
-
-async function publishViaWorker(
-  request: PublishRequest,
-  password: string,
-): Promise<PublishResult> {
-  const response = await fetch("/api/publish", {
-    method: "POST",
-    headers: {
-      "content-type": "application/json",
-      ...(password ? { "x-write-password": password } : {}),
-    },
-    body: JSON.stringify(request),
-  });
-
-  const payload = (await response.json().catch(() => ({}))) as Partial<PublishResult> & { error?: string };
-  if (!response.ok) {
-    throw new Error(payload.error || `Publish failed (${response.status}).`);
-  }
-  return payload as PublishResult;
-}
-
-/**
- * `password` is typed into the publish dialog and used for this request only —
- * it is never stored, so a browser left open cannot publish on its own.
- */
-export async function publish(
-  request: PublishRequest,
-  config: AppConfig | null,
-  settings: Settings,
-  password = "",
-): Promise<PublishResult> {
-  if (usesServerPublishing(config)) {
-    return publishViaWorker(request, password);
-  }
-
+function token(settings: Settings): string {
   if (!settings.githubToken) {
     throw new Error(
-      "No GitHub token yet. Add a fine-grained token in Settings, or deploy the worker with a GITHUB_TOKEN secret so the token never touches the browser.",
+      "No GitHub token yet. Add a fine-grained one — Contents: read and write on the blog repo — in Settings.",
     );
   }
+  return settings.githubToken;
+}
 
+/** Reads a published post back out of the repository, for `?edit=`. */
+export async function fetchPostSource(path: string, settings: Settings): Promise<PostSource> {
+  const markdown = await readTextFile(token(settings), settings.repo, settings.branch, path);
+  if (markdown === null) {
+    throw new Error(`${settings.repo} has no ${path} on ${settings.branch}.`);
+  }
+  return { path, branch: settings.branch, markdown };
+}
+
+export async function publish(
+  request: PublishRequest,
+  settings: Settings,
+): Promise<PublishResult> {
   return commitFiles({
-    token: settings.githubToken,
+    token: token(settings),
     repo: settings.repo,
     branch: request.branch || settings.branch,
     baseBranch: settings.branch,

@@ -1,15 +1,14 @@
 import { EditorContent, useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { AppConfig, PostMeta, PublishResult } from "../shared/types.ts";
+import type { PostMeta, PublishResult } from "../shared/types.ts";
 import { DraftRail } from "./components/DraftRail.tsx";
 import { EditorPopover, type ExportFormat } from "./components/EditorPopover.tsx";
 import { Icon } from "./components/Icons.tsx";
-import { ImportDialog } from "./components/ImportDialog.tsx";
 import { PublishDialog } from "./components/PublishDialog.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
 import { editorExtensions } from "./editor/extensions.ts";
-import { fetchAppConfig, fetchPostSource } from "./lib/api.ts";
+import { fetchPostSource } from "./lib/api.ts";
 import { draftStore, type Draft } from "./lib/db.ts";
 import { createDraft, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText } from "./lib/download.ts";
@@ -35,7 +34,6 @@ export default function App() {
   usePinnedViewport();
 
   const [settings, setSettings] = useState<Settings>(loadSettings);
-  const [config, setConfig] = useState<AppConfig | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -44,12 +42,6 @@ export default function App() {
   const [toast, setToast] = useState<Toast>(null);
   const [exporting, setExporting] = useState(false);
   const [ready, setReady] = useState(false);
-  // Set by the blog's edit button (`?edit=…`), cleared once the post is open.
-  const [importPath, setImportPath] = useState<string | null>(null);
-  const [importBusy, setImportBusy] = useState(false);
-  const [importError, setImportError] = useState<string | null>(null);
-  // Typed once per tab, kept in memory only: never stored, gone on reload.
-  const [sessionPassword, setSessionPassword] = useState("");
   // The post's Markdown while it is being edited as text; null in rich mode.
   const [source, setSource] = useState<string | null>(null);
 
@@ -167,22 +159,8 @@ export default function App() {
 
   useEffect(() => {
     void (async () => {
-      const [stored, remote] = await Promise.all([draftStore.all(), fetchAppConfig()]);
-      setConfig(remote);
-      setSiteUrl(remote?.siteUrl || loadSettings().siteUrl);
-      if (remote) {
-        // The worker is authoritative about where posts go.
-        updateSettings({
-          repo: remote.repo || undefined,
-          branch: remote.branch || undefined,
-          siteUrl: remote.siteUrl || undefined,
-          postsDir: remote.postsDir,
-          draftsDir: remote.draftsDir,
-          imagesDir: remote.imagesDir,
-        } as Partial<Settings>);
-      }
-
-      const sorted = sortDrafts(stored);
+      setSiteUrl(loadSettings().siteUrl);
+      const sorted = sortDrafts(await draftStore.all());
       if (sorted.length === 0) {
         const draft = createDraft(loadSettings());
         await draftStore.put(draft);
@@ -196,25 +174,6 @@ export default function App() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // `?edit=_posts/…` — the blog's edit button pointing back here. The query is
-  // dropped straight away so a reload does not import the post twice.
-  useEffect(() => {
-    if (!ready) {
-      return;
-    }
-    const requested = new URLSearchParams(window.location.search).get("edit");
-    if (!requested) {
-      return;
-    }
-    window.history.replaceState({}, "", window.location.pathname);
-    const path = postPathFromLink(requested);
-    if (path) {
-      setImportPath(path);
-    } else {
-      setToast({ message: `Not a post path: ${requested}`, kind: "error" });
-    }
-  }, [ready]);
 
   useEffect(() => {
     const field = description.current;
@@ -263,19 +222,16 @@ export default function App() {
    * duplicated, so local edits are never silently replaced by the live copy.
    */
   const importPost = useCallback(
-    async (path: string, password: string) => {
-      setImportBusy(true);
-      setImportError(null);
+    async (path: string) => {
       try {
         const existing = draftsRef.current.find((draft) => draft.publishedPath === path);
         if (existing) {
-          setImportPath(null);
           setCurrentId(existing.id);
           setToast({ message: `Opened your local draft of ${path}.`, kind: "info" });
           return;
         }
 
-        const source = await fetchPostSource(path, password);
+        const source = await fetchPostSource(path, settings);
         const parsed = parsePost(source.markdown);
         const now = Date.now();
         const draft: Draft = {
@@ -291,20 +247,38 @@ export default function App() {
         await draftStore.put(draft);
         setDrafts((previous) => sortDrafts([draft, ...previous]));
         setCurrentId(draft.id);
-        setSessionPassword(password);
-        setImportPath(null);
         // Re-publishing should land back on the file it came from.
         const drafts = settings.draftsDir.replace(/^\/+|\/+$/g, "");
         updateSettings({ publishTarget: path.startsWith(`${drafts}/`) ? "drafts" : "posts" });
         setToast({ message: `Opened ${path}.`, kind: "info" });
       } catch (cause) {
-        setImportError(cause instanceof Error ? cause.message : String(cause));
-      } finally {
-        setImportBusy(false);
+        setToast({
+          message: cause instanceof Error ? cause.message : String(cause),
+          kind: "error",
+        });
       }
     },
     [settings, updateSettings],
   );
+
+  // `?edit=_posts/…` — the blog's edit button pointing back here. The query is
+  // dropped straight away so a reload does not import the post twice.
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+    const requested = new URLSearchParams(window.location.search).get("edit");
+    if (!requested) {
+      return;
+    }
+    window.history.replaceState({}, "", window.location.pathname);
+    const path = postPathFromLink(requested);
+    if (path) {
+      void importPost(path);
+    } else {
+      setToast({ message: `Not a post path: ${requested}`, kind: "error" });
+    }
+  }, [ready, importPost]);
 
   /**
    * The same post as Markdown. Everything downstream reads the document, so
@@ -649,34 +623,18 @@ export default function App() {
           onChange: updateMeta,
           onSlugChange: setSlug,
         }}
-        settings={{ settings, config, onChange: updateSettings }}
+        settings={{ settings, onChange: updateSettings }}
         onPublish={() => void settle().then(() => setPublishOpen(true))}
         onExport={(format) => void exportAs(format)}
         exporting={exporting}
         escapeCloses={!publishOpen}
       />
 
-      {importPath ? (
-        <ImportDialog
-          path={importPath}
-          busy={importBusy}
-          error={importError}
-          onCancel={() => {
-            setImportPath(null);
-            setImportError(null);
-          }}
-          onUnlock={(password) => void importPost(importPath, password)}
-        />
-      ) : null}
-
       {publishOpen ? (
         <PublishDialog
           draft={current}
           settings={settings}
-          config={config}
           onSettingsChange={updateSettings}
-          password={sessionPassword}
-          onPassword={setSessionPassword}
           onClose={() => setPublishOpen(false)}
           onPublished={onPublished}
           onOpenSettings={() => {
