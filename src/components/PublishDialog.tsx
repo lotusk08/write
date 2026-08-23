@@ -11,9 +11,6 @@ interface PublishDialogProps {
   draft: Draft;
   settings: Settings;
   onSettingsChange: (patch: Partial<Settings>) => void;
-  /** The publish token, if it was unlocked earlier in this tab. */
-  writeToken: string;
-  onWriteToken: (token: string) => void;
   onClose: () => void;
   onPublished: (result: PublishResult, plan: PublishPlan) => void;
   onOpenSettings: () => void;
@@ -23,8 +20,6 @@ export function PublishDialog({
   draft,
   settings,
   onSettingsChange,
-  writeToken,
-  onWriteToken,
   onClose,
   onPublished,
   onOpenSettings,
@@ -34,9 +29,10 @@ export function PublishDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [passphrase, setPassphrase] = useState("");
-  // Asked for here and nowhere else: this is the step that writes.
+  // Asked for here and nowhere else, and asked every time: the token is opened
+  // for this one commit and is not held afterwards, in this dialog or beyond
+  // it. Writing a post needs none of this — only sending it does.
   const locked = settings.publishToken;
-  const needsPassphrase = Boolean(locked) && !writeToken;
 
   const repo = settings.repo;
   const baseBranch = settings.branch;
@@ -79,18 +75,13 @@ export function PublishDialog({
   );
 
   const run = async () => {
-    if (!plan || !locked || (needsPassphrase && !passphrase)) {
+    if (!plan || !locked || !passphrase) {
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      // The passphrase opens the token for this tab, not for the next one.
-      const token = writeToken || (await unlockToken(locked, passphrase));
-      if (!writeToken) {
-        onWriteToken(token);
-        setPassphrase("");
-      }
+      const token = await unlockToken(locked, passphrase);
       const branch = settings.openPullRequest ? publishBranchName(plan.slug) : baseBranch;
       const result = await publish(
         {
@@ -125,9 +116,7 @@ export function PublishDialog({
           <button
             type="button"
             className="btn primary"
-            disabled={
-              !plan || busy || Boolean(missingCredentials) || (needsPassphrase && !passphrase)
-            }
+            disabled={!plan || busy || Boolean(missingCredentials) || !passphrase}
             onClick={() => void run()}
           >
             {busy ? "Publishing…" : settings.openPullRequest ? "Open pull request" : "Commit"}
@@ -152,7 +141,7 @@ export function PublishDialog({
       ) : null}
       {error ? <div className="notice warn">{error}</div> : null}
 
-      {needsPassphrase ? (
+      {locked ? (
         <div className="field">
           <label htmlFor="publish-passphrase">Passphrase</label>
           <input
@@ -172,8 +161,8 @@ export function PublishDialog({
             }}
           />
           <p className="hint">
-            Opens the publish token for as long as this tab is open. Nothing else here can write
-            to the blog.
+            Opens the publish token for this one commit. It is not kept afterwards, and nothing
+            else here can write to the blog.
           </p>
         </div>
       ) : null}

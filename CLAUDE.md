@@ -10,8 +10,8 @@ The blog is reached straight from the browser with two fine-grained GitHub
 tokens kept in Settings, split by what they can do. The read token (Contents:
 read) opens a published post for editing and sits in the browser as it is. The
 publish token (Contents: read and write) is locked with a passphrase — `lock.ts`,
-PBKDF2 and AES-GCM — and opened only at the publish step, held for that tab and
-never stored. Everything to do with media — WebP, placeholders, sizes — belongs
+PBKDF2 and AES-GCM — and opened at the publish step, for that one commit and
+never held afterwards. Everything to do with media — WebP, placeholders, sizes — belongs
 to the blog's own build, not here.
 
 This repository began as a fork of BlockNote. That tree is preserved on the

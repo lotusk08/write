@@ -107,8 +107,8 @@ on the blog anyway.
 
 **Publish token** — *Contents: Read & write*. Paste it into Settings with a
 passphrase and it is locked there (PBKDF2 + AES-GCM, in WebCrypto); the token
-itself is never stored. Publishing asks for the passphrase, opens the token for
-as long as that tab is open, and asks again next time.
+itself is never stored. Every publish asks for the passphrase and opens the
+token for that one commit.
 
 So a phone left unlocked reads; it does not write. Forgetting the passphrase
 costs you a token, not the blog — issue another and lock it again. Either token
