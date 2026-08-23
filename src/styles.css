@@ -647,6 +647,9 @@ textarea {
   font-family: var(--font-prose);
   font-size: 15px;
   line-height: 1.55;
+  /* Its height is set from what is written in it, so it never scrolls inside
+     itself and never leaves an empty line under a one-line description. */
+  overflow: hidden;
   resize: none;
 }
 

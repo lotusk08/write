@@ -51,6 +51,7 @@ export default function App() {
   const pendingRef = useRef<Partial<Draft>>({});
   const timerRef = useRef<number | undefined>(undefined);
   const menuButton = useRef<HTMLButtonElement>(null);
+  const description = useRef<HTMLTextAreaElement>(null);
   const mainRegion = useRef<HTMLDivElement>(null);
 
   draftsRef.current = drafts;
@@ -171,6 +172,15 @@ export default function App() {
       setToast({ message: `Not a post path: ${requested}`, kind: "error" });
     }
   }, [ready]);
+
+  useEffect(() => {
+    const field = description.current;
+    if (!field) {
+      return;
+    }
+    field.style.height = "auto";
+    field.style.height = `${field.scrollHeight}px`;
+  }, [current?.meta.description, currentId, ready]);
 
   /* ----------------------------------------------------------------- theme */
 
@@ -480,9 +490,10 @@ export default function App() {
                   onChange={(event) => updateMeta({ title: event.target.value })}
                 />
                 <textarea
+                  ref={description}
                   className="description-input"
                   placeholder="A one-line description for the post card and SEO"
-                  rows={2}
+                  rows={1}
                   value={current.meta.description}
                   onChange={(event) => updateMeta({ description: event.target.value })}
                 />
