@@ -14,10 +14,12 @@ import { Extension } from "@tiptap/core";
  * a line you have not written on yet and the break turns into one, which is the
  * blank line the blog reads as a new `<p>`.
  *
- * Only where a paragraph flows: a list item, a table cell and a section summary
- * have their own idea of what Enter means, and keep it.
+ * Only where a paragraph flows — the document, a blockquote, and the body of a
+ * collapsible section, which the blog renders through kramdown like any other
+ * prose. A list item, a table cell and a section summary have their own idea
+ * of what Enter means, and keep it.
  */
-const FLOWING = new Set(["doc", "blockquote"]);
+const FLOWING = new Set(["doc", "blockquote", "collapsibleContent"]);
 
 export const EnterBreaks = Extension.create({
   name: "enterBreaks",
@@ -35,6 +37,13 @@ export const EnterBreaks = Extension.create({
         // An empty paragraph has nothing to break; let Enter do what it does
         // there, which is leave the quote it is in.
         if ($from.parent.content.size === 0) {
+          return false;
+        }
+        // At the very start of a line there is nothing before the cursor to
+        // break after — and a break written here would sit at the paragraph's
+        // edge, which the serialiser trims. Default Enter opens a paragraph
+        // above, which is what it looks like it does.
+        if ($from.parentOffset === 0) {
           return false;
         }
 

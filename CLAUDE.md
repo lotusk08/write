@@ -136,7 +136,10 @@ Things that took a bug to learn, and that a change here can quietly undo:
   each way is the break and the whole of it.
 - A caption written beside its image and one written under it are the same
   paragraph but not the same rendering — the second has a `<br>` before it. Which
-  side it was on rides on the block as `sameLine`.
+  side it was on rides on the block as `sameLine`, and like every block
+  attribute it must be declared in `BlockAttributes` — the schema strips what
+  it does not know the first time a document passes through the editor, which
+  is a silent way to lose exactly this kind of fact.
 - The break that ends the line an image sits on is layout, not text. Left in the
   run it becomes a paragraph between two images, which is a blank line on the way
   out, and a blank line is the end of the row.
@@ -158,6 +161,17 @@ Things that took a bug to learn, and that a change here can quietly undo:
 - The five switches are coerced with `Boolean()` before interpolation. A draft
   saved before one of them existed writes `undefined` otherwise, which YAML
   reads back as a string — and a string is true.
+
+In an `.author` quote the site styles the last paragraph as the attribution —
+right-aligned, italic, the dash added by CSS — and the editor now shows the
+same, so where the name goes is visible while writing rather than a convention
+to remember. The stanza flow inside a quote: Enter is a line break, Enter twice
+is a `>` gap (a new paragraph, still in the quote), and Enter on that empty
+paragraph is the way out of it.
+
+The publish password lives in session storage (`src/lib/password.ts`), never in
+Settings: one prompt per sitting, and closing the tab — or the app going away
+on a phone — is what forgets it.
 
 ## Editing a published post
 

@@ -846,6 +846,35 @@ textarea {
   text-align: center;
 }
 
+/* The site's rule, shown while writing: the quote's last paragraph is the
+   attribution — right-aligned, italic, with the dash put there by the
+   stylesheet. So where the name goes is visible before publishing, instead of
+   a convention to remember; type it as the last line and it dresses itself. */
+.ProseMirror blockquote[data-note="author"] p:last-child {
+  padding-right: 1.5em;
+  font-size: 0.9em;
+  font-style: italic;
+  opacity: 0.85;
+  text-align: right;
+}
+
+.ProseMirror blockquote[data-note="author"] p:last-child::before {
+  content: "— ";
+}
+
+/* Until a second paragraph exists there is no attribution yet, only a quote. */
+.ProseMirror blockquote[data-note="author"] p:only-child {
+  padding-right: 0;
+  font-size: inherit;
+  font-style: inherit;
+  opacity: 1;
+  text-align: center;
+}
+
+.ProseMirror blockquote[data-note="author"] p:only-child::before {
+  content: none;
+}
+
 /* Inline code the blog renders as a path rather than as a code span. */
 .ProseMirror code.filepath {
   border: none;

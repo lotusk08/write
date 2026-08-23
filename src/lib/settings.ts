@@ -3,9 +3,9 @@ import type { AppConfig } from "../../shared/types.ts";
 /**
  * What this browser remembers. Not the blog's address, its branch or its
  * directories — those belong to the deployment and arrive from `/api/config`
- * at startup — and no GitHub token: the Worker holds the only one there is.
- * The password that unlocks it is kept here, so it is typed once on a device
- * rather than once a post.
+ * at startup — and no credentials: the Worker holds the only GitHub token, and
+ * the password that reaches it lives in session storage (`password.ts`), gone
+ * when the tab is.
  */
 export interface Settings {
   theme: "light" | "dark" | "system";
@@ -21,8 +21,6 @@ export interface Settings {
   postsDir: string;
   draftsDir: string;
   imagesDir: string;
-  /** Sent to the Worker with every publish. Typed once, then remembered. */
-  publishPassword: string;
   publishTarget: "posts" | "drafts";
   openPullRequest: boolean;
   /** Which tab the pop-up menu opens on. */
@@ -45,7 +43,6 @@ export const defaultSettings: Settings = {
   postsDir: "_posts",
   draftsDir: "_drafts",
   imagesDir: "assets/img/post",
-  publishPassword: "",
   publishTarget: "posts",
   openPullRequest: false,
   menuTab: "post",
@@ -70,6 +67,7 @@ export function loadSettings(): Settings {
       ? (JSON.parse(raw) as Partial<Settings> & {
           githubToken?: string;
           publishToken?: unknown;
+          publishPassword?: string;
         })
       : {};
     const stored = { ...defaultSettings, ...parsed };
@@ -80,7 +78,7 @@ export function loadSettings(): Settings {
     // GitHub tokens used to be kept here, one of them locked behind a
     // password. The Worker holds the only one now, so loading is the moment to
     // get them out of this browser for good.
-    const stale = ["githubToken", "publishToken"] as const;
+    const stale = ["githubToken", "publishToken", "publishPassword"] as const;
     for (const key of stale) {
       delete (settings as Partial<typeof parsed>)[key];
     }

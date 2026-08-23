@@ -122,14 +122,14 @@ piping it — a trailing newline makes GitHub treat the request as anonymous,
 which a private repo answers with a flat "not found".
 
 `WRITE_PASSWORD` is the whole of what stands in front of it, so make it long.
-It is the only thing the browser is trusted with: the app asks for it the first
-time you publish on a device, keeps it once it works, and never asks again
-until the Worker's answer changes. It guards sending, not reading — a post
-under `_posts` opens without it, because it is on the blog anyway; a draft does
-not. Until it is set the Worker refuses to
+It is the only thing the browser is ever trusted with, and only for a sitting:
+the first publish after the app opens asks for it, and it is held in session
+storage until the tab closes — or the app goes away on a phone — then asked for
+again. Nothing stores it. It guards sending, not reading — a post under
+`_posts` opens without it, because it is on the blog anyway; a draft does not. Until it is set the Worker refuses to
 publish at all — an endpoint holding a write token with nothing in front of it
 is worse than a broken one, so it fails closed and says so.
 
-Changing the password locks every browser out at once: the next publish gets a
-401, forgets what it had, and asks. Revoking the token on GitHub stops the
+Changing the password locks every session out at once: the next publish gets a
+401, drops what it held, and asks. Revoking the token on GitHub stops the
 Worker itself. Those are the two independent ways back.

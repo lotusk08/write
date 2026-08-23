@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AppConfig, PublishResult } from "../../shared/types.ts";
 import { PasswordRejected, publish } from "../lib/api.ts";
+import { rememberPassword, sessionPassword } from "../lib/password.ts";
 import type { Draft } from "../lib/db.ts";
 import { buildPublishPlan, defaultCommitMessage, publishBranchName, type PublishPlan } from "../lib/publish.ts";
 import type { Settings } from "../lib/settings.ts";
@@ -27,11 +28,11 @@ export function PublishDialog({
   const [message, setMessage] = useState(() => defaultCommitMessage(draft, Boolean(draft.publishedPath)));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Asked for only when there is none to send, or when the Worker has just
-  // said the one we sent is wrong. Otherwise publishing is one button.
-  const [password, setPassword] = useState(settings.publishPassword);
+  // Asked for once a session — the first publish after the app opens — or when
+  // the Worker has just said what we sent is wrong. Otherwise one button.
+  const [password, setPassword] = useState(sessionPassword);
   const [rejected, setRejected] = useState(false);
-  const asking = !settings.publishPassword || rejected;
+  const asking = !sessionPassword() || rejected;
 
   const repo = settings.repo;
   const baseBranch = settings.branch;
@@ -97,20 +98,16 @@ export function PublishDialog({
         },
         password,
       );
-      // It worked, so it is worth keeping: this is the last time this device
-      // asks, until the password on the Worker changes.
-      if (password !== settings.publishPassword) {
-        onSettingsChange({ publishPassword: password });
-      }
+      // It worked, so it is worth keeping — for this session. The next sitting
+      // asks again; that is the point of it.
+      rememberPassword(password);
       onPublished(result, plan);
     } catch (cause) {
       if (cause instanceof PasswordRejected) {
-        // A stored password that has stopped working is worse than none: it
+        // A held password that has stopped working is worse than none: it
         // would fail the same way every time without ever asking.
         setRejected(true);
-        if (settings.publishPassword) {
-          onSettingsChange({ publishPassword: "" });
-        }
+        rememberPassword("");
       }
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -169,7 +166,8 @@ export function PublishDialog({
             }}
           />
           <p className="hint">
-            Remembered on this device once it works, so this is the only time it is asked for.
+            Held until this tab closes, then asked for again — one prompt a sitting, not one a
+            post.
           </p>
         </div>
       ) : null}

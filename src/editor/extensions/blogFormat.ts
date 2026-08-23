@@ -174,6 +174,19 @@ export const BlockAttributes = Extension.create({
             parseHTML: (element) => element.hasAttribute("data-join"),
             renderHTML: (attributes) => (attributes.joinPrevious ? { "data-join": "" } : {}),
           },
+          /**
+           * Whether the block carried on the previous block's line rather than
+           * starting one under it — an image's caption written beside it. Not
+           * cosmetic: with `hard_wrap` the two positions render differently,
+           * and an attribute the schema does not declare is stripped the first
+           * time the document passes through the editor. That was a caption
+           * quietly gaining a `<br>` on every edited post.
+           */
+          sameLine: {
+            default: false,
+            parseHTML: (element) => element.hasAttribute("data-same-line"),
+            renderHTML: (attributes) => (attributes.sameLine ? { "data-same-line": "" } : {}),
+          },
         },
       },
     ];

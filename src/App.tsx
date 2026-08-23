@@ -13,6 +13,7 @@ import { draftStore, type Draft } from "./lib/db.ts";
 import { createDraft, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
 import { markdownToDoc, parsePost, postPathFromLink, slugFromPath } from "./lib/import.ts";
+import { sessionPassword } from "./lib/password.ts";
 import { buildHtmlDocument } from "./lib/html.ts";
 import { docToMarkdown, docToPlainText } from "./lib/markdown.ts";
 import { draftSlug, markdownForExport, type PublishPlan } from "./lib/publish.ts";
@@ -253,7 +254,7 @@ export default function App() {
           return;
         }
 
-        const source = await fetchPostSource(path, settings.publishPassword);
+        const source = await fetchPostSource(path, sessionPassword());
         const parsed = parsePost(source.markdown);
         const now = Date.now();
         const draft: Draft = {
