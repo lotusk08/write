@@ -7,7 +7,9 @@ commit. Posts already on the blog can be opened here and edited in place.
 
 No token to remember. A small Worker holds the one GitHub token and makes the
 commit; the browser sends a password to reach it, typed once on a device and
-remembered after that. No GitHub credential ever touches the browser.
+remembered after that. Opening a published post asks for nothing at all — the
+password is for sending, not for reading. No GitHub credential ever touches the
+browser.
 
 ```
 .
@@ -121,7 +123,9 @@ which a private repo answers with a flat "not found".
 `WRITE_PASSWORD` is the whole of what stands in front of it, so make it long.
 It is the only thing the browser is trusted with: the app asks for it the first
 time you publish on a device, keeps it once it works, and never asks again
-until the Worker's answer changes. Until it is set the Worker refuses to
+until the Worker's answer changes. It guards sending, not reading — a post
+under `_posts` opens without it, because it is on the blog anyway; a draft does
+not. Until it is set the Worker refuses to
 publish at all — an endpoint holding a write token with nothing in front of it
 is worse than a broken one, so it fails closed and says so.
 

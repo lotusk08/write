@@ -12,6 +12,12 @@ password, as `x-write-password` on every `/api` call — typed once on a device
 and remembered, so publishing is one button rather than a password prompt per
 post.
 
+Reading and writing are not the same privilege, so they are not asked for the
+same way. A published post opens without the password: `_posts` is on the blog
+already, and the *Edit this post* link should land you in the editor rather than
+at a prompt. Drafts do not — they are the writing nobody has seen — and neither
+does publishing. So the password appears in one place, the publish dialog.
+
 The Worker fails closed: with no `WRITE_PASSWORD` set it refuses to publish at
 all, because it would otherwise be an open endpoint holding a write token.
 
@@ -115,7 +121,7 @@ Things that took a bug to learn, and that a change here can quietly undo:
 ## Editing a published post
 
 `?edit=<repo path>` — what the blog's own edit button links to — reads the post
-through `/api/source` and opens it as a draft whose `publishedPath` is that
-file, so re-publishing lands on the same path rather than making a copy. Images
+through `/api/source`, which asks no password for anything under `_posts`, and
+opens it as a draft whose `publishedPath` is that file, so re-publishing lands on the same path rather than making a copy. Images
 already on the blog are left alone: not re-encoded, re-uploaded or renamed, and
 a newly added image is numbered past every name the post already uses.

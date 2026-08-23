@@ -58,18 +58,26 @@ function sameSecret(a: string, b: string): boolean {
   return differences === 0;
 }
 
-/** What is missing before this deployment can publish, in the order to fix it. */
-function problem(env: Env): string | null {
+/** What is missing before this deployment can reach the blog at all. */
+function unreachable(env: Env): string | null {
   if (!env.GITHUB_TOKEN) {
     return "This deployment has no GITHUB_TOKEN, so it cannot reach the blog. Add one with `wrangler secret put GITHUB_TOKEN`.";
-  }
-  if (!env.WRITE_PASSWORD) {
-    return "Publishing is disabled until WRITE_PASSWORD is set (`wrangler secret put WRITE_PASSWORD`), otherwise this endpoint would let anyone write to the blog.";
   }
   if (!env.BLOG_REPO) {
     return "No BLOG_REPO configured on this deployment.";
   }
   return null;
+}
+
+/** What is missing before it can publish, in the order to fix it. */
+function problem(env: Env): string | null {
+  if (!env.GITHUB_TOKEN) {
+    return unreachable(env);
+  }
+  if (!env.WRITE_PASSWORD) {
+    return "Publishing is disabled until WRITE_PASSWORD is set (`wrangler secret put WRITE_PASSWORD`), otherwise this endpoint would let anyone write to the blog.";
+  }
+  return unreachable(env);
 }
 
 function json(body: unknown, status = 200): Response {
@@ -244,13 +252,17 @@ async function whyMissing(env: Env, branch: string, path: string): Promise<strin
   return `No such file on ${repo}@${branch}: ${path}`;
 }
 
-/** Reads one post back out of the repo so it can be edited here. */
+/**
+ * Reads one post back out of the repo so it can be edited here.
+ *
+ * A published post is asked for without a password. The repository is private,
+ * but a file under `_posts` is on the blog already — the same words, rendered —
+ * so a password on the way to it buys nothing and costs the thing the blog's
+ * *Edit this post* button is for: following that link and simply arriving in
+ * the editor. Drafts are the opposite case and stay behind the password: they
+ * are the writing nobody has seen.
+ */
 async function handleSource(request: Request, env: Env): Promise<Response> {
-  const denied = authorize(request, env);
-  if (denied) {
-    return denied;
-  }
-
   const url = new URL(request.url);
   const path = (url.searchParams.get("path") ?? "").replace(/^\/+/, "");
   const allowed = Object.values(dirs(env)).map((dir) => `${dir.replace(/\/+$/, "")}/`);
@@ -259,6 +271,19 @@ async function handleSource(request: Request, env: Env): Promise<Response> {
   }
   if (!/\.(md|markdown)$/i.test(path)) {
     return json({ error: "Only Markdown files can be opened." }, 400);
+  }
+
+  const published = path.startsWith(`${dirs(env).postsDir.replace(/\/+$/, "")}/`);
+  if (published) {
+    const missing = unreachable(env);
+    if (missing) {
+      return json({ error: missing }, env.GITHUB_TOKEN ? 500 : 501);
+    }
+  } else {
+    const denied = authorize(request, env);
+    if (denied) {
+      return denied;
+    }
   }
 
   const branch = env.BLOG_BRANCH || "main";
