@@ -87,14 +87,17 @@ Any static host will do. On Cloudflare:
 
 ```bash
 npx wrangler login
-npm run deploy       # builds, then uploads dist as a Pages project
+npm run deploy       # builds, then uploads dist to the `write` Worker
 ```
 
-Attach `write.stevehoang.com` to that project in the dashboard — the blog's
-*Edit this post* button links to that name, so keep the two in step. For
-deploys on push, connect the repository under Workers & Pages → Builds: root
-directory `/`, build command `npm run build`, output directory `dist`. Node
-comes from `.node-version`.
+`write.stevehoang.com` is a custom domain on that Worker, and `wrangler.jsonc`
+holds the route — so the deploy lands on the name the blog's *Edit this post*
+button links to, with nothing to attach by hand. The Worker has no `main`: it
+serves `dist` and runs no code of its own.
+
+Deploy anywhere else — a Pages project of the same name included — and the
+domain stays on the Worker, serving whatever was last pushed to it. That is the
+one way this can look like it worked and change nothing.
 
 ### The two tokens
 

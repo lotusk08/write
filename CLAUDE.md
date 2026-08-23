@@ -100,7 +100,7 @@ Things that took a bug to learn, and that a change here can quietly undo:
 ## Editing a published post
 
 `?edit=<repo path>` — what the blog's own edit button links to — reads the post
-through `/api/source` and opens it as a draft whose `publishedPath` is that
-file, so re-publishing lands on the same path rather than making a copy. Images
+from GitHub with the read token and opens it as a draft whose `publishedPath` is
+that file, so re-publishing lands on the same path rather than making a copy. Images
 already on the blog are left alone: not re-encoded, re-uploaded or renamed, and
 a newly added image is numbered past every name the post already uses.
