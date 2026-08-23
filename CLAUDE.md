@@ -90,11 +90,17 @@ photo published as a JPEG does once the site has been built.
 back. Editing a published post must not change what the blog renders, so the two
 are checked against the real corpus rather than by eye: parse every post in
 `../stevehoang.com/_posts`, re-serialise it, render both versions with kramdown
-(`input: GFM`, `hard_wrap: false`) and compare the HTML.
+and compare the HTML. Use the options the site actually builds with —
+`input: GFM` and **`hard_wrap: true`** (`_config.yml`). This note used to say
+`hard_wrap: false`, which is a different renderer: under it a lone newline is a
+wrap, under the real one it is a `<br>`. Every line break in the corpus was
+being scored against the wrong answer.
 
-At the time of writing **60 of 62 posts render byte-identically**. The two that
-do not have unbalanced `*` in the source, which kramdown and this parser recover
-from differently. Treat a drop in that number as a regression.
+At the time of writing **57 of 63 posts render identically** once whitespace
+runs are collapsed, and 26 byte for byte — the others differ only in whitespace
+kramdown copies through from stray trailing spaces in the source. The 6 that
+really differ are older posts with unbalanced `*` and the like, which kramdown
+and this parser recover from differently. Treat a drop in 57 as a regression.
 
 Things that took a bug to learn, and that a change here can quietly undo:
 
@@ -117,6 +123,20 @@ Things that took a bug to learn, and that a change here can quietly undo:
 - Code spans are literal: escaping them writes the backslashes into the code.
   A link wraps its emphasis, not the other way round.
 - Footnote references are syntax, not text to escape.
+- Every newline inside a paragraph is a `<br>`: the site sets `hard_wrap: true`.
+  Reading one as a wrap and joining the lines with a space took a break out of
+  every post opened here, and writing a break as two trailing spaces left the
+  spaces sitting in front of the `<br />` kramdown made of them. A bare newline
+  each way is the break and the whole of it.
+- A caption written beside its image and one written under it are the same
+  paragraph but not the same rendering — the second has a `<br>` before it. Which
+  side it was on rides on the block as `sameLine`.
+- The break that ends the line an image sits on is layout, not text. Left in the
+  run it becomes a paragraph between two images, which is a blank line on the way
+  out, and a blank line is the end of the row.
+- A photo in a row carries `{: .normal .gap }`. `.gap` is `margin-right: 0.25rem`
+  in the blog's stylesheet, so the spacing between photos is the site's to set;
+  the editor reads the same class rather than inventing a margin of its own.
 - Front matter the app has no field for survives anyway. `image.lqip` and
   `redirect_from` are the two the blog actually uses, and both are written by
   something other than this app — losing them on an edit would blank a

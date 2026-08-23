@@ -171,16 +171,17 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
       i += 2;
       continue;
     }
-    // Two trailing spaces are the only hard break; a lone newline is a wrap.
-    if (/^[^\S\n]{2,}\n/.test(rest)) {
+    // Every newline inside a paragraph is a break. The blog runs kramdown with
+    // `hard_wrap: true` (`_config.yml`), so a line the author ended by pressing
+    // Enter is a `<br>` on the site — reading it as a wrap and joining the two
+    // lines with a space took that break out of every post opened here.
+    // Trailing spaces before it are the older way of writing the same break and
+    // are no part of the text.
+    const wrap = /^[^\S\n]*\n/.exec(rest);
+    if (wrap) {
       flush();
       out.push({ type: "hardBreak" });
-      i += /^[^\S\n]{2,}\n/.exec(rest)![0].length;
-      continue;
-    }
-    if (char === "\n") {
-      buffer += " ";
-      i += 1;
+      i += wrap[0].length;
       continue;
     }
     if (char === "`") {
@@ -274,6 +275,15 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
  */
 function trimRun(nodes: JSONContent[]): JSONContent[] {
   const out = [...nodes];
+  // The break that ended the line an image was on is the layout, not text.
+  // Left in, it becomes a paragraph of its own between two images — which is a
+  // blank line on the way out, and a blank line is the end of the row.
+  while (out[0]?.type === "hardBreak") {
+    out.shift();
+  }
+  while (out[out.length - 1]?.type === "hardBreak") {
+    out.pop();
+  }
   for (const [index, edge] of [[0, /^[ \t]+/] as const, [-1, /[ \t]+$/] as const]) {
     const at = index === 0 ? 0 : out.length - 1;
     const node = out[at];
@@ -305,11 +315,20 @@ function blocksFromInline(nodes: JSONContent[]): JSONContent[] {
   }
 
   const out: JSONContent[] = [];
+  /**
+   * Whether each block carried on the line the one before it was on, rather
+   * than starting a new one. A caption written beside its image and a caption
+   * written under it are the same paragraph but not the same rendering: with
+   * `hard_wrap` the second has a `<br>` between them and the first does not.
+   */
+  const carriesOn: boolean[] = [];
   let run: JSONContent[] = [];
   const flush = () => {
+    const sameLine = run.length > 0 && run[0]?.type !== "hardBreak";
     const trimmed = trimRun(run);
     if (trimmed.length) {
       out.push({ type: "paragraph", content: trimmed });
+      carriesOn.push(sameLine);
     }
     run = [];
   };
@@ -320,6 +339,9 @@ function blocksFromInline(nodes: JSONContent[]): JSONContent[] {
       run.push(node);
       continue;
     }
+    // Read before the flush clears it: a break at the end of what came before
+    // put this image on a line of its own.
+    const sameLine = run.length > 0 && run[run.length - 1]?.type !== "hardBreak";
     flush();
     const next = nodes[i + 1];
     const attributes = next?.type === "text" && !next.marks?.length ? IAL.exec(next.text ?? "") : null;
@@ -333,12 +355,22 @@ function blocksFromInline(nodes: JSONContent[]): JSONContent[] {
       }
     }
     out.push(node);
+    carriesOn.push(sameLine);
   }
 
   flush();
   // They were one paragraph, and are written back as one.
   return out.map((block, index) =>
-    index === 0 ? block : { ...block, attrs: { ...block.attrs, joinPrevious: true } },
+    index === 0
+      ? block
+      : {
+          ...block,
+          attrs: {
+            ...block.attrs,
+            joinPrevious: true,
+            ...(carriesOn[index] ? { sameLine: true } : {}),
+          },
+        },
   );
 }
 

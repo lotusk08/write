@@ -19,6 +19,35 @@ declare module "@tiptap/core" {
 /** The blog's centred image row, the one block attribute worth a button. */
 export const CENTER_ROW = "{: .d-flex .c-center }";
 
+/**
+ * What the blog's own posts put on each photo in a row. `.gap` is a quarter of
+ * a rem of margin in the site's stylesheet, so the spacing between photos is
+ * the site's to decide rather than something this editor invents; `.normal`
+ * keeps the width class off them. Written per image, not per row, which is how
+ * the posts that already do this are written.
+ */
+const ROW_CLASSES = ["normal", "gap"];
+
+const IAL_BODY = /^\{:\s*|\s*\}$/g;
+const rowClass = (name: string) => new RegExp(`\\.${name}(?![\\w-])`);
+
+/** Adds the row classes, keeping whatever the list already carries. */
+export function withRowClasses(ial: unknown): string {
+  const body = String(ial ?? "").replace(IAL_BODY, "").trim();
+  const missing = ROW_CLASSES.filter((name) => !rowClass(name).test(body));
+  return `{: ${[body, ...missing.map((name) => `.${name}`)].filter(Boolean).join(" ")} }`;
+}
+
+/** Takes them out again, and the list with them when nothing else is left. */
+export function withoutRowClasses(ial: unknown): string | null {
+  const body = String(ial ?? "")
+    .replace(IAL_BODY, "")
+    .replace(new RegExp(`\\.(?:${ROW_CLASSES.join("|")})(?![\\w-])`, "g"), "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return body ? `{: ${body} }` : null;
+}
+
 /** Whether the images around the cursor are already laid out as one row. */
 export function inImageRow(state: EditorState): boolean {
   return isRow(imageRun(state));
@@ -205,6 +234,11 @@ export const BlockAttributes = Extension.create({
           const breaking = isRow(run);
           run.forEach(({ pos, node }, index) => {
             tr.setNodeAttribute(pos, "joinPrevious", breaking ? false : index > 0);
+            tr.setNodeAttribute(
+              pos,
+              "ial",
+              breaking ? withoutRowClasses(node.attrs.ial) : withRowClasses(node.attrs.ial),
+            );
             const last = index === run.length - 1;
             if (!breaking && last) {
               tr.setNodeAttribute(pos, "blockIal", CENTER_ROW);

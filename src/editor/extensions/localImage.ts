@@ -3,7 +3,7 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { NodeView } from "@tiptap/pm/view";
 import { LOCAL_PREFIX, isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
 import { displaySrc } from "../../lib/site.ts";
-import { CENTER_ROW } from "./blogFormat.ts";
+import { CENTER_ROW, withRowClasses } from "./blogFormat.ts";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -84,6 +84,8 @@ function applyLayout(figure: HTMLElement, image: HTMLImageElement, ial: string):
       ? "right"
       : "";
   figure.classList.toggle("is-shadowed", classes.includes("shadow"));
+  // `.gap` is the blog's own spacing for a photo in a row.
+  figure.classList.toggle("is-gapped", classes.includes("gap"));
   figure.classList.toggle("is-rounded", classes.some((name) => name.startsWith("rounded")));
   // The site serves one of these per theme; showing both would be a surprise.
   figure.dataset.scheme = classes.includes("light")
@@ -147,6 +149,9 @@ export const LocalImage = Image.extend({
                     alt: "",
                     title: null,
                     joinPrevious: row && index > 0,
+                    // The spacing between photos in a row is the site's, and
+                    // it reads it off these classes.
+                    ial: row ? withRowClasses(null) : null,
                     // Kramdown reads the list under the last line as the whole
                     // paragraph's, and a row is one paragraph.
                     blockIal: row && index === stored.length - 1 ? CENTER_ROW : null,

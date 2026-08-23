@@ -1177,6 +1177,13 @@ textarea {
   vertical-align: top;
 }
 
+/* `.gap` in the blog's stylesheet is a quarter of a rem of margin, and it is
+   written onto each photo in a row. The same rule here, so the spacing in the
+   editor is the spacing the post will have rather than one invented for it. */
+.ProseMirror .editor-image.is-gapped {
+  margin-right: 0.25rem;
+}
+
 .ProseMirror .editor-image[data-join] img,
 .ProseMirror .editor-image:has(+ .editor-image[data-join]) img {
   width: 100%;
@@ -1196,20 +1203,20 @@ textarea {
    ones, and equal specificity means the last match wins. */
 .ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join]),
 .ProseMirror .editor-image:not([data-join]) + .editor-image[data-join] {
-  max-width: calc(50% - 4px);
+  max-width: calc(50% - 8px);
 }
 
 .ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join]),
 .ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join]) + .editor-image[data-join],
 .ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join]) + .editor-image[data-join] + .editor-image[data-join] {
-  max-width: calc(33.333% - 4px);
+  max-width: calc(33.333% - 8px);
 }
 
 .ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join] + .editor-image[data-join]),
 .ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join] + .editor-image[data-join]) + .editor-image[data-join],
 .ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join] + .editor-image[data-join]) + .editor-image[data-join] + .editor-image[data-join],
 .ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join] + .editor-image[data-join]) + .editor-image[data-join] + .editor-image[data-join] + .editor-image[data-join] {
-  max-width: calc(25% - 4px);
+  max-width: calc(25% - 8px);
 }
 
 .ProseMirror .editor-image.is-shadowed img {

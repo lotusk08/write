@@ -115,7 +115,10 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         return applyMarks(code ? raw : escapeText(raw), marks);
       }
       if (node.type === "hardBreak") {
-        return "  \n";
+        // A bare newline, not the two-space form: with `hard_wrap: true` the
+        // newline alone is the break, and kramdown leaves the two spaces in
+        // the HTML in front of the `<br />` it makes.
+        return "\n";
       }
       if (node.type === "image") {
         return image(node, options);
@@ -302,7 +305,12 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
     // source: put them back on adjacent lines so the blog lays them out the
     // way it always did.
     if (node.attrs?.joinPrevious && out.length === start + 1 && start > 0) {
-      out[start - 1] = nextLine(out[start - 1], out.pop() ?? "");
+      const piece = out.pop() ?? "";
+      // A caption written beside its image goes back beside it. Put on the
+      // next line instead it would gain a `<br>`, since the blog wraps hard.
+      out[start - 1] = node.attrs?.sameLine
+        ? `${out[start - 1]} ${piece}`
+        : nextLine(out[start - 1], piece);
     }
 
     // Kramdown reads `{: … }` on the line after a block as that block's
