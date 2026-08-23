@@ -39,15 +39,21 @@ export const editorExtensions = [
   LocalImage.configure({ inline: false, allowBase64: true }),
   ...collapsibleExtensions,
   Placeholder.configure({
+    // Reaches the summary of a collapsible section and the headings inside it.
     includeChildren: true,
-    placeholder: ({ node }) => {
+    placeholder: ({ editor, node }) => {
       if (node.type.name === "collapsibleSummary") {
         return "Section title";
       }
       if (node.type.name === "heading") {
         return "Heading";
       }
-      return "Write. Markdown shortcuts work: # heading, - list, > quote, ``` code, >>> collapsible section.";
+      // The hint is for an empty post. A blank line left in one that is being
+      // written gets nothing: by then it has been read, and it would sit in
+      // the middle of the writing rather than in front of it.
+      return editor.isEmpty
+        ? "Write. Markdown shortcuts work: # heading, - list, > quote, ``` code, >>> collapsible section."
+        : "";
     },
   }),
 ];

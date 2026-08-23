@@ -1054,13 +1054,34 @@ textarea {
   pointer-events: none;
 }
 
-.ProseMirror p.is-editor-empty:first-child::before,
+/* A placeholder is painted beside the caret rather than in front of it, so it
+   has to stay out of the flow. Taken out of it absolutely, it covers its own
+   line and nothing else, and is cut with an ellipsis where it would have
+   wrapped: as a zero-height float, the hint on a blank line in the middle of a
+   post used to paint three lines of itself over the paragraph below it. */
+.ProseMirror .is-empty {
+  position: relative;
+}
+
 .ProseMirror .is-empty::before {
-  height: 0;
+  position: absolute;
   color: var(--faint);
   content: attr(data-placeholder);
-  float: left;
+  inset-inline: 0;
+  overflow: hidden;
   pointer-events: none;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* An empty post is the one place with nothing underneath to cover, so that
+   hint keeps the float, and the room to run to as many lines as it needs. */
+.ProseMirror p.is-editor-empty:first-child::before {
+  position: static;
+  height: 0;
+  float: left;
+  overflow: visible;
+  white-space: normal;
 }
 
 /* ---------------------------------------------------------- collapsible */
