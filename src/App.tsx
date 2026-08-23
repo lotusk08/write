@@ -25,6 +25,8 @@ type SaveState = "idle" | "saving" | "saved";
 type Toast = { message: string; kind: "info" | "error"; href?: string } | null;
 
 const SAVE_DEBOUNCE_MS = 600;
+/** Long enough that a long post is not re-parsed on every keystroke. */
+const PARSE_DEBOUNCE_MS = 300;
 
 export default function App() {
   const [settings, setSettings] = useState<Settings>(loadSettings);
@@ -50,12 +52,15 @@ export default function App() {
   const currentIdRef = useRef<string | null>(null);
   const pendingRef = useRef<Partial<Draft>>({});
   const timerRef = useRef<number | undefined>(undefined);
+  const parseTimer = useRef<number | undefined>(undefined);
+  const sourceRef = useRef<string | null>(null);
   const menuButton = useRef<HTMLButtonElement>(null);
   const description = useRef<HTMLTextAreaElement>(null);
   const mainRegion = useRef<HTMLDivElement>(null);
 
   draftsRef.current = drafts;
   currentIdRef.current = currentId;
+  sourceRef.current = source;
 
   const current = useMemo(
     () => drafts.find((draft) => draft.id === currentId) ?? null,
@@ -99,6 +104,20 @@ export default function App() {
     });
   }, []);
 
+  /**
+   * Brings the draft up to date with whatever is still in flight: a Markdown
+   * parse waiting on its debounce, then the save queue. Anything that reads
+   * the document rather than the screen — publishing, exporting — goes through
+   * here first, or it would work from a copy up to a second old.
+   */
+  const settle = useCallback(async () => {
+    window.clearTimeout(parseTimer.current);
+    if (sourceRef.current !== null) {
+      queueSave({ doc: markdownToDoc(sourceRef.current) });
+    }
+    await flush();
+  }, [flush, queueSave]);
+
   /* ---------------------------------------------------------------- editor */
 
   const editor = useEditor({
@@ -107,6 +126,17 @@ export default function App() {
     autofocus: false,
     onUpdate: ({ editor: instance }) => queueSave({ doc: instance.getJSON() }),
   });
+
+  useEffect(() => {
+    window.clearTimeout(parseTimer.current);
+    setSource(null);
+  }, [currentId]);
+
+  // The browser tab carries the draft's name, so a window full of them can be
+  // told apart.
+  useEffect(() => {
+    document.title = current ? draftLabel(current) : "write";
+  }, [current]);
 
   useEffect(() => {
     if (!editor || !currentId) {
@@ -206,13 +236,13 @@ export default function App() {
   /* -------------------------------------------------------------- commands */
 
   const newDraft = useCallback(async () => {
-    await flush();
+    await settle();
     const draft = createDraft(settings);
     await draftStore.put(draft);
     setDrafts((previous) => sortDrafts([draft, ...previous]));
     setCurrentId(draft.id);
     window.setTimeout(() => document.querySelector<HTMLInputElement>(".title-input")?.focus(), 40);
-  }, [flush, settings]);
+  }, [settle, settings]);
 
   /**
    * Opens a published post in the editor: the other end of the blog's edit
@@ -268,36 +298,41 @@ export default function App() {
    * the text is parsed back as it is typed rather than only on the way out.
    */
   const editSource = useCallback(async () => {
-    await flush();
+    await settle();
     const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
     setSource(draft ? docToMarkdown(draft.doc) : "");
-  }, [flush]);
+  }, [settle]);
 
   const editRich = useCallback(() => {
-    setSource((text) => {
-      if (text !== null) {
-        editor?.commands.setContent(markdownToDoc(text), { emitUpdate: false });
-      }
-      return null;
-    });
-  }, [editor]);
+    if (source !== null) {
+      // Reading the state rather than updating from it: a state updater has to
+      // stay pure, and React may run it more than once.
+      editor?.commands.setContent(markdownToDoc(source), { emitUpdate: false });
+    }
+    setSource(null);
+  }, [editor, source]);
 
   const changeSource = useCallback(
     (text: string) => {
       setSource(text);
-      queueSave({ doc: markdownToDoc(text) });
+      // Parsing a long post on every keystroke is wasted work, so the document
+      // catches up a beat behind the text — and `flush` is not what saves it,
+      // so the debounce is here rather than in the save queue.
+      window.clearTimeout(parseTimer.current);
+      parseTimer.current = window.setTimeout(
+        () => queueSave({ doc: markdownToDoc(text) }),
+        PARSE_DEBOUNCE_MS,
+      );
     },
     [queueSave],
   );
 
   const selectDraft = useCallback(
     async (id: string) => {
-      await flush();
-      // The text on screen belongs to the draft being left behind.
-      setSource(null);
+      await settle();
       setCurrentId(id);
     },
-    [flush],
+    [settle],
   );
 
   const deleteDraft = useCallback(
@@ -362,7 +397,7 @@ export default function App() {
       }
       setExporting(true);
       try {
-        await flush();
+        await settle();
         const draft = draftsRef.current.find((item) => item.id === current.id) ?? current;
         const slug = draftSlug(draft);
 
@@ -600,7 +635,7 @@ export default function App() {
           onSlugChange: setSlug,
         }}
         settings={{ settings, config, onChange: updateSettings }}
-        onPublish={() => setPublishOpen(true)}
+        onPublish={() => void settle().then(() => setPublishOpen(true))}
         onExport={(format) => void exportAs(format)}
         exporting={exporting}
         escapeCloses={!publishOpen}

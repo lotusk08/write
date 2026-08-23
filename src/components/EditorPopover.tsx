@@ -88,7 +88,7 @@ export function EditorPopover({
         onClose();
       }
     };
-    const onDown = (event: MouseEvent) => {
+    const onDown = (event: PointerEvent) => {
       const target = event.target as globalThis.Node;
       // The anchor is excluded so its own click toggles rather than reopening.
       if (panel.current?.contains(target) || anchorRef.current?.contains(target)) {
@@ -97,10 +97,10 @@ export function EditorPopover({
       onClose();
     };
     document.addEventListener("keydown", onKey);
-    document.addEventListener("mousedown", onDown);
+    document.addEventListener("pointerdown", onDown);
     return () => {
       document.removeEventListener("keydown", onKey);
-      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("pointerdown", onDown);
     };
   }, [open, escapeCloses, onClose, anchorRef]);
 
@@ -152,12 +152,13 @@ export function EditorPopover({
         </div>
         <button
           type="button"
-          className="btn icon ghost"
-          title="Close — Esc"
-          aria-label="Close menu"
-          onClick={onClose}
+          className={settings.settings.focusMode ? "btn icon ghost is-active" : "btn icon ghost"}
+          title="Focus mode — hides the toolbar and the draft rail"
+          aria-label="Focus mode"
+          aria-pressed={settings.settings.focusMode}
+          onClick={() => settings.onChange({ focusMode: !settings.settings.focusMode })}
         >
-          <Icon name="close" />
+          <Icon name="focus" />
         </button>
       </header>
 

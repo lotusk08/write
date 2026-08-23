@@ -58,6 +58,16 @@ export function PublishDialog({
     };
   }, [draft, settings]);
 
+  /**
+   * A post's file name is built from its date and slug, so editing either of
+   * those on a post that came from the blog writes a second file rather than
+   * replacing the first.
+   */
+  const renamedFrom =
+    draft.publishedPath && plan && plan.markdownPath !== draft.publishedPath
+      ? draft.publishedPath
+      : null;
+
   const missingCredentials = useMemo(() => {
     if (usesServerPublishing(config)) {
       // The password is asked for below rather than being a setting to fix.
@@ -125,6 +135,13 @@ export function PublishDialog({
           <button type="button" className="btn ghost" onClick={onOpenSettings}>
             Open settings
           </button>
+        </div>
+      ) : null}
+      {renamedFrom ? (
+        <div className="notice warn">
+          This writes a new file. The post it was opened from,{" "}
+          <span className="mono">{renamedFrom}</span>, stays on the blog — delete it there if you
+          meant to rename this one.
         </div>
       ) : null}
       {error ? <div className="notice warn">{error}</div> : null}

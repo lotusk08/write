@@ -132,19 +132,6 @@ export function SettingsPanel({ settings, config, onChange }: SettingsPanelProps
               </span>
             </label>
           </li>
-          <li>
-            <label className="switch">
-              <input
-                type="checkbox"
-                checked={settings.focusMode}
-                onChange={(event) => onChange({ focusMode: event.target.checked })}
-              />
-              <span>
-                Focus mode
-                <em>Hides the toolbar and the draft rail</em>
-              </span>
-            </label>
-          </li>
         </ul>
       </Section>
     </>
