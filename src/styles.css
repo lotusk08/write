@@ -1443,7 +1443,8 @@ textarea {
 /* --------------------------------------------------------------- dialog */
 .scrim {
   position: fixed;
-  z-index: 40;
+  /* Above the menu, which is portalled and so paints later at equal depth. */
+  z-index: 45;
   display: grid;
   padding: 24px;
   background: rgb(13 13 13 / 32%);

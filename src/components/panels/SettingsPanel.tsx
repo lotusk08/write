@@ -1,9 +1,101 @@
+import { useState } from "react";
+import { tokenLogin } from "../../../shared/github.ts";
+import { lockToken } from "../../lib/lock.ts";
 import type { Settings } from "../../lib/settings.ts";
 import { Section } from "./Section.tsx";
 
 export interface SettingsPanelProps {
   settings: Settings;
   onChange: (patch: Partial<Settings>) => void;
+}
+
+/**
+ * The token that can write. It is locked with a passphrase here and opened
+ * again at the moment of publishing, so the one credential that can change the
+ * blog is not sitting in this browser in the clear.
+ */
+function PublishToken({ settings, onChange }: SettingsPanelProps) {
+  const [token, setToken] = useState("");
+  const [passphrase, setPassphrase] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  if (settings.publishToken) {
+    return (
+      <div className="field">
+        <span className="field-label">Publish token</span>
+        <div className="row wide-first">
+          <p className="hint">Locked. The passphrase is asked for when you publish.</p>
+          <button
+            type="button"
+            className="btn tiny danger"
+            onClick={() => onChange({ publishToken: null })}
+          >
+            Forget it
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  const lock = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      // Better to find out now than at the end of writing a post: a token
+      // pasted with a stray newline is one GitHub answers anonymously.
+      if (!(await tokenLogin(token.trim()))) {
+        setError("GitHub did not accept that token.");
+        return;
+      }
+      onChange({ publishToken: await lockToken(token.trim(), passphrase) });
+      setToken("");
+      setPassphrase("");
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="field">
+      <label htmlFor="set-publish-token">Publish token</label>
+      <input
+        id="set-publish-token"
+        className="input"
+        type="password"
+        autoComplete="off"
+        placeholder="github_pat_…"
+        value={token}
+        onChange={(event) => setToken(event.target.value)}
+      />
+      <div className="row wide-first">
+        <input
+          className="input"
+          type="password"
+          autoComplete="new-password"
+          aria-label="Passphrase for the publish token"
+          placeholder="Passphrase"
+          value={passphrase}
+          onChange={(event) => setPassphrase(event.target.value)}
+        />
+        <button
+          type="button"
+          className="btn"
+          disabled={!token.trim() || !passphrase || busy}
+          onClick={() => void lock()}
+        >
+          {busy ? "Locking…" : "Lock it"}
+        </button>
+      </div>
+      {error ? <p className="hint" style={{ color: "var(--danger)" }}>{error}</p> : null}
+      <p className="hint">
+        Fine-grained, Contents: read and write. It is locked with that passphrase and never kept
+        unlocked — forget the passphrase and you issue a new token, nothing worse.
+      </p>
+    </div>
+  );
 }
 
 export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
@@ -31,7 +123,7 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
           </div>
         </div>
         <div className="field">
-          <label htmlFor="set-token">GitHub token</label>
+          <label htmlFor="set-token">Read token</label>
           <input
             id="set-token"
             className="input"
@@ -42,10 +134,12 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
             onChange={(event) => onChange({ githubToken: event.target.value })}
           />
           <p className="hint">
-            Fine-grained, Contents: read and write on the blog repo. It is kept in this
-            browser and sent to GitHub, nowhere else.
+            Fine-grained, Contents: read on the blog repo. It opens published posts for editing
+            and is kept in this browser as it is — what it can reach is on the blog anyway.
           </p>
         </div>
+
+        <PublishToken settings={settings} onChange={onChange} />
       </Section>
 
       <Section title="Post defaults">

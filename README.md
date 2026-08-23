@@ -6,8 +6,9 @@ Word, and publish straight to the blog repository — text and images in a singl
 commit. Posts already on the blog can be opened here and edited in place.
 
 It is static files and nothing else — no server, no API of its own, nothing to
-pay for. Publishing is a GitHub call from the browser, with a fine-grained
-token you keep in Settings.
+pay for. Publishing is a GitHub call from the browser, with fine-grained tokens
+you keep in Settings: one that can only read, and one that can write, kept
+locked until the moment you publish.
 
 ```
 .
@@ -95,15 +96,23 @@ deploys on push, connect the repository under Workers & Pages → Builds: root
 directory `/`, build command `npm run build`, output directory `dist`. Node
 comes from `.node-version`.
 
-### The GitHub token
+### The two tokens
 
-Publishing needs a fine-grained personal access token with **Contents: Read &
-write** on `lotusk08/stevehoang.com` and nothing else. Paste it into Settings.
+Reading the blog and writing to it are different privileges, so they are
+different fine-grained tokens on `lotusk08/stevehoang.com` and nothing else.
 
-It is held in that browser's local storage and sent to `api.github.com`, never
-anywhere else — which also means it is only as private as the device it is on.
-On a phone, that is a device with a passcode; treat the token as something you
-can revoke and reissue in a minute, because that is the recovery plan.
+**Read token** — *Contents: Read*. Opens a published post for editing. Paste it
+into Settings; it stays in that browser as it is, because what it can reach is
+on the blog anyway.
+
+**Publish token** — *Contents: Read & write*. Paste it into Settings with a
+passphrase and it is locked there (PBKDF2 + AES-GCM, in WebCrypto); the token
+itself is never stored. Publishing asks for the passphrase, opens the token for
+as long as that tab is open, and asks again next time.
+
+So a phone left unlocked reads; it does not write. Forgetting the passphrase
+costs you a token, not the blog — issue another and lock it again. Either token
+can be revoked on GitHub in a minute, which is the recovery plan for both.
 
 ### Where posts go
 
@@ -126,7 +135,7 @@ the app's own — nothing hands them to it:
   Apple devices, Inter where installed), so no web fonts are downloaded.
 - Front matter and settings share one pop-up rather than a sidebar, a top bar
   and two dialogs; only publishing and opening a post are modals. Settings holds
-  what is yours to set: the repository, the token, the paths and the post
+  what is yours to set: the repository, the two tokens, the paths and the post
   defaults.
 - Reading a published post back is the inverse of writing one, and is checked
   against the real blog: every post is parsed, re-serialised and rendered with

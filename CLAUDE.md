@@ -6,11 +6,13 @@ whole thing is static files — there is no server side of its own. Published
 posts can be read back out of the repository and edited here, so the app has to
 be able to write a post it did not create without changing it.
 
-The blog is reached straight from the browser with a fine-grained GitHub token
-kept in Settings. That token is the app's only piece of trust and never leaves
-the browser it was typed into; scope it to the blog repo, Contents: read and
-write. Everything to do with media — WebP, placeholders, sizes — belongs to the
-blog's own build, not here.
+The blog is reached straight from the browser with two fine-grained GitHub
+tokens kept in Settings, split by what they can do. The read token (Contents:
+read) opens a published post for editing and sits in the browser as it is. The
+publish token (Contents: read and write) is locked with a passphrase — `lock.ts`,
+PBKDF2 and AES-GCM — and opened only at the publish step, held for that tab and
+never stored. Everything to do with media — WebP, placeholders, sizes — belongs
+to the blog's own build, not here.
 
 This repository began as a fork of BlockNote. That tree is preserved on the
 `blocknote-upstream` branch — `main` is this app, at the repository root, with

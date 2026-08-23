@@ -42,6 +42,9 @@ export default function App() {
   const [toast, setToast] = useState<Toast>(null);
   const [exporting, setExporting] = useState(false);
   const [ready, setReady] = useState(false);
+  // Opened with the passphrase when a post is published, and gone on reload:
+  // the token itself is never held anywhere but here.
+  const [writeToken, setWriteToken] = useState("");
   // The post's Markdown while it is being edited as text; null in rich mode.
   const [source, setSource] = useState<string | null>(null);
 
@@ -624,7 +627,15 @@ export default function App() {
           onSlugChange: setSlug,
         }}
         settings={{ settings, onChange: updateSettings }}
-        onPublish={() => void settle().then(() => setPublishOpen(true))}
+        onPublish={() =>
+          void settle().then(() => {
+            // The menu is portalled and the dialog is not, so on a phone —
+            // where the menu is a full-height sheet — it would sit over the
+            // dialog it just opened, with Commit underneath it.
+            setMenuOpen(false);
+            setPublishOpen(true);
+          })
+        }
         onExport={(format) => void exportAs(format)}
         exporting={exporting}
         escapeCloses={!publishOpen}
@@ -635,6 +646,8 @@ export default function App() {
           draft={current}
           settings={settings}
           onSettingsChange={updateSettings}
+          writeToken={writeToken}
+          onWriteToken={setWriteToken}
           onClose={() => setPublishOpen(false)}
           onPublished={onPublished}
           onOpenSettings={() => {

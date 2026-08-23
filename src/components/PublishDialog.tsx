@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import type { PublishResult } from "../../shared/types.ts";
 import { publish } from "../lib/api.ts";
+import { unlockToken } from "../lib/lock.ts";
 import type { Draft } from "../lib/db.ts";
 import { buildPublishPlan, defaultCommitMessage, publishBranchName, type PublishPlan } from "../lib/publish.ts";
 import type { Settings } from "../lib/settings.ts";
@@ -10,6 +11,9 @@ interface PublishDialogProps {
   draft: Draft;
   settings: Settings;
   onSettingsChange: (patch: Partial<Settings>) => void;
+  /** The publish token, if it was unlocked earlier in this tab. */
+  writeToken: string;
+  onWriteToken: (token: string) => void;
   onClose: () => void;
   onPublished: (result: PublishResult, plan: PublishPlan) => void;
   onOpenSettings: () => void;
@@ -19,6 +23,8 @@ export function PublishDialog({
   draft,
   settings,
   onSettingsChange,
+  writeToken,
+  onWriteToken,
   onClose,
   onPublished,
   onOpenSettings,
@@ -27,6 +33,10 @@ export function PublishDialog({
   const [message, setMessage] = useState(() => defaultCommitMessage(draft, Boolean(draft.publishedPath)));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [passphrase, setPassphrase] = useState("");
+  // Asked for here and nowhere else: this is the step that writes.
+  const locked = settings.publishToken;
+  const needsPassphrase = Boolean(locked) && !writeToken;
 
   const repo = settings.repo;
   const baseBranch = settings.branch;
@@ -62,19 +72,25 @@ export function PublishDialog({
 
   const missingCredentials = useMemo(
     () =>
-      settings.githubToken
+      settings.publishToken
         ? null
-        : "No GitHub token yet — add a fine-grained one in Settings, scoped to the blog repo with Contents: read and write.",
-    [settings.githubToken],
+        : "No publish token yet — add one in Settings, scoped to the blog repo with Contents: read and write, and lock it with a passphrase.",
+    [settings.publishToken],
   );
 
   const run = async () => {
-    if (!plan) {
+    if (!plan || !locked || (needsPassphrase && !passphrase)) {
       return;
     }
     setBusy(true);
     setError(null);
     try {
+      // The passphrase opens the token for this tab, not for the next one.
+      const token = writeToken || (await unlockToken(locked, passphrase));
+      if (!writeToken) {
+        onWriteToken(token);
+        setPassphrase("");
+      }
       const branch = settings.openPullRequest ? publishBranchName(plan.slug) : baseBranch;
       const result = await publish(
         {
@@ -86,6 +102,7 @@ export function PublishDialog({
             : null,
         },
         settings,
+        token,
       );
       onPublished(result, plan);
     } catch (cause) {
@@ -108,7 +125,9 @@ export function PublishDialog({
           <button
             type="button"
             className="btn primary"
-            disabled={!plan || busy || Boolean(missingCredentials)}
+            disabled={
+              !plan || busy || Boolean(missingCredentials) || (needsPassphrase && !passphrase)
+            }
             onClick={() => void run()}
           >
             {busy ? "Publishing…" : settings.openPullRequest ? "Open pull request" : "Commit"}
@@ -132,6 +151,32 @@ export function PublishDialog({
         </div>
       ) : null}
       {error ? <div className="notice warn">{error}</div> : null}
+
+      {needsPassphrase ? (
+        <div className="field">
+          <label htmlFor="publish-passphrase">Passphrase</label>
+          <input
+            id="publish-passphrase"
+            className="input"
+            type="password"
+            autoComplete="current-password"
+            autoFocus
+            placeholder="••••••••"
+            value={passphrase}
+            onChange={(event) => setPassphrase(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void run();
+              }
+            }}
+          />
+          <p className="hint">
+            Opens the publish token for as long as this tab is open. Nothing else here can write
+            to the blog.
+          </p>
+        </div>
+      ) : null}
 
       <div className="row">
         <div className="field">

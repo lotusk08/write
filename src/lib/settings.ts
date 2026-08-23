@@ -1,3 +1,5 @@
+import type { LockedToken } from "./lock.ts";
+
 export interface Settings {
   theme: "light" | "dark" | "system";
   /** Front matter `author:` value. */
@@ -11,8 +13,10 @@ export interface Settings {
   postsDir: string;
   draftsDir: string;
   imagesDir: string;
-  /** Only used when the deployment has no server-side token. */
+  /** Reads posts back out of the blog. Contents: read is enough. */
   githubToken: string;
+  /** Commits them. Kept locked, and opened with a passphrase at publish. */
+  publishToken: LockedToken | null;
   publishTarget: "posts" | "drafts";
   openPullRequest: boolean;
   /** Which tab the pop-up menu opens on. */
@@ -36,6 +40,7 @@ export const defaultSettings: Settings = {
   draftsDir: "_drafts",
   imagesDir: "assets/img/post",
   githubToken: "",
+  publishToken: null,
   publishTarget: "posts",
   openPullRequest: false,
   menuTab: "post",
