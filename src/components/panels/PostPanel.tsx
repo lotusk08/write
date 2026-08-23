@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
-import type { PostMeta } from "../../../shared/types.ts";
+import type { AppConfig, PostMeta } from "../../../shared/types.ts";
 import { isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
+import type { Settings } from "../../lib/settings.ts";
 import { displaySrc } from "../../lib/site.ts";
 import { TokenInput } from "../TokenInput.tsx";
 import { Section } from "./Section.tsx";
@@ -8,9 +9,17 @@ import { Section } from "./Section.tsx";
 export interface PostPanelProps {
   meta: PostMeta;
   slug: string;
+  settings: Settings;
+  config: AppConfig | null;
   onChange: (patch: Partial<PostMeta>) => void;
   onSlugChange: (slug: string) => void;
+  onSettingsChange: (patch: Partial<Settings>) => void;
 }
+
+const TARGETS: { id: Settings["publishTarget"]; label: string }[] = [
+  { id: "posts", label: "Post" },
+  { id: "drafts", label: "Draft" },
+];
 
 const OPTIONS: { key: "toc" | "pin" | "math" | "mermaid" | "chart"; label: string; hint: string }[] = [
   { key: "toc", label: "Table of contents", hint: "Sidebar outline on the post page" },
@@ -20,7 +29,15 @@ const OPTIONS: { key: "toc" | "pin" | "math" | "mermaid" | "chart"; label: strin
   { key: "chart", label: "Charts", hint: "Loads Chart.js for this post" },
 ];
 
-export function PostPanel({ meta, slug, onChange, onSlugChange }: PostPanelProps) {
+export function PostPanel({
+  meta,
+  slug,
+  settings,
+  config,
+  onChange,
+  onSlugChange,
+  onSettingsChange,
+}: PostPanelProps) {
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const coverInput = useRef<HTMLInputElement>(null);
 
@@ -178,6 +195,73 @@ export function PostPanel({ meta, slug, onChange, onSlugChange }: PostPanelProps
             </li>
           ))}
         </ul>
+      </Section>
+      <Section title="Defaults" hint="Used when a new post is made. Not this one.">
+        <div className="row">
+          <div className="field">
+            <label htmlFor="set-author">Default author</label>
+            <input
+              id="set-author"
+              className="input"
+              value={settings.author}
+              onChange={(event) => onSettingsChange({ author: event.target.value })}
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="set-tz">UTC offset</label>
+            <input
+              id="set-tz"
+              className="input mono"
+              type="number"
+              step={30}
+              value={settings.timezoneOffset}
+              onChange={(event) => onSettingsChange({ timezoneOffset: Number(event.target.value) })}
+            />
+          </div>
+        </div>
+        <p className="hint">Offset in minutes; +0700 is 420. Stamps the date on a new post.</p>
+      </Section>
+
+      <Section title="Blog">
+        {config?.problem ? <div className="notice warn">{config.problem}</div> : null}
+        {config ? (
+          <>
+            <div className="menu-row">
+              <span className="field-label">Repository</span>
+              <span className="menu-value mono">{config.repo || "\u2014"}</span>
+            </div>
+            <div className="menu-row">
+              <span className="field-label">Branch</span>
+              <span className="menu-value mono">{config.branch}</span>
+            </div>
+            <div className="menu-row">
+              <span className="field-label">Publish as</span>
+              <div className="toggle" role="group" aria-label="Publish as">
+                <span className="toggle-knob" data-at={settings.publishTarget} />
+                {TARGETS.map(({ id, label }) => (
+                  <button
+                    key={id}
+                    type="button"
+                    className={settings.publishTarget === id ? "is-on" : undefined}
+                    aria-pressed={settings.publishTarget === id}
+                    onClick={() => onSettingsChange({ publishTarget: id })}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <p className="hint">
+              A draft goes to <span className="mono">{config.draftsDir}</span> and is not on the
+              site until it moves. A post goes to <span className="mono">{config.postsDir}</span>.
+            </p>
+          </>
+        ) : (
+          <p className="hint">
+            This app's own API did not answer, so it does not know where it publishes. Reload; if
+            that lasts, the Worker is not up.
+          </p>
+        )}
       </Section>
     </>
   );

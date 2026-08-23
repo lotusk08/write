@@ -200,6 +200,13 @@ const PATHS = {
       <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
     </>
   ),
+  /** `upload` with the arrow the other way up. */
+  download: (
+    <>
+      <path d="M12 4v12M7.5 11.5 12 16l4.5-4.5" />
+      <path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3" />
+    </>
+  ),
 } satisfies Record<string, ReactNode>;
 
 export type IconName = keyof typeof PATHS;

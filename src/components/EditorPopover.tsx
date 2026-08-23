@@ -1,12 +1,20 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import { resolvedTheme, type MenuTab } from "../lib/settings.ts";
+import type { AppConfig } from "../../shared/types.ts";
+import { resolvedTheme, type MenuTab, type Settings } from "../lib/settings.ts";
 import { PHONE_QUERY, useMediaQuery } from "../lib/viewport.ts";
 import { Icon } from "./Icons.tsx";
+import { ExportPanel, type ExportFormat } from "./panels/ExportPanel.tsx";
 import { PostPanel, type PostPanelProps } from "./panels/PostPanel.tsx";
-import { SettingsPanel, type SettingsPanelProps } from "./panels/SettingsPanel.tsx";
 
-export type ExportFormat = "markdown" | "docx" | "html" | "copy";
+export type { ExportFormat };
+
+/** The theme and focus toggles live in the head, so this is needed either tab. */
+export interface MenuSettings {
+  settings: Settings;
+  config: AppConfig | null;
+  onChange: (patch: Partial<Settings>) => void;
+}
 
 interface EditorPopoverProps {
   open: boolean;
@@ -18,9 +26,10 @@ interface EditorPopoverProps {
   onTab: (tab: MenuTab) => void;
   onClose: () => void;
   post: PostPanelProps;
-  settings: SettingsPanelProps;
+  settings: MenuSettings;
   onPublish: () => void;
-  onExport: (format: ExportFormat) => void;
+  /** Runs every ticked format, in the order they are listed. */
+  onExport: (formats: ExportFormat[]) => void;
   exporting: boolean;
   /** False while a modal is open, so Escape closes the modal only. */
   escapeCloses?: boolean;
@@ -28,19 +37,13 @@ interface EditorPopoverProps {
 
 const TABS: { id: MenuTab; label: string }[] = [
   { id: "post", label: "Post" },
-  { id: "settings", label: "Settings" },
-];
-
-const EXPORTS: { id: ExportFormat; label: string }[] = [
-  { id: "markdown", label: "Markdown" },
-  { id: "docx", label: "Word" },
-  { id: "html", label: "HTML" },
-  { id: "copy", label: "Copy" },
+  { id: "export", label: "Export" },
 ];
 
 /**
- * Front matter, settings and the publish actions, in a pop-up docked to the
- * right of the writing surface. Drafts are not here — they live on the rail.
+ * Front matter, the ways out of the editor, and the publish action, in a pop-up
+ * docked to the right of the writing surface. Drafts are not here — they live
+ * on the rail.
  */
 export function EditorPopover({
   open,
@@ -58,6 +61,9 @@ export function EditorPopover({
 }: EditorPopoverProps) {
   const panel = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState<DOMRect | null>(null);
+  // Ticks live as long as the menu does. They are a choice about this trip to
+  // the menu, not a preference worth keeping.
+  const [chosen, setChosen] = useState<ExportFormat[]>([]);
   // A phone has no room beside the writing surface, so the pop-up becomes a
   // sheet across the foot of it instead of a panel docked to one corner.
   const sheet = useMediaQuery(PHONE_QUERY);
@@ -186,27 +192,40 @@ export function EditorPopover({
       </header>
 
       <div className="popover-body">
-        {tab === "post" ? <PostPanel {...post} /> : <SettingsPanel {...settings} />}
+        {tab === "post" ? (
+          <PostPanel {...post} />
+        ) : (
+          <ExportPanel chosen={chosen} exporting={exporting} onChange={setChosen} />
+        )}
       </div>
 
       <footer className="popover-foot">
-        <div className="export-row">
-          <span className="field-label">Download</span>
-          <div className="segmented">
-            {EXPORTS.map(({ id, label }) => (
-              <button key={id} type="button" disabled={exporting} onClick={() => onExport(id)}>
-                {label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <button type="button" className="btn primary block" onClick={onPublish}>
-          <Icon name="upload" />
-          Publish to blog
-        </button>
-        <p className="hint publish-target">
-          <span className="mono">{publishDir}/</span>
-        </p>
+        {tab === "export" ? (
+          <>
+            <button
+              type="button"
+              className="btn primary block"
+              disabled={exporting || chosen.length === 0}
+              onClick={() => onExport(chosen)}
+            >
+              <Icon name="download" />
+              {exporting ? "Exporting…" : "Export"}
+            </button>
+            <p className="hint publish-target">
+              {chosen.length === 0 ? "Tick what you want" : `${chosen.length} selected`}
+            </p>
+          </>
+        ) : (
+          <>
+            <button type="button" className="btn primary block" onClick={onPublish}>
+              <Icon name="upload" />
+              Publish to blog
+            </button>
+            <p className="hint publish-target">
+              <span className="mono">{publishDir}/</span>
+            </p>
+          </>
+        )}
       </footer>
     </div>,
     document.body,

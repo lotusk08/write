@@ -67,8 +67,9 @@ are editing spells out its title, and the rest tuck behind each other like
 sheets in a deck, showing only their edges. Reaching for a deck fans it back out
 to full size — the drafts above the open one and those below it fan separately.
 The formatting toolbar is docked inside the bottom of the editor frame, and the
-menu at its right end holds front matter, settings, export and publish — so
-nothing sits above the page.
+menu at its right end holds front matter on one tab and the ways out on the
+other — download, where it publishes, and the publish button — so nothing sits
+above the page.
 
 Shortcuts: `⌘S` save now · `⌘⇧N` new draft · `⌘\` open/close the menu ·
 `⌘⇧C` copy Markdown · plus the usual Markdown input rules (`#`, `-`, `1.`, `>`,

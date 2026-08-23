@@ -174,30 +174,16 @@ export function PublishDialog({
         </div>
       ) : null}
 
-      <div className="row">
-        <div className="field">
-          <label htmlFor="publish-target">Publish as</label>
-          <select
-            id="publish-target"
-            className="select"
-            value={settings.publishTarget}
-            onChange={(event) => onSettingsChange({ publishTarget: event.target.value as Settings["publishTarget"] })}
-          >
-            <option value="posts">Post ({settings.postsDir})</option>
-            <option value="drafts">Draft ({settings.draftsDir})</option>
-          </select>
-        </div>
-        <div className="field">
-          <span className="field-label">Review</span>
-          <label className="switch">
-            <input
-              type="checkbox"
-              checked={settings.openPullRequest}
-              onChange={(event) => onSettingsChange({ openPullRequest: event.target.checked })}
-            />
-            Open a pull request
-          </label>
-        </div>
+      <div className="field">
+        <span className="field-label">Review</span>
+        <label className="switch">
+          <input
+            type="checkbox"
+            checked={settings.openPullRequest}
+            onChange={(event) => onSettingsChange({ openPullRequest: event.target.checked })}
+          />
+          Open a pull request
+        </label>
       </div>
 
       <div className="field">

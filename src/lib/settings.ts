@@ -31,7 +31,7 @@ export interface Settings {
   focusMode: boolean;
 }
 
-export type MenuTab = "post" | "settings";
+export type MenuTab = "post" | "export";
 
 const KEY = "write:settings";
 
@@ -73,8 +73,9 @@ export function loadSettings(): Settings {
         })
       : {};
     const stored = { ...defaultSettings, ...parsed };
-    // "drafts" was a tab before drafts moved onto the rail.
-    const menuTab: MenuTab = stored.menuTab === "settings" ? "settings" : "post";
+    // "drafts" was a tab before drafts moved onto the rail, and "settings"
+    // before that half of it went and the other half became Export.
+    const menuTab: MenuTab = stored.menuTab === "export" ? "export" : "post";
     const settings: Settings = { ...stored, menuTab };
     // GitHub tokens used to be kept here, one of them locked behind a
     // password. The Worker holds the only one now, so loading is the moment to

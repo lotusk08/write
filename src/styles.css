@@ -188,11 +188,39 @@ textarea {
   background: var(--panel);
 }
 
-.export-row {
+/* A label on the left, what it controls on the right. The export row reads
+   this way, and the settings tab is a list of the same shape. */
+.menu-row {
   display: flex;
+  min-height: 26px;
   align-items: center;
   justify-content: space-between;
-  gap: 10px;
+  gap: 12px;
+}
+
+.menu-row + .menu-row {
+  margin-top: 8px;
+}
+
+.menu-row > .field-label {
+  flex-shrink: 0;
+}
+
+/* The right-hand side: a value, or a value and the button that clears it. */
+.menu-value {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  color: var(--text);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+  text-align: right;
+}
+
+.menu-value.is-quiet {
+  color: var(--faint);
 }
 
 .btn.block {
@@ -458,8 +486,7 @@ textarea {
   color: var(--danger);
 }
 
-.input,
-.select {
+.input {
   width: 100%;
   height: 34px;
   padding: 0 10px;
@@ -470,23 +497,11 @@ textarea {
   transition: border-color 120ms ease, box-shadow 120ms ease;
 }
 
-.select {
-  padding-right: 30px;
-  appearance: none;
-  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%),
-    linear-gradient(135deg, var(--muted) 50%, transparent 50%);
-  background-repeat: no-repeat;
-  background-position: right 14px center, right 9px center;
-  background-size: 5px 5px, 5px 5px;
-  cursor: pointer;
-}
-
 .input::placeholder {
   color: var(--faint);
 }
 
-.input:focus,
-.select:focus {
+.input:focus {
   border-color: var(--accent);
   box-shadow: 0 0 0 3px var(--ring);
   outline: none;
@@ -515,18 +530,6 @@ textarea {
   font-weight: 500;
 }
 
-/* A label and its state on the left, the control that opens it on the right. */
-.field-head {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.field-head .hint {
-  margin-top: 2px;
-}
-
 .hint {
   margin: 0;
   color: var(--faint);
@@ -538,10 +541,6 @@ textarea {
   display: grid;
   gap: 12px;
   grid-template-columns: 1fr 1fr;
-}
-
-.row.wide-first {
-  grid-template-columns: 1.7fr 1fr;
 }
 
 /* -------------------------------------------------------------- toolbar */
@@ -1410,36 +1409,58 @@ textarea {
   line-height: 1.45;
 }
 
-/* Joined buttons for the export formats. */
-.segmented {
+/* Two named states, one of which is on. The knob slides between them, so the
+   choice reads as a position rather than a thing to go and find out. */
+.toggle {
+  position: relative;
   display: flex;
+  padding: 2px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
-  overflow: hidden;
+  border-radius: 999px;
+  background: var(--panel);
 }
 
-.segmented button {
-  padding: 5px 9px;
+.toggle button {
+  position: relative;
+  z-index: 1;
+  min-width: 54px;
+  flex: 1;
+  padding: 3px 12px;
   border: none;
-  border-left: 1px solid var(--border);
-  background: var(--panel);
+  border-radius: 999px;
+  background: none;
   color: var(--muted);
   cursor: pointer;
   font-size: 12px;
+  font-weight: 500;
+  transition: color 140ms ease;
 }
 
-.segmented button:first-child {
-  border-left: none;
-}
-
-.segmented button:hover:not(:disabled) {
-  background: var(--hover);
+.toggle button.is-on {
   color: var(--text);
 }
 
-.segmented button:disabled {
-  cursor: not-allowed;
-  opacity: 0.5;
+.toggle-knob {
+  position: absolute;
+  z-index: 0;
+  top: 2px;
+  bottom: 2px;
+  left: 2px;
+  width: calc(50% - 2px);
+  border-radius: 999px;
+  background: var(--hover);
+  box-shadow: inset 0 0 0 1px var(--border);
+  transition: transform 160ms ease;
+}
+
+.toggle-knob[data-at="drafts"] {
+  transform: translateX(100%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle-knob {
+    transition: none;
+  }
 }
 
 .publish-target {
@@ -1746,14 +1767,12 @@ textarea {
   .description-input,
   .source-editor,
   .input,
-  .select,
   .token-input,
   .rail-tab-field {
     font-size: 16px;
   }
 
-  .input,
-  .select {
+  .input {
     height: 38px;
   }
 

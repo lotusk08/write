@@ -11,7 +11,7 @@ import { editorExtensions } from "./editor/extensions.ts";
 import { fetchAppConfig, fetchPostSource } from "./lib/api.ts";
 import { draftStore, type Draft } from "./lib/db.ts";
 import { createDraft, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
-import { downloadBlob, downloadText } from "./lib/download.ts";
+import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
 import { markdownToDoc, parsePost, postPathFromLink, slugFromPath } from "./lib/import.ts";
 import { buildHtmlDocument } from "./lib/html.ts";
 import { docToMarkdown, docToPlainText } from "./lib/markdown.ts";
@@ -23,6 +23,15 @@ import { usePinnedViewport } from "./lib/viewport.ts";
 
 type SaveState = "idle" | "saving" | "saved";
 type Toast = { message: string; kind: "info" | "error"; href?: string } | null;
+
+/** Names a format in a failure, where the toast is all there is to go on. */
+const LABELS: Record<ExportFormat, string> = {
+  markdown: "Markdown",
+  docx: "Word",
+  pdf: "PDF",
+  html: "HTML",
+  copy: "Copy",
+};
 
 const SAVE_DEBOUNCE_MS = 600;
 /** Long enough that a long post is not re-parsed on every keystroke. */
@@ -391,8 +400,8 @@ export default function App() {
   );
 
   const exportAs = useCallback(
-    async (format: ExportFormat) => {
-      if (!current || !editor) {
+    async (formats: ExportFormat[]) => {
+      if (!current || !editor || formats.length === 0) {
         return;
       }
       setExporting(true);
@@ -400,21 +409,52 @@ export default function App() {
         await settle();
         const draft = draftsRef.current.find((item) => item.id === current.id) ?? current;
         const slug = draftSlug(draft);
+        // Built once even when several formats want it, and only when they do.
+        let html: string | null = null;
+        const page = async () => (html ??= await buildHtmlDocument(editor.getHTML(), draft.meta));
 
-        if (format === "markdown" || format === "copy") {
-          const markdown = await markdownForExport(draft, settings);
-          if (format === "copy") {
-            await navigator.clipboard.writeText(markdown);
-            setToast({ message: "Markdown copied to clipboard.", kind: "info" });
-          } else {
-            downloadText(markdown, `${datePrefix(draft.meta.date)}-${slug}.md`, "text/markdown");
+        // One format failing is not the others failing. The clipboard alone
+        // refuses for reasons that have nothing to do with the post — a window
+        // that lost focus is enough — and taking four files down with it would
+        // be the wrong end of the trade.
+        const done: ExportFormat[] = [];
+        const failed: string[] = [];
+
+        for (const format of formats) {
+          try {
+            if (format === "markdown" || format === "copy") {
+              const markdown = await markdownForExport(draft, settings);
+              if (format === "copy") {
+                await navigator.clipboard.writeText(markdown);
+              } else {
+                downloadText(markdown, `${datePrefix(draft.meta.date)}-${slug}.md`, "text/markdown");
+              }
+            } else if (format === "docx") {
+              const { docToDocxBlob } = await import("./lib/docx.ts");
+              downloadBlob(await docToDocxBlob(draft.doc, draft.meta), `${slug}.docx`);
+            } else if (format === "pdf") {
+              await printDocument(await page());
+            } else {
+              downloadText(await page(), `${slug}.html`, "text/html");
+            }
+            done.push(format);
+          } catch (error) {
+            failed.push(
+              `${LABELS[format]} — ${error instanceof Error ? error.message : "failed"}`,
+            );
           }
-        } else if (format === "docx") {
-          const { docToDocxBlob } = await import("./lib/docx.ts");
-          downloadBlob(await docToDocxBlob(draft.doc, draft.meta), `${slug}.docx`);
+        }
+
+        if (failed.length) {
+          setToast({ message: failed.join("; "), kind: "error" });
         } else {
-          const html = await buildHtmlDocument(editor.getHTML(), draft.meta);
-          downloadText(html, `${slug}.html`, "text/html");
+          setToast({
+            message:
+              done.length === 1 && done[0] === "copy"
+                ? "Markdown copied to clipboard."
+                : `Exported ${done.length} file${done.length === 1 ? "" : "s"}.`,
+            kind: "info",
+          });
         }
       } catch (error) {
         setToast({
@@ -463,7 +503,7 @@ export default function App() {
         void newDraft();
       } else if (event.shiftKey && event.key.toLowerCase() === "c") {
         event.preventDefault();
-        void exportAs("copy");
+        void exportAs(["copy"]);
       }
     };
     document.addEventListener("keydown", onKey);
@@ -633,8 +673,11 @@ export default function App() {
         post={{
           meta: current.meta,
           slug: current.slug,
+          settings,
+          config,
           onChange: updateMeta,
           onSlugChange: setSlug,
+          onSettingsChange: updateSettings,
         }}
         settings={{ settings, config, onChange: updateSettings }}
         onPublish={() =>
@@ -646,7 +689,7 @@ export default function App() {
             setPublishOpen(true);
           })
         }
-        onExport={(format) => void exportAs(format)}
+        onExport={(formats) => void exportAs(formats)}
         exporting={exporting}
         escapeCloses={!publishOpen}
       />
