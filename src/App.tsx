@@ -1,14 +1,14 @@
 import { EditorContent, useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { PostMeta, PublishResult } from "../shared/types.ts";
+import type { AppConfig, PostMeta, PublishResult } from "../shared/types.ts";
 import { DraftRail } from "./components/DraftRail.tsx";
 import { EditorPopover, type ExportFormat } from "./components/EditorPopover.tsx";
 import { Icon } from "./components/Icons.tsx";
 import { PublishDialog } from "./components/PublishDialog.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
 import { editorExtensions } from "./editor/extensions.ts";
-import { fetchPostSource } from "./lib/api.ts";
+import { fetchAppConfig, fetchPostSource } from "./lib/api.ts";
 import { draftStore, type Draft } from "./lib/db.ts";
 import { createDraft, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText } from "./lib/download.ts";
@@ -16,7 +16,7 @@ import { markdownToDoc, parsePost, postPathFromLink, slugFromPath } from "./lib/
 import { buildHtmlDocument } from "./lib/html.ts";
 import { docToMarkdown, docToPlainText } from "./lib/markdown.ts";
 import { draftSlug, markdownForExport, type PublishPlan } from "./lib/publish.ts";
-import { loadSettings, saveSettings, type Settings } from "./lib/settings.ts";
+import { applyConfig, loadSettings, saveSettings, type Settings } from "./lib/settings.ts";
 import { setSiteUrl } from "./lib/site.ts";
 import { countWords, datePrefix, slugify } from "./lib/text.ts";
 import { usePinnedViewport } from "./lib/viewport.ts";
@@ -34,6 +34,8 @@ export default function App() {
   usePinnedViewport();
 
   const [settings, setSettings] = useState<Settings>(loadSettings);
+  // How the deployment is configured, as its own Worker reports it.
+  const [config, setConfig] = useState<AppConfig | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<SaveState>("idle");
@@ -159,10 +161,21 @@ export default function App() {
 
   useEffect(() => {
     void (async () => {
-      setSiteUrl(loadSettings().siteUrl);
-      const sorted = sortDrafts(await draftStore.all());
+      // The deployment knows where it publishes; this browser only remembers
+      // how the writing is set up. Ask both before the first draft is made,
+      // so a new post is stamped with the right paths from the start.
+      const [stored, remote] = await Promise.all([draftStore.all(), fetchAppConfig()]);
+      let active = loadSettings();
+      if (remote) {
+        active = applyConfig(active, remote);
+        setConfig(remote);
+        setSettings(active);
+        saveSettings(active);
+      }
+      setSiteUrl(active.siteUrl);
+      const sorted = sortDrafts(stored);
       if (sorted.length === 0) {
-        const draft = createDraft(loadSettings());
+        const draft = createDraft(active);
         await draftStore.put(draft);
         setDrafts([draft]);
         setCurrentId(draft.id);
@@ -231,7 +244,7 @@ export default function App() {
           return;
         }
 
-        const source = await fetchPostSource(path, settings);
+        const source = await fetchPostSource(path);
         const parsed = parsePost(source.markdown);
         const now = Date.now();
         const draft: Draft = {
@@ -623,7 +636,7 @@ export default function App() {
           onChange: updateMeta,
           onSlugChange: setSlug,
         }}
-        settings={{ settings, onChange: updateSettings }}
+        settings={{ settings, config, onChange: updateSettings }}
         onPublish={() =>
           void settle().then(() => {
             // The menu is portalled and the dialog is not, so on a phone —
@@ -642,14 +655,10 @@ export default function App() {
         <PublishDialog
           draft={current}
           settings={settings}
+          config={config}
           onSettingsChange={updateSettings}
           onClose={() => setPublishOpen(false)}
           onPublished={onPublished}
-          onOpenSettings={() => {
-            setPublishOpen(false);
-            updateSettings({ menuTab: "settings" });
-            setMenuOpen(true);
-          }}
         />
       ) : null}
 

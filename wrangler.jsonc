@@ -1,17 +1,38 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "write",
+  "main": "./worker/index.ts",
   "compatibility_date": "2026-06-01",
-  // Static files, nothing else: the app publishes to GitHub from the browser,
-  // so this deployment has no code of its own and no secrets to hold. With no
-  // `main`, `wrangler deploy` uploads `dist` and Cloudflare serves it — the
-  // Worker is the asset server and runs no script.
   "assets": {
     "directory": "./dist",
+    "binding": "ASSETS",
     "not_found_handling": "single-page-application"
   },
+  "observability": {
+    "enabled": true
+  },
   // The blog's *Edit this post* button links here, so this name has to keep
-  // answering. It is attached to this Worker, not to a Pages project: deploying
-  // anywhere else leaves the old app sitting on the domain.
-  "routes": [{ "pattern": "write.stevehoang.com", "custom_domain": true }]
+  // answering. It is a custom domain on this Worker, not on a Pages project:
+  // deploying anywhere else leaves the old app sitting on the domain.
+  "routes": [{ "pattern": "write.stevehoang.com", "custom_domain": true }],
+  "vars": {
+    "BLOG_REPO": "lotusk08/stevehoang.com",
+    // The branch the posts live on — the site's `_posts` are on `blog`.
+    "BLOG_BRANCH": "blog",
+    // Where the blog is served, so images already published can be previewed.
+    "SITE_URL": "https://stevehoang.com",
+    "POSTS_DIR": "_posts",
+    "DRAFTS_DIR": "_drafts",
+    "IMAGES_DIR": "assets/img/post",
+    // Cloudflare Access is what stands between the internet and the token
+    // below, so the Worker refuses to publish until both of these are set.
+    // ACCESS_AUD is the Application Audience tag from the Access app's
+    // overview page; ACCESS_EMAIL is optional and narrows it to one address
+    // whatever the Access policy happens to allow.
+    "ACCESS_TEAM_DOMAIN": "stevehoang.cloudflareaccess.com",
+    "ACCESS_AUD": "",
+    "ACCESS_EMAIL": ""
+  }
+  // Secret (never in this file — use `wrangler secret put GITHUB_TOKEN`):
+  //   GITHUB_TOKEN – fine-grained PAT, Contents: read & write on the blog repo
 }

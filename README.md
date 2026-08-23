@@ -5,14 +5,14 @@ draft in the browser, fold sections away while you work, export to Markdown or
 Word, and publish straight to the blog repository — text and images in a single
 commit. Posts already on the blog can be opened here and edited in place.
 
-It is static files and nothing else — no server, no API of its own, nothing to
-pay for. Publishing is a GitHub call from the browser, with fine-grained tokens
-you keep in Settings: one that can only read, and one that can write, kept
-locked until the moment you publish.
+There is nothing to sign into and no token to remember. Cloudflare Access
+guards the address; behind it a small Worker holds the one GitHub token and
+makes the commit. The browser never sees a credential.
 
 ```
 .
 ├── src/          the editor app (React + Tiptap 3)
+├── worker/       the three API routes, and the Access check in front of them
 ├── shared/       the GitHub commit flow, the post types, base64
 └── wrangler.jsonc
 ```
@@ -76,10 +76,14 @@ Shortcuts: `⌘S` save now · `⌘⇧N` new draft · `⌘\` open/close the menu 
 
 ```bash
 npm install
-npm run dev          # http://localhost:5173
-npm run typecheck    # tsc across the app and shared
+npm run dev          # http://localhost:5173 — the editor, without /api
+npm run typecheck    # tsc across the app, worker and shared
 npm run build        # dist
+npx wrangler dev     # the whole thing, /api included (serves dist — build first)
 ```
+
+`wrangler dev` reads `.dev.vars` for `GITHUB_TOKEN`. Leave `ACCESS_AUD` unset
+there and publishing stays disabled locally, which is usually what you want.
 
 ## Deploying
 
@@ -99,25 +103,34 @@ Deploy anywhere else — a Pages project of the same name included — and the
 domain stays on the Worker, serving whatever was last pushed to it. That is the
 one way this can look like it worked and change nothing.
 
-### The two tokens
+### The token, and who may use it
 
-Reading the blog and writing to it are different privileges, so they are
-different fine-grained tokens on `lotusk08/stevehoang.com` and nothing else.
+One fine-grained token on `lotusk08/stevehoang.com` and nothing else, *Contents:
+Read & write*, kept as a Worker secret:
 
-Both are pasted once, under Settings → Blog → **Access**, which folds itself
-away as soon as they are in: the only part of this you meet again is the
-password at the publish step.
+```bash
+npx wrangler secret put GITHUB_TOKEN
+```
 
-**Read token** — *Contents: Read*. Opens a published post for editing. It stays
-in that browser as it is, because what it can reach is on the blog anyway.
+Paste it at the prompt rather than piping it — a trailing newline makes GitHub
+treat the request as anonymous, which a private repo answers with a flat "not
+found".
 
-**Publish token** — *Contents: Read & write*. Paste it with a password and it is
-locked there (PBKDF2 + AES-GCM, in WebCrypto); the token itself is never stored.
-Every publish asks for the password and opens the token for that one commit.
+That token is worth exactly as much as the thing standing in front of it, which
+is **Cloudflare Access**. In Zero Trust → Access → Applications, add a
+self-hosted application for `write.stevehoang.com` with a policy that allows
+your own address, then copy its **Application Audience (AUD) tag** into
+`ACCESS_AUD` in `wrangler.jsonc` and deploy again. `ACCESS_EMAIL` is optional
+and narrows it further, to one address whatever the policy allows.
 
-So a phone left unlocked reads; it does not write. Forgetting the password costs
-you a token, not the blog — issue another and lock it again. Either token can be
-revoked on GitHub in a minute, which is the recovery plan for both.
+Until `ACCESS_AUD` is set the Worker refuses to publish — an endpoint holding a
+write token with nothing in front of it is worse than a broken one, so it fails
+closed and says so. `worker/access.ts` verifies the assertion Access attaches
+rather than trusting the header: signature against the team's published keys,
+then audience, issuer and expiry.
+
+Revoking is two independent moves: end the Access session (or delete the policy)
+to stop this browser, and revoke the token on GitHub to stop the Worker.
 
 ### Where posts go
 

@@ -1,20 +1,24 @@
 # write
 
 A Tiptap-based writing app for [stevehoang.com](https://stevehoang.com): drafts
-live in the browser, posts are published to the Jekyll blog repository, and the
-whole thing is static files — there is no server side of its own. Published
-posts can be read back out of the repository and edited here, so the app has to
-be able to write a post it did not create without changing it.
+live in the browser and posts are published to the Jekyll blog repository.
+Published posts can be read back out of the repository and edited here, so the
+app has to be able to write a post it did not create without changing it.
 
-The blog is reached straight from the browser with two fine-grained GitHub
-tokens kept in Settings, split by what they can do. The read token (Contents:
-read) opens a published post for editing and sits in the browser as it is. The
-publish token (Contents: read and write) is locked with a passphrase — `lock.ts`,
-PBKDF2 and AES-GCM — and opened at the publish step, for that one commit and
-never held afterwards. Both are set under Settings → Blog → Access, which folds
-away once they are in; the app calls that passphrase a password, since that is
-the only part of it anyone types twice. Everything to do with media — WebP, placeholders, sizes — belongs
-to the blog's own build, not here.
+The blog is reached through this app's own Worker, which holds one fine-grained
+GitHub token (Contents: read and write) as a secret. The browser holds no
+credential at all: Cloudflare Access sits in front of the hostname, and the
+session cookie it issues is what lets a request through. So there is nothing to
+paste into Settings and nothing to type per post — signing out of Access, or
+letting the session lapse, is what takes the ability to publish away.
+
+`worker/access.ts` is the whole of that trust. It verifies the
+`Cf-Access-Jwt-Assertion` header rather than trusting it for being present:
+signature against the team's published keys, then audience, issuer and expiry.
+The Worker fails closed — without `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` set it
+refuses to publish at all, because it would otherwise be an open endpoint
+holding a write token. Everything to do with media — WebP, placeholders, sizes
+— belongs to the blog's own build, not here.
 
 This repository began as a fork of BlockNote. That tree is preserved on the
 `blocknote-upstream` branch — `main` is this app, at the repository root, with
@@ -22,10 +26,15 @@ its own npm lockfile.
 
 ## Commands
 
-- `npm run dev` — Vite on :5173. Nothing else runs alongside it.
-- `npm run typecheck` — `tsc -b` across the app and `shared/`.
-- `npm run build` — emits `dist`.
-- `npm run deploy` — builds, then uploads `dist` as a Pages project.
+- `npm run dev` — Vite on :5173. The editor only; `/api` is not there, so
+  publishing and `?edit=` need `wrangler dev` (which serves `dist`, so build
+  first) with a `.dev.vars` holding `GITHUB_TOKEN`.
+- `npm run typecheck` — `tsc -b` across the app, `worker/` and `shared/`.
+- `npm run build` — emits `dist`, flat. Wrangler bundles `worker/` itself, so
+  there is no Cloudflare plugin in the Vite build and nothing nested under
+  `dist`.
+- `npm run deploy` — builds, then `wrangler deploy`. The custom domain lives on
+  this Worker; deploying anywhere else leaves the old app on it.
 
 ## Layout
 
@@ -37,8 +46,13 @@ its own npm lockfile.
   post; `import.ts` reads one back and is the inverse of it. `viewport.ts`
   measures the part of the window a phone keyboard leaves on screen; the shell
   is pinned to it and every pop-up is placed against it, not `innerHeight`.
-- `shared/` — GitHub calls, base64 and the post types. No DOM in it, so it can
-  be read and tested on its own; `lib/api.ts` is the only door to the network.
+- `worker/` — the only thing holding a credential. `index.ts` has the three
+  endpoints (`/api/config`, `/api/source`, `/api/publish`), validates every
+  path against the configured directories so a stolen session cannot rewrite
+  workflows, and `access.ts` decides who is asking.
+- `shared/` — GitHub calls, base64 and the post types. No DOM in it, so it is
+  read by both the app and the Worker; `lib/api.ts` is the browser's only door
+  to the network, and it only ever calls `/api`.
 
 ## Publishing format
 
@@ -100,7 +114,7 @@ Things that took a bug to learn, and that a change here can quietly undo:
 ## Editing a published post
 
 `?edit=<repo path>` — what the blog's own edit button links to — reads the post
-from GitHub with the read token and opens it as a draft whose `publishedPath` is
-that file, so re-publishing lands on the same path rather than making a copy. Images
+through `/api/source` and opens it as a draft whose `publishedPath` is that
+file, so re-publishing lands on the same path rather than making a copy. Images
 already on the blog are left alone: not re-encoded, re-uploaded or renamed, and
 a newly added image is numbered past every name the post already uses.

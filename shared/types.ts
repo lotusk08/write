@@ -1,8 +1,29 @@
 /**
  * Types and helpers with no DOM in them, kept apart from the editor so they can
- * be read — and tested — on their own. They were shared with a Worker once; the
- * app talks to GitHub directly now.
+ * be read — and tested — on their own, and shared with the Worker that holds
+ * the blog's token.
  */
+
+/**
+ * How this deployment is configured, as the Worker sees it. The editor asks
+ * once at startup: the repository, branch and directories are the deployment's
+ * to know, not something to be re-typed into every browser.
+ */
+export interface AppConfig {
+  repo: string;
+  branch: string;
+  /** Public site URL, used to preview images already published. */
+  siteUrl: string;
+  postsDir: string;
+  draftsDir: string;
+  imagesDir: string;
+  /** False when something is missing and publishing would fail. */
+  ready: boolean;
+  /** What is missing, when it is not ready. */
+  problem?: string;
+  /** Who Cloudflare Access says is signed in. */
+  email?: string;
+}
 
 /** Jekyll (Chirpy) front matter for a post. */
 export interface PostMeta {

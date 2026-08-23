@@ -1,17 +1,40 @@
-import { commitFiles, readTextFile } from "../../shared/github.ts";
-import type { PublishRequest, PublishResult } from "../../shared/types.ts";
-import type { Settings } from "./settings.ts";
+import type { AppConfig, PublishRequest, PublishResult } from "../../shared/types.ts";
 
 /**
- * The blog is reached straight from the browser with fine-grained tokens.
+ * The blog is reached through this app's own Worker, which holds the one token
+ * that can read and write it.
  *
- * There is nothing of this app's own running anywhere — it is static files —
- * so the tokens in Settings are all the trust it holds, and they are split by
- * what they can do. Reading a post back needs Contents: read, and that token
- * sits in this browser: the posts it can reach are published anyway. Writing
- * needs Contents: read and write, and that one is locked (see `lock.ts`) and
- * opened with a passphrase at the moment of publishing.
+ * Nothing here carries a credential. Cloudflare Access sits in front of the
+ * hostname and signs you in; the browser gets a session cookie for it and sends
+ * it with these requests the way it sends any cookie. So there is no token in
+ * this browser to leak and no password to type per post — signing out of Access,
+ * or letting the session lapse, is what takes the ability to publish away.
  */
+
+async function readJson<T>(response: Response, whenItFails: string): Promise<T> {
+  const payload = (await response.json().catch(() => ({}))) as Partial<T> & { error?: string };
+  if (!response.ok) {
+    throw new Error(payload.error || `${whenItFails} (${response.status}).`);
+  }
+  return payload as T;
+}
+
+/**
+ * Asks the Worker how this deployment is configured. A `problem` in the answer
+ * is something to fix on the deployment, not in the browser, so it is shown as
+ * it is rather than translated.
+ */
+export async function fetchAppConfig(): Promise<AppConfig | null> {
+  try {
+    const response = await fetch("/api/config", { headers: { accept: "application/json" } });
+    if (!response.ok || !(response.headers.get("content-type") ?? "").includes("application/json")) {
+      return null;
+    }
+    return (await response.json()) as AppConfig;
+  } catch {
+    return null;
+  }
+}
 
 export interface PostSource {
   path: string;
@@ -19,37 +42,24 @@ export interface PostSource {
   markdown: string;
 }
 
-function readToken(settings: Settings): string {
-  if (!settings.githubToken) {
-    throw new Error(
-      "No read token yet. Add a fine-grained one — Contents: read on the blog repo — in Settings.",
-    );
-  }
-  return settings.githubToken;
-}
-
 /** Reads a published post back out of the repository, for `?edit=`. */
-export async function fetchPostSource(path: string, settings: Settings): Promise<PostSource> {
-  const markdown = await readTextFile(readToken(settings), settings.repo, settings.branch, path);
-  if (markdown === null) {
-    throw new Error(`${settings.repo} has no ${path} on ${settings.branch}.`);
+export async function fetchPostSource(path: string): Promise<PostSource> {
+  const response = await fetch(`/api/source?path=${encodeURIComponent(path)}`, {
+    headers: { accept: "application/json" },
+  });
+  const source = await readJson<PostSource>(response, `Could not open ${path}`);
+  if (typeof source.markdown !== "string") {
+    throw new Error(`Could not open ${path}.`);
   }
-  return { path, branch: settings.branch, markdown };
+  return source;
 }
 
-/** `writeToken` is the unlocked publish token, held for this tab only. */
-export async function publish(
-  request: PublishRequest,
-  settings: Settings,
-  writeToken: string,
-): Promise<PublishResult> {
-  return commitFiles({
-    token: writeToken,
-    repo: settings.repo,
-    branch: request.branch || settings.branch,
-    baseBranch: settings.branch,
-    message: request.message,
-    files: request.files,
-    pullRequest: request.pullRequest ?? null,
+/** Commits a post and its images in one go. */
+export async function publish(request: PublishRequest): Promise<PublishResult> {
+  const response = await fetch("/api/publish", {
+    method: "POST",
+    headers: { "content-type": "application/json", accept: "application/json" },
+    body: JSON.stringify(request),
   });
+  return readJson<PublishResult>(response, "Publish failed");
 }

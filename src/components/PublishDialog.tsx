@@ -1,7 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
-import type { PublishResult } from "../../shared/types.ts";
+import type { AppConfig, PublishResult } from "../../shared/types.ts";
 import { publish } from "../lib/api.ts";
-import { unlockToken } from "../lib/lock.ts";
 import type { Draft } from "../lib/db.ts";
 import { buildPublishPlan, defaultCommitMessage, publishBranchName, type PublishPlan } from "../lib/publish.ts";
 import type { Settings } from "../lib/settings.ts";
@@ -10,29 +9,24 @@ import { Dialog } from "./Dialog.tsx";
 interface PublishDialogProps {
   draft: Draft;
   settings: Settings;
+  config: AppConfig | null;
   onSettingsChange: (patch: Partial<Settings>) => void;
   onClose: () => void;
   onPublished: (result: PublishResult, plan: PublishPlan) => void;
-  onOpenSettings: () => void;
 }
 
 export function PublishDialog({
   draft,
   settings,
+  config,
   onSettingsChange,
   onClose,
   onPublished,
-  onOpenSettings,
 }: PublishDialogProps) {
   const [plan, setPlan] = useState<PublishPlan | null>(null);
   const [message, setMessage] = useState(() => defaultCommitMessage(draft, Boolean(draft.publishedPath)));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [passphrase, setPassphrase] = useState("");
-  // Asked for here and nowhere else, and asked every time: the password opens
-  // the token for this one commit and is not held afterwards, in this dialog
-  // or beyond it. Writing a post needs none of this — only sending it does.
-  const locked = settings.publishToken;
 
   const repo = settings.repo;
   const baseBranch = settings.branch;
@@ -66,35 +60,35 @@ export function PublishDialog({
       ? draft.publishedPath
       : null;
 
-  const missingCredentials = useMemo(
+  // Nothing to type and nothing to fix in this browser: either the deployment
+  // can publish or it says what it is missing, and Cloudflare Access has
+  // already decided whether this session is allowed to ask.
+  const blocked = useMemo(
     () =>
-      settings.publishToken
-        ? null
-        : "No publish token yet — open Settings, add one under Access, and lock it with a password.",
-    [settings.publishToken],
+      config === null
+        ? "This app's own API did not answer, so it cannot publish. Reload and try again."
+        : config.ready
+          ? null
+          : config.problem ?? "This deployment is not configured to publish.",
+    [config],
   );
 
   const run = async () => {
-    if (!plan || !locked || !passphrase) {
+    if (!plan || blocked) {
       return;
     }
     setBusy(true);
     setError(null);
     try {
-      const token = await unlockToken(locked, passphrase);
       const branch = settings.openPullRequest ? publishBranchName(plan.slug) : baseBranch;
-      const result = await publish(
-        {
-          message,
-          files: plan.files,
-          branch,
-          pullRequest: settings.openPullRequest
-            ? { title: message, body: `Published from write.\n\n\`${plan.markdownPath}\`` }
-            : null,
-        },
-        settings,
-        token,
-      );
+      const result = await publish({
+        message,
+        files: plan.files,
+        branch,
+        pullRequest: settings.openPullRequest
+          ? { title: message, body: `Published from write.\n\n\`${plan.markdownPath}\`` }
+          : null,
+      });
       onPublished(result, plan);
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -116,7 +110,7 @@ export function PublishDialog({
           <button
             type="button"
             className="btn primary"
-            disabled={!plan || busy || Boolean(missingCredentials) || !passphrase}
+            disabled={!plan || busy || Boolean(blocked)}
             onClick={() => void run()}
           >
             {busy ? "Publishing…" : settings.openPullRequest ? "Open pull request" : "Commit"}
@@ -124,14 +118,7 @@ export function PublishDialog({
         </>
       }
     >
-      {missingCredentials ? (
-        <div className="notice warn">
-          {missingCredentials}{" "}
-          <button type="button" className="btn ghost" onClick={onOpenSettings}>
-            Open settings
-          </button>
-        </div>
-      ) : null}
+      {blocked ? <div className="notice warn">{blocked}</div> : null}
       {renamedFrom ? (
         <div className="notice warn">
           This writes a new file. The post it was opened from,{" "}
@@ -140,32 +127,6 @@ export function PublishDialog({
         </div>
       ) : null}
       {error ? <div className="notice warn">{error}</div> : null}
-
-      {locked ? (
-        <div className="field">
-          <label htmlFor="publish-passphrase">Password</label>
-          <input
-            id="publish-passphrase"
-            className="input"
-            type="password"
-            autoComplete="current-password"
-            autoFocus
-            placeholder="••••••••"
-            value={passphrase}
-            onChange={(event) => setPassphrase(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void run();
-              }
-            }}
-          />
-          <p className="hint">
-            Opens the publish token for this one commit. It is not kept afterwards, and nothing
-            else here can write to the blog.
-          </p>
-        </div>
-      ) : null}
 
       <div className="row">
         <div className="field">
