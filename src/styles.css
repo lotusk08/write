@@ -598,6 +598,13 @@ textarea {
   color: var(--accent);
 }
 
+/* A tool with nothing to act on: still there, so the row keeps its shape. */
+.tool:disabled {
+  background: none;
+  color: var(--border-strong);
+  cursor: default;
+}
+
 .tool-text {
   font-size: 12px;
   font-weight: 600;

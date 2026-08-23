@@ -87,7 +87,15 @@ export default function App() {
     }
     const next: Draft = { ...base, ...patch, updatedAt: Date.now() };
     await draftStore.put(next);
-    setDrafts((previous) => sortDrafts(previous.map((draft) => (draft.id === id ? next : draft))));
+    const merge = (list: Draft[]) => sortDrafts(list.map((draft) => (draft.id === id ? next : draft)));
+    // The ref, not just the state: everything that reads the document after
+    // awaiting a flush — the source view, the next draft, an export — reads it
+    // through here, and React has not re-rendered yet to refill it. Saving and
+    // immediately opening the Markdown source used to hand back the post as it
+    // was a keystroke ago, and coming back out of it wrote that copy over the
+    // real one.
+    draftsRef.current = merge(draftsRef.current);
+    setDrafts(merge);
     setSaveState("saved");
   }, []);
 

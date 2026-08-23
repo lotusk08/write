@@ -223,6 +223,15 @@ export function PublishDialog({
             {plan.skippedImages.length} image(s) missing from this browser's storage and will not be uploaded.
           </p>
         ) : null}
+        {plan?.keptImages.length ? (
+          <p className="hint">
+            {plan.keptImages.length} image(s) going up as they came in
+            {plan.keptImages.some((image) => image.reason === "larger")
+              ? " — WebP came out larger"
+              : " — this browser could not encode WebP"}
+            . The blog builds placeholders and sizes for <span className="mono">.webp</span> only.
+          </p>
+        ) : null}
       </div>
 
       <div className="field">

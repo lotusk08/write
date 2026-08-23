@@ -88,6 +88,13 @@ const PATHS = {
       <path d="M3 10h18M9 10v10" />
     </>
   ),
+  imageRow: (
+    <>
+      <rect x="2.5" y="6" width="5.5" height="12" rx="1.5" />
+      <rect x="9.5" y="6" width="5" height="12" rx="1.5" />
+      <rect x="16" y="6" width="5.5" height="12" rx="1.5" />
+    </>
+  ),
   rule: (
     <>
       <path d="M3 12h4M10 12h4M17 12h4" />

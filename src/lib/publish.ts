@@ -2,7 +2,7 @@ import type { JSONContent } from "@tiptap/core";
 import type { PublishFile } from "../../shared/types.ts";
 import type { Draft, StoredImage } from "./db.ts";
 import { imageStore, isLocalSrc, localId } from "./db.ts";
-import { blobToBase64, toWebp } from "./images.ts";
+import { blobToBase64, extensionFor, toWebp, type EncodeOutcome } from "./images.ts";
 import { buildPostFile } from "./markdown.ts";
 import type { Settings } from "./settings.ts";
 import { datePrefix, slugify } from "./text.ts";
@@ -17,6 +17,13 @@ export interface PublishPlan {
   imageUrls: Map<string, string>;
   /** Images referenced by the document but no longer in this browser. */
   skippedImages: string[];
+  /** Images going up in the format they arrived in, and why. */
+  keptImages: KeptImage[];
+}
+
+export interface KeptImage {
+  path: string;
+  reason: EncodeOutcome;
 }
 
 interface PlannedImage {
@@ -95,14 +102,6 @@ function passthroughType(type: string): boolean {
   return type === "image/gif" || type === "image/svg+xml";
 }
 
-function storedExtension(image: StoredImage): string {
-  const fromName = image.name.split(".").pop()?.toLowerCase();
-  if (fromName && /^[a-z0-9]{2,5}$/.test(fromName)) {
-    return fromName;
-  }
-  return image.type.split("/")[1] ?? "png";
-}
-
 function metaWithCover(draft: Draft, imageUrls: Map<string, string>) {
   const cover = draft.meta.cover;
   if (!cover?.path) {
@@ -136,7 +135,7 @@ export async function markdownForExport(draft: Draft, settings: Settings): Promi
     const extension =
       settings.convertImagesToWebp && !passthroughType(image.stored.type)
         ? "webp"
-        : storedExtension(image.stored);
+        : extensionFor(image.stored.type, image.stored.name);
     imageUrls.set(image.src, `/${imagesDir}/${image.baseName}.${extension}`);
   }
 
@@ -155,6 +154,7 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
   const files: PublishFile[] = [];
   const imageUrls = new Map<string, string>();
   const skippedImages: string[] = [];
+  const keptImages: KeptImage[] = [];
 
   for (const image of await planImages(draft, slug)) {
     if (!image.stored) {
@@ -162,9 +162,18 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
       continue;
     }
     const encoded = settings.convertImagesToWebp
-      ? await toWebp(image.stored.blob)
-      : { blob: image.stored.blob, extension: storedExtension(image.stored) };
+      ? await toWebp(image.stored.blob, image.stored.name)
+      : {
+          blob: image.stored.blob,
+          extension: extensionFor(image.stored.type, image.stored.name),
+          outcome: "kept" as const,
+        };
     const path = `${imagesDir}/${image.baseName}.${encoded.extension}`;
+    // Worth saying out loud: the blog builds its placeholders and its sizes
+    // from `.webp` alone, so anything else goes up without them.
+    if (encoded.extension !== "webp" && !passthroughType(image.stored.type)) {
+      keptImages.push({ path, reason: encoded.outcome });
+    }
     files.push({ path, contentBase64: await blobToBase64(encoded.blob) });
     imageUrls.set(image.src, `/${path}`);
   }
@@ -175,7 +184,7 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
   const markdownPath = markdownPathFor(draft, settings, slug);
   files.unshift({ path: markdownPath, contentBase64: await blobToBase64(new Blob([markdown])) });
 
-  return { slug, markdownPath, markdown, files, imageUrls, skippedImages };
+  return { slug, markdownPath, markdown, files, imageUrls, skippedImages, keptImages };
 }
 
 export function defaultCommitMessage(draft: Draft, isUpdate: boolean): string {

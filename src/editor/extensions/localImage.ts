@@ -3,15 +3,22 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { NodeView } from "@tiptap/pm/view";
 import { LOCAL_PREFIX, isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
 import { displaySrc } from "../../lib/site.ts";
+import { CENTER_ROW } from "./blogFormat.ts";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     localImage: {
-      /** Stores the file in IndexedDB and inserts it at the cursor. */
-      insertLocalImage: (file: File) => ReturnType;
+      /** Stores the files in IndexedDB and inserts them at the cursor. */
+      insertLocalImages: (files: File[]) => ReturnType;
     };
   }
 }
+
+/**
+ * How many photos picked together are taken as a row rather than a column.
+ * The blog lays a row out with flex, so past four they are slivers.
+ */
+const ROW_LIMIT = 4;
 
 function imageFilesFrom(list: FileList | DataTransferItemList | null | undefined): File[] {
   if (!list) {
@@ -112,17 +119,40 @@ export const LocalImage = Image.extend({
   addCommands() {
     return {
       ...this.parent?.(),
-      insertLocalImage:
-        (file: File) =>
+      /**
+       * All of them in one insertion, in the order they were picked. One at a
+       * time raced: each file was stored asynchronously and inserted wherever
+       * the cursor had ended up, which was on the image inserted just before —
+       * so the second photo replaced the first, and three arrived as one.
+       *
+       * Picked together, a handful of photos is a row: that is what the blog's
+       * flex gallery is for, and the row tool breaks it up in a tap.
+       */
+      insertLocalImages:
+        (files: File[]) =>
         ({ editor }) => {
-          void storeImageFile(file).then((stored) => {
+          if (!files.length) {
+            return false;
+          }
+          void Promise.all(files.map((file) => storeImageFile(file))).then((stored) => {
+            const row = stored.length > 1 && stored.length <= ROW_LIMIT;
             editor
               .chain()
               .focus()
-              .insertContent({
-                type: this.name,
-                attrs: { src: `${LOCAL_PREFIX}${stored.id}`, alt: "", title: null },
-              })
+              .insertContent(
+                stored.map((image, index) => ({
+                  type: this.name,
+                  attrs: {
+                    src: `${LOCAL_PREFIX}${image.id}`,
+                    alt: "",
+                    title: null,
+                    joinPrevious: row && index > 0,
+                    // Kramdown reads the list under the last line as the whole
+                    // paragraph's, and a row is one paragraph.
+                    blockIal: row && index === stored.length - 1 ? CENTER_ROW : null,
+                  },
+                })),
+              )
               .run();
           });
           return true;
@@ -212,7 +242,7 @@ export const LocalImage = Image.extend({
               return false;
             }
             event.preventDefault();
-            files.forEach((file) => editor.commands.insertLocalImage(file));
+            editor.commands.insertLocalImages(files);
             return true;
           },
           handleDrop: (view, event) => {
@@ -228,7 +258,7 @@ export const LocalImage = Image.extend({
             if (coords) {
               editor.commands.focus(coords.pos);
             }
-            files.forEach((file) => editor.commands.insertLocalImage(file));
+            editor.commands.insertLocalImages(files);
             return true;
           },
         },

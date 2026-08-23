@@ -1,6 +1,7 @@
 import { Extension } from "@tiptap/core";
 import Code from "@tiptap/extension-code";
-import { NodeSelection } from "@tiptap/pm/state";
+import type { Node } from "@tiptap/pm/model";
+import { NodeSelection, type EditorState } from "@tiptap/pm/state";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -9,12 +10,24 @@ declare module "@tiptap/core" {
       setBlockAttributes: (value: string | null) => ReturnType;
       /** Sets it, or clears it when the block already carries that value. */
       toggleBlockAttributes: (value: string) => ReturnType;
+      /** Lays neighbouring images out as one row, or breaks the row up. */
+      toggleImageRow: () => ReturnType;
     };
   }
 }
 
 /** The blog's centred image row, the one block attribute worth a button. */
 export const CENTER_ROW = "{: .d-flex .c-center }";
+
+/** Whether the images around the cursor are already laid out as one row. */
+export function inImageRow(state: EditorState): boolean {
+  return isRow(imageRun(state));
+}
+
+/** Whether there are neighbouring images to make a row out of at all. */
+export function canImageRow(state: EditorState): boolean {
+  return imageRun(state).length > 1;
+}
 
 /**
  * Blocks that can carry a Kramdown attribute list of their own — the
@@ -37,6 +50,64 @@ const BLOCKS = [
   "rawBlock",
   "embed",
 ];
+
+interface RowImage {
+  pos: number;
+  node: Node;
+}
+
+/**
+ * The run of neighbouring images the selection is in.
+ *
+ * A selection covering more than one image is taken as written; a cursor
+ * resting on a single one reaches out to the images either side of it, so
+ * three stacked photos become a row from a tap on any of them — the only kind
+ * of aim there is on a phone.
+ */
+function imageRun(state: EditorState): RowImage[] {
+  const { from, to } = state.selection;
+  const touched: RowImage[] = [];
+  state.doc.nodesBetween(from, to, (node, pos) => {
+    if (node.type.name === "image") {
+      touched.push({ pos, node });
+      return false;
+    }
+    return true;
+  });
+  if (!touched.length) {
+    return [];
+  }
+  if (touched.length > 1) {
+    return touched;
+  }
+
+  const $image = state.doc.resolve(touched[0].pos);
+  const parent = $image.parent;
+  const index = $image.index();
+  let first = index;
+  let last = index;
+  while (first > 0 && parent.child(first - 1).type.name === "image") {
+    first -= 1;
+  }
+  while (last + 1 < parent.childCount && parent.child(last + 1).type.name === "image") {
+    last += 1;
+  }
+
+  const run: RowImage[] = [];
+  let pos = $image.start();
+  for (let i = 0; i <= last; i += 1) {
+    if (i >= first) {
+      run.push({ pos, node: parent.child(i) });
+    }
+    pos += parent.child(i).nodeSize;
+  }
+  return run;
+}
+
+/** Images written on adjacent lines: one paragraph, and one row on the blog. */
+function isRow(run: RowImage[]): boolean {
+  return run.length > 1 && run.slice(1).every((image) => Boolean(image.node.attrs.joinPrevious));
+}
 
 export const BlockAttributes = Extension.create({
   name: "blockAttributes",
@@ -115,6 +186,33 @@ export const BlockAttributes = Extension.create({
           }
           const current = state.doc.nodeAt(at)?.attrs.blockIal;
           dispatch?.(tr.setNodeAttribute(at, "blockIal", current === value ? null : value));
+          return true;
+        },
+
+      /**
+       * A row is one paragraph of images to Kramdown — the lines written
+       * against each other — carrying the flex class the blog lays them out
+       * with. That class goes on the last of them, which is the line the
+       * attribute list is written under.
+       */
+      toggleImageRow:
+        () =>
+        ({ state, tr, dispatch }) => {
+          const run = imageRun(state);
+          if (run.length < 2) {
+            return false;
+          }
+          const breaking = isRow(run);
+          run.forEach(({ pos, node }, index) => {
+            tr.setNodeAttribute(pos, "joinPrevious", breaking ? false : index > 0);
+            const last = index === run.length - 1;
+            if (!breaking && last) {
+              tr.setNodeAttribute(pos, "blockIal", CENTER_ROW);
+            } else if (node.attrs.blockIal === CENTER_ROW) {
+              tr.setNodeAttribute(pos, "blockIal", null);
+            }
+          });
+          dispatch?.(tr);
           return true;
         },
     };

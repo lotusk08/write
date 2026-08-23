@@ -2,7 +2,7 @@ import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
 import type { ReactNode } from "react";
 import { useEffect, useRef } from "react";
-import { CENTER_ROW } from "../editor/extensions/blogFormat.ts";
+import { CENTER_ROW, canImageRow, inImageRow } from "../editor/extensions/blogFormat.ts";
 import { embedFromUrl } from "../editor/extensions/embed.ts";
 import type { NoteType } from "../editor/extensions/noteQuote.ts";
 import { Icon, type IconName } from "./Icons.tsx";
@@ -22,9 +22,11 @@ interface ToolProps {
   icon?: IconName;
   label?: ReactNode;
   active?: boolean;
+  /** Kept in place rather than hidden, so the row never shifts under a tap. */
+  disabled?: boolean;
 }
 
-function Tool({ title, onClick, icon, label, active }: ToolProps) {
+function Tool({ title, onClick, icon, label, active, disabled }: ToolProps) {
   return (
     <button
       type="button"
@@ -32,6 +34,7 @@ function Tool({ title, onClick, icon, label, active }: ToolProps) {
       title={title}
       aria-label={title}
       aria-pressed={active}
+      disabled={disabled}
       onMouseDown={(event) => event.preventDefault()}
       onClick={onClick}
     >
@@ -82,6 +85,8 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
       filepath: instance.isActive("code", { filepath: true }),
       // The blog's `{: .d-flex .c-center }`, wherever the cursor is sitting.
       centered: CENTERABLE.some((type) => instance.getAttributes(type).blockIal === CENTER_ROW),
+      imageRow: inImageRow(instance.state),
+      canImageRow: canImageRow(instance.state),
       highlight: instance.isActive("highlight"),
       link: instance.isActive("link"),
       h2: instance.isActive("heading", { level: 2 }),
@@ -198,6 +203,13 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
 
       <div className="tool-group">
         <Tool icon="image" title="Insert image" onClick={() => fileInput.current?.click()} />
+        <Tool
+          icon="imageRow"
+          title="Row of images — one photo strip, the way the blog lays them out"
+          active={state.imageRow}
+          disabled={!state.canImageRow}
+          onClick={() => editor.chain().focus().toggleImageRow().run()}
+        />
         <Tool icon="video" title="Embed a video — YouTube, X, Spotify…" onClick={insertEmbed} />
         <Tool
           icon="table"
@@ -220,7 +232,7 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
         multiple
         hidden
         onChange={(event) => {
-          Array.from(event.target.files ?? []).forEach((file) => editor.commands.insertLocalImage(file));
+          editor.commands.insertLocalImages(Array.from(event.target.files ?? []));
           event.target.value = "";
         }}
       />

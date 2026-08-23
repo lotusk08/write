@@ -47,6 +47,14 @@ Body output follows the blog too: headings start at H2, images are WebP under
 `assets/img/post` so the LQIP pass picks them up, and blockquotes can carry the
 site's `{: .note-* }` callout classes.
 
+WebKit has no WebP encoder behind its canvas — `toBlob` and `convertToBlob`
+hand back a PNG without saying so — so `images.ts` checks what came back and
+falls through to libwebp (`@jsquash/webp`, in `webpWorker.ts`) when it is not a
+WebP. That codec is a lazy chunk, fetched only on the browsers that need it,
+and runs off the main thread because a phone photo is a second or two of work.
+An image that still cannot be encoded is published as it arrived and the
+publish dialog says so, rather than going up as a `.png` the blog will skip.
+
 ## Round-tripping published posts
 
 `import.ts` parses a post into the editor's schema and `markdown.ts` writes it
@@ -67,7 +75,10 @@ Things that took a bug to learn, and that a change here can quietly undo:
   block above. Tabs indent by columns, not by one character.
 - An image and the line under it are one paragraph, and the blog styles that
   line as a caption; a row of images is one paragraph too. `joinPrevious` keeps
-  those together on the way out.
+  those together on the way out, and the row's `{: .d-flex .c-center }` belongs
+  on the last image of the run — Kramdown reads the list under the last line as
+  the whole paragraph's. That is what the row tool and a multi-photo insert
+  build, and `rowAttributes` in `import.ts` is what puts it back there.
 - A Kramdown attribute list attaches to whichever neighbour is not separated
   from it by a blank line, and it is parsed with quoted values taken whole —
   the base64 inside `lqip="…"` contains things that look like classes and
