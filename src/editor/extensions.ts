@@ -7,6 +7,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { BlockAttributes, FilepathCode } from "./extensions/blogFormat.ts";
 import { collapsibleExtensions } from "./extensions/collapsible.ts";
 import { Embed } from "./extensions/embed.ts";
+import { EnterBreaks } from "./extensions/lineBreak.ts";
 import { MathBlock, PreviewCodeBlock, RawBlock } from "./extensions/preview.ts";
 import { NoteQuote } from "./extensions/noteQuote.ts";
 import { LocalImage } from "./extensions/localImage.ts";
@@ -29,6 +30,7 @@ export const editorExtensions = [
   Embed,
   FilepathCode,
   BlockAttributes,
+  EnterBreaks,
   NoteQuote,
   TaskList,
   TaskItem.configure({ nested: true }),

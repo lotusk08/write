@@ -123,6 +123,12 @@ Things that took a bug to learn, and that a change here can quietly undo:
 - Code spans are literal: escaping them writes the backslashes into the code.
   A link wraps its emphasis, not the other way round.
 - Footnote references are syntax, not text to escape.
+- Enter writes a line break; Enter again on the line it just made starts a
+  paragraph. A phone keyboard has no Shift+Enter, so that was the only way to
+  say `<br>` and every line of a poem became its own paragraph — a `>` gap
+  between each one, and an attribution several gaps below the quote it belonged
+  to. `lineBreak.ts`, and only where a paragraph flows: a list item, a table
+  cell and a section summary keep their own Enter.
 - Every newline inside a paragraph is a `<br>`: the site sets `hard_wrap: true`.
   Reading one as a wrap and joining the lines with a space took a break out of
   every post opened here, and writing a break as two trailing spaces left the
