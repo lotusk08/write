@@ -6,13 +6,13 @@ export interface Settings {
   timezoneOffset: number;
   repo: string;
   branch: string;
+  /** Public site URL, used to preview images already published. */
+  siteUrl: string;
   postsDir: string;
   draftsDir: string;
   imagesDir: string;
   /** Only used when the deployment has no server-side token. */
   githubToken: string;
-  /** Password for a worker that publishes on your behalf. */
-  writePassword: string;
   publishTarget: "posts" | "drafts";
   openPullRequest: boolean;
   convertImagesToWebp: boolean;
@@ -31,12 +31,12 @@ export const defaultSettings: Settings = {
   author: "steve",
   timezoneOffset: 420,
   repo: "lotusk08/stevehoang.com",
-  branch: "main",
+  branch: "blog",
+  siteUrl: "https://stevehoang.com",
   postsDir: "_posts",
   draftsDir: "_drafts",
   imagesDir: "assets/img/post",
   githubToken: "",
-  writePassword: "",
   publishTarget: "posts",
   openPullRequest: false,
   convertImagesToWebp: true,
@@ -47,10 +47,17 @@ export const defaultSettings: Settings = {
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY);
-    const stored = raw ? { ...defaultSettings, ...(JSON.parse(raw) as Partial<Settings>) } : defaultSettings;
+    const parsed = raw ? (JSON.parse(raw) as Partial<Settings> & { writePassword?: string }) : {};
+    const stored = { ...defaultSettings, ...parsed };
     // "drafts" was a tab before drafts moved onto the rail.
     const menuTab: MenuTab = stored.menuTab === "settings" ? "settings" : "post";
-    return { ...stored, menuTab };
+    const settings: Settings = { ...stored, menuTab };
+    delete (settings as Partial<typeof parsed>).writePassword;
+    // The publish password used to be kept here. Take the chance to wipe it.
+    if ("writePassword" in parsed) {
+      saveSettings(settings);
+    }
+    return settings;
   } catch {
     return { ...defaultSettings };
   }

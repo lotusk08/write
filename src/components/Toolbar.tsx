@@ -2,9 +2,14 @@ import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
 import type { ReactNode } from "react";
 import { useRef } from "react";
+import { CENTER_ROW } from "../editor/extensions/blogFormat.ts";
+import { embedFromUrl } from "../editor/extensions/embed.ts";
 import type { NoteType } from "../editor/extensions/noteQuote.ts";
 import { Icon, type IconName } from "./Icons.tsx";
 import { NoteMenu } from "./NoteMenu.tsx";
+
+/** Blocks the centre-row attribute can sit on, in the order it is looked for. */
+const CENTERABLE = ["image", "paragraph", "blockquote", "heading", "table"];
 
 interface ToolbarProps {
   editor: Editor;
@@ -45,6 +50,9 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
       italic: instance.isActive("italic"),
       strike: instance.isActive("strike"),
       code: instance.isActive("code"),
+      filepath: instance.isActive("code", { filepath: true }),
+      // The blog's `{: .d-flex .c-center }`, wherever the cursor is sitting.
+      centered: CENTERABLE.some((type) => instance.getAttributes(type).blockIal === CENTER_ROW),
       highlight: instance.isActive("highlight"),
       link: instance.isActive("link"),
       h2: instance.isActive("heading", { level: 2 }),
@@ -59,6 +67,23 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
       collapsible: instance.isActive("collapsible"),
     }),
   });
+
+  /** Takes the page URL and works out the include the blog needs. */
+  const insertEmbed = () => {
+    const url = window.prompt(
+      "Video or post URL (YouTube, X, Bilibili, Spotify, Twitch)",
+      "https://www.youtube.com/watch?v=",
+    );
+    if (!url) {
+      return;
+    }
+    const embed = embedFromUrl(url);
+    if (!embed) {
+      window.alert(`Could not find a video id in: ${url}`);
+      return;
+    }
+    editor.chain().focus().setEmbed(embed).run();
+  };
 
   const setLink = () => {
     const previous = editor.getAttributes("link").href as string | undefined;
@@ -97,6 +122,19 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
         <Tool icon="strike" title="Strikethrough" active={state.strike} onClick={() => editor.chain().focus().toggleStrike().run()} />
         <Tool icon="highlight" title="Highlight" active={state.highlight} onClick={() => editor.chain().focus().toggleHighlight().run()} />
         <Tool icon="code" title="Inline code" active={state.code} onClick={() => editor.chain().focus().toggleCode().run()} />
+        <Tool
+          icon="file"
+          title="File path — the blog's {: .filepath}"
+          active={state.filepath}
+          onClick={() =>
+            editor
+              .chain()
+              .focus()
+              .setCode()
+              .updateAttributes("code", { filepath: !state.filepath })
+              .run()
+          }
+        />
         <Tool icon="link" title="Link" active={state.link} onClick={setLink} />
       </div>
 
@@ -131,12 +169,19 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
 
       <div className="tool-group">
         <Tool icon="image" title="Insert image" onClick={() => fileInput.current?.click()} />
+        <Tool icon="video" title="Embed a video — YouTube, X, Spotify…" onClick={insertEmbed} />
         <Tool
           icon="table"
           title="Insert table"
           onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
         />
         <Tool icon="rule" title="Divider" onClick={() => editor.chain().focus().setHorizontalRule().run()} />
+        <Tool
+          icon="center"
+          title="Centre this block — the blog's {: .d-flex .c-center }"
+          active={state.centered}
+          onClick={() => editor.chain().focus().toggleBlockAttributes(CENTER_ROW).run()}
+        />
       </div>
 
       <input

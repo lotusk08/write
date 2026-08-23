@@ -3,7 +3,7 @@
 A quiet, Tiptap-based writing app for [stevehoang.com](https://stevehoang.com):
 draft in the browser, fold sections away while you work, export to Markdown or
 Word, and publish straight to the blog repository — text and images in a single
-commit.
+commit. Posts already on the blog can be opened here and edited in place.
 
 It runs entirely on Cloudflare: the SPA is served from Workers static assets and
 a small Worker handles publishing.
@@ -11,7 +11,7 @@ a small Worker handles publishing.
 ```
 .
 ├── src/          the editor app (React + Tiptap 3)
-├── worker/       the Cloudflare Worker: /api/config, /api/publish, /api/posts
+├── worker/       the Cloudflare Worker: /api/config, /api/publish, /api/posts, /api/source
 ├── shared/       code both sides use (GitHub commit flow, types, base64)
 └── wrangler.jsonc
 ```
@@ -27,16 +27,30 @@ a small Worker handles publishing.
   `<details markdown="1">…</details>`, which Jekyll renders as a real disclosure
   widget.
 - **Drafts.** Everything is stored locally in IndexedDB and autosaves ~600 ms
-  after you stop typing. Drafts are searchable, duplicable and deletable; images
-  are kept as blobs so drafts stay small and survive reloads.
+  after you stop typing. Images are kept as blobs so drafts stay small and
+  survive reloads. The open draft renames in place on a double-click and carries
+  the delete button.
 - **Front matter.** Title, description, slug, date, author, categories, tags,
-  cover image, and the `pin` / `toc` / `math` / `mermaid` switches the blog
+  cover image, and the `pin` / `toc` / `math` / `mermaid` / `chart` switches the blog
   already uses. It is written the way the blog's own `update-lqip.js` would
   write it — block sequences, no unnecessary quoting, empty fields omitted — so
   a site build never rewrites a published post's front matter.
 - **Callouts.** Quotes can carry the blog's five note styles, exported as
-  `{: .note-info }` and friends. Body headings start at H2, since the title
-  lives in front matter.
+  `{: .note-info }` and friends, plus its centred `{: .author }` attribution.
+  Body headings start at H2, since the title lives in front matter.
+- **The blog's own formats.** `{: .filepath}` code, centred image rows
+  (`{: .d-flex .c-center }`) and `{% include embed/… %}` players are first-class
+  here — paste a YouTube, X, Spotify, Bilibili or Twitch link and the right
+  include is written for you. Any other attribute list a post carries is kept
+  exactly as written, so editing a post does not rewrite lines you did not touch.
+- **Seeing what the blog will render.** Mermaid diagrams, Chart.js charts and
+  `$$ … $$` maths are drawn live above their source; embedded videos play in
+  place. The libraries load only when a post actually uses them.
+- **Markdown when you want it.** The **MD** button in the dock swaps the page
+  view for the raw Markdown — exactly what gets published — and back.
+- **Editing published posts.** The blog's *Edit this post* button opens the post
+  here (`?edit=_posts/…`). Its images are left alone — not re-encoded, renamed
+  or re-uploaded — and re-publishing commits back to the file it came from.
 - **Export.** Markdown (with front matter), Word `.docx` (images embedded), a
   self-contained HTML file, or Markdown straight to the clipboard.
 - **Publish.** Commits `_posts/YYYY-MM-DD-slug.md` — or `_drafts/…` — plus every
@@ -47,10 +61,11 @@ a small Worker handles publishing.
 
 Drafts sit as vertical tabs along the left edge, Obsidian-style: the draft you
 are editing spells out its title, and the rest tuck behind each other like
-sheets in a deck, showing only their edges. Reaching for the rail fans them
-back out to full size. The formatting toolbar is docked inside the bottom of the editor
-frame, and the menu at its right end holds front matter, settings, export and
-publish — so nothing sits above the page.
+sheets in a deck, showing only their edges. Reaching for a deck fans it back out
+to full size — the drafts above the open one and those below it fan separately.
+The formatting toolbar is docked inside the bottom of the editor frame, and the
+menu at its right end holds front matter, settings, export and publish — so
+nothing sits above the page.
 
 Shortcuts: `⌘S` save now · `⌘⇧N` new draft · `⌘\` open/close the menu ·
 `⌘⇧C` copy Markdown · plus the usual Markdown input rules (`#`, `-`, `1.`, `>`,
@@ -78,12 +93,10 @@ npx wrangler login
 npm run deploy       # builds, then uploads the Worker and the static assets
 ```
 
-That publishes to `https://write.<your-subdomain>.workers.dev`. To use your own
-hostname, add a route to `wrangler.jsonc`:
-
-```jsonc
-"routes": [{ "pattern": "write.stevehoang.com", "custom_domain": true }]
-```
+`wrangler.jsonc` already claims `write.stevehoang.com` as a custom domain, which
+needs that zone on the same Cloudflare account. Drop the `routes` entry to
+publish to `https://write.<your-subdomain>.workers.dev` instead — but the blog's
+*Edit this post* button links to the custom name, so keep the two in step.
 
 ### Choose how the GitHub token is held
 
@@ -92,12 +105,18 @@ reaches the browser; the app just sends a password.
 
 ```bash
 npx wrangler secret put GITHUB_TOKEN     # fine-grained PAT, see below
-npx wrangler secret put WRITE_PASSWORD   # a password you type into Settings
+npx wrangler secret put WRITE_PASSWORD   # asked for when you publish
 ```
 
 Both are required together: with a token but no password, the Worker refuses to
 publish rather than leave an open write endpoint on the internet, and says so in
-the app.
+the app. The password is typed at the moment you publish and never stored, so
+writing and previewing need nothing at all.
+
+Paste the token at the prompt rather than piping it in — a trailing newline
+makes GitHub treat the request as anonymous, and a private repo answers that
+with a flat *not found*. If a post will not open, the app says whether the token
+was rejected outright or simply was never granted the repository.
 
 **Browser-side.** Deploy with no secrets at all and paste a fine-grained token
 into Settings; it is kept in that browser's local storage and talks to
@@ -122,13 +141,16 @@ them from `/api/config` at boot:
 | Var | Default |
 | --- | --- |
 | `BLOG_REPO` | `lotusk08/stevehoang.com` |
-| `BLOG_BRANCH` | `main` |
+| `BLOG_BRANCH` | `blog` — the branch the posts are on |
 | `POSTS_DIR` | `_posts` |
 | `DRAFTS_DIR` | `_drafts` |
 | `IMAGES_DIR` | `assets/img/post` |
+| `SITE_URL` | `https://stevehoang.com` — where published images are previewed from |
 
 The Worker will only ever write inside those three directories, and only to
-`BLOG_REPO` — a request cannot point it somewhere else.
+`BLOG_REPO` — a request cannot point it somewhere else. `/api/source`, which
+reads a post back out for editing, is limited to the same directories and sits
+behind the same password, since the blog repository is private.
 
 ## Notes
 
@@ -139,10 +161,14 @@ The Worker will only ever write inside those three directories, and only to
 - The interface is deliberately neutral — monochrome greys, hairline borders,
   one violet accent, icon-only toolbar — and rides on the system sans (SF on
   Apple devices, Inter where installed), so no web fonts are downloaded.
-- Front matter, settings and draft management share one drawer rather than a
-  sidebar, a top bar and two dialogs; only the publish confirmation is still a
-  modal. The drawer's Drafts tab is for searching and housekeeping — the rail
-  handles switching.
+- Front matter and settings share one pop-up rather than a sidebar, a top bar
+  and two dialogs; only publishing and opening a post are modals. Settings holds
+  what is yours to set — with a Worker publishing, there is no repository, token
+  or path to configure here.
+- Reading a published post back is the inverse of writing one, and is checked
+  against the real blog: every post is parsed, re-serialised and rendered with
+  kramdown, and 60 of 62 come out byte-identical. The two that differ have
+  unbalanced `*` in the source. `CLAUDE.md` lists what that exercise taught.
 - Publishing through the GitHub API bypasses the blog's local pre-commit hook,
   so images are converted to WebP here instead — which also keeps them eligible
   for the LQIP pass, whose regex only matches `.webp` under `assets/img`.

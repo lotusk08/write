@@ -4,7 +4,10 @@ import Placeholder from "@tiptap/extension-placeholder";
 import { TableKit } from "@tiptap/extension-table";
 import Typography from "@tiptap/extension-typography";
 import StarterKit from "@tiptap/starter-kit";
+import { BlockAttributes, FilepathCode } from "./extensions/blogFormat.ts";
 import { collapsibleExtensions } from "./extensions/collapsible.ts";
+import { Embed } from "./extensions/embed.ts";
+import { MathBlock, PreviewCodeBlock, RawBlock } from "./extensions/preview.ts";
 import { NoteQuote } from "./extensions/noteQuote.ts";
 import { LocalImage } from "./extensions/localImage.ts";
 
@@ -13,10 +16,19 @@ export const editorExtensions = [
   StarterKit.configure({
     link: { openOnClick: false, autolink: true, defaultProtocol: "https" },
     heading: { levels: [1, 2, 3, 4] },
-    codeBlock: { languageClassPrefix: "language-" },
+    // Replaced by PreviewCodeBlock, which draws mermaid and chart fences.
+    codeBlock: false,
+    // Replaced by FilepathCode, which adds the blog's `.filepath` variant.
+    code: false,
     // Replaced by NoteQuote, which adds the blog's callout styles.
     blockquote: false,
   }),
+  PreviewCodeBlock.configure({ languageClassPrefix: "language-" }),
+  MathBlock,
+  RawBlock,
+  Embed,
+  FilepathCode,
+  BlockAttributes,
   NoteQuote,
   TaskList,
   TaskItem.configure({ nested: true }),

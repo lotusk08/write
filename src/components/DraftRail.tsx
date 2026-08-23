@@ -1,138 +1,149 @@
-import type { CSSProperties } from "react";
+import { useEffect, useRef, useState, type CSSProperties } from "react";
 import type { Draft } from "../lib/db.ts";
 import { draftLabel } from "../lib/draft.ts";
-import { relativeTime } from "../lib/text.ts";
 import { Icon } from "./Icons.tsx";
 
 interface DraftRailProps {
   drafts: Draft[];
   currentId: string | null;
-  query: string;
-  onQuery: (value: string) => void;
   onSelect: (id: string) => void;
   onNew: () => void;
-  onDuplicate: (id: string) => void;
+  /** Renames the open draft — the only one whose title is on show. */
+  onRename: (title: string) => void;
   onDelete: (id: string) => void;
 }
 
 /**
- * Drafts live entirely on the rail. At rest it is a deck of sheets with only
- * the open draft named; hovering it — or focusing anything inside it — slides
- * out the full list with search and per-draft actions.
+ * Drafts live entirely on the rail: two decks of sheets with the open draft
+ * between them. That one sheet renames in place on a double-click and carries
+ * the delete button; the rest are one click away.
  */
 export function DraftRail({
   drafts,
   currentId,
-  query,
-  onQuery,
   onSelect,
   onNew,
-  onDuplicate,
+  onRename,
   onDelete,
 }: DraftRailProps) {
   const ordered = [...drafts].sort((a, b) => a.createdAt - b.createdAt);
-  const needle = query.trim().toLowerCase();
-  const listed = needle
-    ? drafts.filter((draft) =>
-        `${draftLabel(draft)} ${draft.meta.tags.join(" ")} ${draft.meta.categories.join(" ")}`
-          .toLowerCase()
-          .includes(needle),
-      )
-    : drafts;
+  // Non-null only while the open title is being edited, so the tab can swap
+  // its label for a field without a second flag.
+  const [editing, setEditing] = useState<string | null>(null);
+  const field = useRef<HTMLInputElement>(null);
+  const renaming = editing !== null;
+
+  // Switching drafts abandons a rename rather than carrying it across.
+  useEffect(() => setEditing(null), [currentId]);
+
+  // Keyed off the flag, not the text: selecting on every keystroke would eat
+  // each character as it was typed.
+  useEffect(() => {
+    if (renaming) {
+      field.current?.select();
+    }
+  }, [renaming]);
+
+  const commit = () => {
+    if (editing !== null) {
+      onRename(editing.trim());
+      setEditing(null);
+    }
+  };
+
+  // The open draft splits the rail in two, and each deck fans on its own:
+  // reaching for the sheets above leaves the ones below stacked.
+  const open = ordered.findIndex((draft) => draft.id === currentId);
+  const openDraft = open === -1 ? null : ordered[open];
+  const label = openDraft ? draftLabel(openDraft) : "";
+
+  const deck = (sheets: Draft[]) => (
+    <div className="rail-deck">
+      {sheets.map((draft) => (
+        <button
+          key={draft.id}
+          type="button"
+          className="rail-tab is-layer"
+          // Earlier drafts paint over later ones, so each sheet tucks behind
+          // the one above and leaves only its edge showing.
+          style={{ "--z": ordered.length - ordered.indexOf(draft) } as CSSProperties}
+          title={draftLabel(draft)}
+          onClick={() => onSelect(draft.id)}
+        >
+          <Icon name="file" size={13} />
+          {draft.publishedPath ? (
+            <span className="dot" title={`Published to ${draft.publishedPath}`} />
+          ) : null}
+        </button>
+      ))}
+    </div>
+  );
 
   return (
     <nav className="rail" aria-label="Drafts">
-      <button type="button" className="btn icon ghost" title="New draft — ⌘⇧N" aria-label="New draft" onClick={onNew}>
+      <button
+        type="button"
+        className="btn icon ghost"
+        title="New draft — ⌘⇧N"
+        aria-label="New draft"
+        onClick={onNew}
+      >
         <Icon name="plus" />
       </button>
 
       <div className="rail-tabs">
-        {ordered.map((draft, index) => {
-          const open = draft.id === currentId;
-          return (
+        {deck(open === -1 ? ordered : ordered.slice(0, open))}
+
+        {openDraft ? (
+          <div className="rail-tab is-open" aria-current="true">
+            <Icon name="file" size={13} />
+            {editing === null ? (
+              <span
+                className="rail-tab-label"
+                title={`${label} — double-click to rename`}
+                onDoubleClick={() => setEditing(label)}
+              >
+                {label}
+              </span>
+            ) : (
+              <input
+                ref={field}
+                className="rail-tab-label rail-tab-field"
+                value={editing}
+                // Sizes the field along its vertical run, so it grows with the
+                // name the way the label it replaced did.
+                size={Math.max(8, editing.length + 1)}
+                aria-label="Draft title"
+                autoFocus
+                onChange={(event) => setEditing(event.target.value)}
+                onBlur={commit}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter") {
+                    commit();
+                  } else if (event.key === "Escape") {
+                    // Kept off the document, where Escape closes the menu.
+                    event.stopPropagation();
+                    setEditing(null);
+                  }
+                }}
+              />
+            )}
+            {openDraft.publishedPath ? (
+              <span className="dot" title={`Published to ${openDraft.publishedPath}`} />
+            ) : null}
             <button
-              key={draft.id}
               type="button"
-              className={open ? "rail-tab is-open" : "rail-tab is-layer"}
-              // Earlier drafts paint over later ones, so each sheet tucks
-              // behind the one above and leaves only its edge showing.
-              style={{ "--z": ordered.length - index } as CSSProperties}
-              aria-current={open}
-              title={draftLabel(draft)}
-              onClick={() => onSelect(draft.id)}
+              className="rail-tab-delete"
+              title="Delete draft"
+              aria-label={`Delete ${label}`}
+              onClick={() => onDelete(openDraft.id)}
             >
-              <Icon name="file" size={13} />
-              {open ? <span className="rail-tab-label">{draftLabel(draft)}</span> : null}
-              {draft.publishedPath ? (
-                <span className="dot" title={`Published to ${draft.publishedPath}`} />
-              ) : null}
+              <Icon name="trash" size={13} />
             </button>
-          );
-        })}
-      </div>
+          </div>
+        ) : null}
 
-      <div className="rail-panel">
-        <header className="rail-panel-head">
-          <h2>
-            Drafts <span className="count">{drafts.length}</span>
-          </h2>
-          <button type="button" className="btn icon ghost" title="New draft" aria-label="New draft" onClick={onNew}>
-            <Icon name="plus" />
-          </button>
-        </header>
-
-        <input
-          className="input"
-          type="search"
-          placeholder="Search drafts"
-          value={query}
-          onChange={(event) => onQuery(event.target.value)}
-        />
-
-        <div className="rail-panel-list">
-          {listed.length === 0 ? (
-            <p className="empty">No drafts match.</p>
-          ) : (
-            listed.map((draft) => (
-              <div key={draft.id} className="draft-row">
-                <button
-                  type="button"
-                  className="draft-item"
-                  aria-current={draft.id === currentId}
-                  onClick={() => onSelect(draft.id)}
-                >
-                  <span className="draft-item-title">{draftLabel(draft)}</span>
-                  <span className="draft-item-meta">
-                    {draft.publishedPath ? (
-                      <span className="dot" title={`Published to ${draft.publishedPath}`} />
-                    ) : null}
-                    {relativeTime(draft.updatedAt)}
-                  </span>
-                </button>
-                <div className="draft-row-actions">
-                  <button
-                    type="button"
-                    className="tool"
-                    title="Duplicate"
-                    aria-label={`Duplicate ${draftLabel(draft)}`}
-                    onClick={() => onDuplicate(draft.id)}
-                  >
-                    <Icon name="copy" size={14} />
-                  </button>
-                  <button
-                    type="button"
-                    className="tool danger"
-                    title="Delete"
-                    aria-label={`Delete ${draftLabel(draft)}`}
-                    onClick={() => onDelete(draft.id)}
-                  >
-                    <Icon name="trash" size={14} />
-                  </button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
+        {deck(open === -1 ? [] : ordered.slice(open + 1))}
       </div>
     </nav>
   );

@@ -192,131 +192,6 @@ textarea {
   justify-content: center;
 }
 
-/* ------------------------------------------------------------ draft list */
-.rail-panel {
-  position: absolute;
-  z-index: 26;
-  top: 8px;
-  left: calc(100% + 6px);
-  display: flex;
-  width: 268px;
-  max-height: min(72vh, calc(100vh - 32px));
-  flex-direction: column;
-  gap: 8px;
-  padding: 10px 10px 6px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: var(--panel);
-  box-shadow: var(--shadow-pop);
-  opacity: 0;
-  pointer-events: none;
-  transform: translateX(-6px);
-  transition: opacity 140ms ease, transform 140ms ease;
-}
-
-/* Peek on hover — after a beat, so crossing the rail does not flash it open —
-   and a text field inside keeps it open while you type. */
-.rail:hover .rail-panel {
-  opacity: 1;
-  pointer-events: auto;
-  transform: none;
-  transition-delay: 160ms;
-}
-
-.rail:has(:focus-visible) .rail-panel {
-  opacity: 1;
-  pointer-events: auto;
-  transform: none;
-}
-
-.rail-panel-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.rail-panel-head h2 {
-  margin: 0 0 0 4px;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.rail-panel-list {
-  min-height: 0;
-  margin: 0 -4px;
-  overflow-y: auto;
-}
-
-.draft-row {
-  position: relative;
-}
-
-.draft-row + .draft-row {
-  margin-top: 1px;
-}
-
-.draft-item {
-  display: flex;
-  width: 100%;
-  flex-direction: column;
-  gap: 2px;
-  padding: 8px 62px 8px 9px;
-  border: none;
-  border-radius: var(--radius);
-  background: none;
-  cursor: pointer;
-  text-align: left;
-}
-
-.draft-item:hover,
-.draft-item[aria-current="true"] {
-  background: var(--hover);
-}
-
-.draft-item-title {
-  overflow: hidden;
-  font-size: 13px;
-  font-weight: 500;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.draft-item-meta {
-  display: flex;
-  gap: 6px;
-  align-items: center;
-  color: var(--faint);
-  font-size: 11.5px;
-}
-
-.dot {
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: var(--accent);
-}
-
-/* Row actions sit on the row itself rather than pushing the list around. */
-.draft-row-actions {
-  position: absolute;
-  top: 50%;
-  right: 5px;
-  display: flex;
-  gap: 1px;
-  opacity: 0;
-  transform: translateY(-50%);
-  transition: opacity 120ms ease;
-}
-
-.draft-row:hover .draft-row-actions,
-.draft-row:focus-within .draft-row-actions {
-  opacity: 1;
-}
-
-.tool.danger:hover {
-  color: var(--danger);
-}
-
 /* ------------------------------------------------------- draft tab rail */
 .rail {
   position: relative;
@@ -327,7 +202,6 @@ textarea {
   align-items: center;
   gap: 8px;
   padding: 12px 0 10px;
-  border-right: 1px solid var(--border);
 }
 
 .rail-tabs {
@@ -361,13 +235,15 @@ textarea {
     background 130ms ease, color 130ms ease;
 }
 
-/* The draft being edited sits on top of the deck, and is the only one that
-   spells out its title. */
+/* The draft being edited sits on top of the deck. It is the only one that
+   spells out its title — and, being the open one, nothing to click. */
 .rail-tab.is-open {
   z-index: 900;
+  padding-bottom: 6px;
   margin: 7px 0;
   color: var(--text);
   box-shadow: var(--shadow-card);
+  cursor: default;
 }
 
 /* The rest are sheets in that deck: at rest each tucks under the one above it
@@ -380,21 +256,29 @@ textarea {
   margin-top: -16px;
 }
 
-/* Reaching for the rail fans the deck open, so every sheet is a full target
-   rather than a 10px sliver. */
-.rail-tabs:hover .rail-tab.is-layer {
+/* The sheets above the open draft and the sheets below it are separate decks,
+   so each one fans on its own — and the open tab, sitting between them, fans
+   neither. The trigger is the deck rather than its sheets: the gaps that open
+   up between them would otherwise collapse the fan as the pointer crosses. */
+.rail-deck {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Reaching for a deck fans it open, so every sheet is a full target rather
+   than a 10px sliver. Keyboard travel does it too — but `:focus-visible`, so
+   the deck restacks after a mouse click instead of staying open. */
+.rail-deck:hover .rail-tab.is-layer,
+.rail-deck:has(:focus-visible) .rail-tab.is-layer {
   margin-top: 3px;
 }
 
-/* Keyboard focus fans it too — but `:focus-visible`, so the deck restacks
-   after a mouse click instead of staying open. Kept in its own rule so older
-   parsers that drop `:has()` still get the hover behaviour. */
-.rail-tabs:has(:focus-visible) .rail-tab.is-layer {
-  margin-top: 3px;
-}
-
-.rail-tabs .rail-tab:first-child,
-.rail-tabs .rail-tab.is-open + .rail-tab.is-layer {
+/* The top sheet of a deck holds its place, so the fan opens downward from
+   where the deck already sits instead of nudging the whole rail. */
+.rail-deck .rail-tab:first-child,
+.rail-deck:hover .rail-tab:first-child,
+.rail-deck:has(:focus-visible) .rail-tab:first-child {
   margin-top: 0;
 }
 
@@ -403,7 +287,13 @@ textarea {
   border-color: var(--border-strong);
   background: var(--hover);
   color: var(--text);
-  transform: translateX(3px);
+}
+
+.dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--accent);
 }
 
 .rail-tab.is-layer .dot {
@@ -422,6 +312,46 @@ textarea {
   writing-mode: vertical-rl;
 }
 
+/* Double-clicking the title swaps it for this, so the name is edited where it
+   is read — down the tab, same type, same place. */
+.rail-tab-field {
+  width: 15px;
+  padding: 2px 0;
+  border: none;
+  border-radius: 4px;
+  background: var(--hover);
+  outline: 2px solid var(--ring);
+  text-overflow: clip;
+}
+
+/* Out of sight until the tab is reached for — but it keeps its place, so the
+   tab does not change length as it comes and goes. */
+.rail-tab-delete {
+  display: flex;
+  padding: 3px;
+  border: none;
+  border-radius: 5px;
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+}
+
+/* Pointing at the tab, the hover a tap leaves behind on touch, or a keyboard
+   landing on the button itself. */
+.rail-tab.is-open:hover .rail-tab-delete,
+.rail-tab-delete:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.rail-tab-delete:hover {
+  background: var(--hover);
+  color: var(--danger);
+}
+
 /* --------------------------------------------------- editor frame dock */
 .card-dock {
   position: sticky;
@@ -433,6 +363,20 @@ textarea {
   border-top: 1px solid var(--border);
   border-radius: 0 0 var(--radius-lg) var(--radius-lg);
   background: var(--panel);
+}
+
+/* Whatever sits on the left, the word count and the menu stay on the right. */
+.card-dock .source-note {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-dock .mode-toggle {
+  margin-left: auto;
+  flex-shrink: 0;
 }
 
 .card-dock .status {
@@ -542,7 +486,8 @@ textarea {
 
 .btn:focus-visible,
 .tool:focus-visible,
-.draft-item:focus-visible,
+.rail-tab:focus-visible,
+.rail-tab-delete:focus-visible,
 .menu button:focus-visible {
   box-shadow: 0 0 0 3px var(--ring);
   outline: 1px solid var(--accent);
@@ -777,12 +722,23 @@ textarea {
   align-items: flex-start;
 }
 
+/* The box sits in a box one line tall, so it centres on the first line of its
+   label at any font size rather than by a hand-picked nudge. */
 .ProseMirror ul[data-type="taskList"] li > label {
-  margin-top: 0.35em;
+  display: flex;
+  height: 1lh;
+  align-items: center;
+  margin-top: 0.1em;
 }
 
 .ProseMirror ul[data-type="taskList"] input {
+  width: 15px;
+  height: 15px;
+  /* Checkboxes ship with margins of their own, which would knock the box out
+     of line with the text again. */
+  margin: 0;
   accent-color: var(--accent);
+  cursor: pointer;
 }
 
 .ProseMirror blockquote {
@@ -825,6 +781,36 @@ textarea {
 [data-note="danger"] {
   --note-color: #da3633;
   --note-bg: rgb(218 54 51 / 7%);
+}
+
+/* Not a callout: the blog centres an author attribution and drops the rule. */
+.ProseMirror blockquote[data-note="author"] {
+  padding: 0.75em 2em;
+  border: none;
+  background: none;
+  color: var(--muted);
+  font-size: 1.05em;
+  text-align: center;
+}
+
+/* Inline code the blog renders as a path rather than as a code span. */
+.ProseMirror code.filepath {
+  border: none;
+  background: none;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+/* `{: .d-flex .c-center }` — the blog lays these out as a centred row. */
+.ProseMirror [data-block-ial*="c-center"] {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+}
+
+.ProseMirror img[data-block-ial*="c-center"] {
+  display: block;
+  margin-inline: auto;
 }
 
 .swatch-label {
@@ -876,6 +862,126 @@ textarea {
   border: none;
   border-top: 1px solid var(--border);
   margin: 1.8em 0;
+}
+
+/* The post as plain Markdown, in the same column the page view uses. */
+.source-editor {
+  display: block;
+  width: 100%;
+  min-height: 60vh;
+  padding: 0;
+  border: none;
+  background: none;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13.5px;
+  line-height: 1.7;
+  outline: none;
+  resize: none;
+  tab-size: 2;
+  white-space: pre-wrap;
+}
+
+/* One button standing in for what used to be a menu of three. */
+.btn.theme-toggle {
+  justify-content: flex-start;
+  gap: 8px;
+}
+
+/* An embedded player, standing in for the Liquid include the blog uses. */
+.embed-block {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+}
+
+.embed-block iframe {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  aspect-ratio: 16 / 9;
+}
+
+.embed-card {
+  display: block;
+  width: 100%;
+  padding: 22px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--sunken);
+  color: var(--muted);
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  text-align: center;
+}
+
+.embed-note {
+  color: var(--faint);
+  font-family: var(--font-mono);
+  font-size: 0.72em;
+}
+
+.ProseMirror .embed-block.ProseMirror-selectednode iframe,
+.ProseMirror .embed-block.ProseMirror-selectednode .embed-card {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--ring);
+}
+
+/* ------------------------------------------------------ rendered blocks */
+/* A mermaid diagram, a chart or an equation, drawn above the source that
+   makes it. Blocks with nothing to draw keep the plain code-block look. */
+.code-block[data-preview="on"] pre,
+.math-block pre {
+  border-top-left-radius: 0;
+  border-top-right-radius: 0;
+  border-top-color: transparent;
+  margin-top: 0;
+}
+
+.block-preview {
+  display: none;
+}
+
+.code-block[data-preview="on"] .block-preview,
+.math-block[data-preview="on"] .block-preview {
+  display: block;
+  padding: 16px;
+  border: 1px solid var(--border);
+  border-bottom: none;
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: var(--panel);
+  text-align: center;
+  overflow-x: auto;
+}
+
+.block-preview svg {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Chart.js sizes its canvas from the box it is given, so it gets one. */
+.chart-frame {
+  position: relative;
+  height: 300px;
+}
+
+.block-preview[data-state="error"] {
+  color: var(--danger);
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  text-align: left;
+  white-space: pre-wrap;
+}
+
+/* The equation is the point; its TeX is reference, so it sits quieter. */
+.math-block pre {
+  font-size: 0.78em;
+  opacity: 0.75;
+}
+
+.math-block[data-preview="off"] pre {
+  opacity: 1;
 }
 
 .ProseMirror a {
@@ -986,6 +1092,49 @@ textarea {
 /* --------------------------------------------------------------- images */
 .editor-image {
   margin: 1.4em 0;
+  text-align: center;
+}
+
+/* Images written on adjacent lines are one row on the blog, so they sit in a
+   row here too rather than stacking. Rows run from two to four photos, so they
+   are matched on height and left to flow — no count needed, and it survives a
+   photo being added or taken out. The width beats the `.normal` class those
+   images usually carry, which the blog's own flex row overrides in the same
+   way. */
+.ProseMirror .editor-image[data-join],
+.ProseMirror .editor-image:has(+ .editor-image[data-join]) {
+  display: inline-block;
+  width: auto !important;
+  margin-block: 0.9em;
+  vertical-align: top;
+}
+
+.ProseMirror .editor-image[data-join] img,
+.ProseMirror .editor-image:has(+ .editor-image[data-join]) img {
+  width: auto;
+  max-height: 210px;
+}
+
+.ProseMirror .editor-image.is-shadowed img {
+  box-shadow: var(--shadow-pop);
+}
+
+.ProseMirror .editor-image.is-rounded img {
+  border-radius: var(--radius-lg);
+}
+
+/* The site serves one image per colour scheme; the editor shows the one that
+   matches, so a pair does not read as a duplicate. */
+:root[data-theme="dark"] .ProseMirror .editor-image[data-scheme="light"],
+:root:not([data-theme="dark"]) .ProseMirror .editor-image[data-scheme="dark"] {
+  display: none;
+}
+
+/* A line written under an image is its caption on the blog. */
+.ProseMirror p[data-join] {
+  margin-top: -0.9em;
+  color: var(--muted);
+  font-size: 0.86em;
   text-align: center;
 }
 
@@ -1224,21 +1373,6 @@ textarea {
   opacity: 0.5;
 }
 
-.count {
-  min-width: 17px;
-  padding: 0 4px;
-  border-radius: 999px;
-  margin-left: 6px;
-  background: var(--hover);
-  color: var(--faint);
-  font-size: 10.5px;
-  font-variant-numeric: tabular-nums;
-}
-
-.rail-panel-head .count {
-  margin-left: 4px;
-}
-
 .publish-target {
   margin-top: -2px;
   text-align: center;
@@ -1413,10 +1547,6 @@ textarea {
 @media (width <= 860px) {
   .rail {
     width: 38px;
-  }
-
-  .rail-panel {
-    width: min(268px, calc(100vw - 60px));
   }
 
   .editor-page {

@@ -82,6 +82,29 @@ export async function listDirectory(
   }
 }
 
+/** The login a token authenticates as, or null when GitHub rejects it. */
+export async function tokenLogin(token: string): Promise<string | null> {
+  try {
+    const user = await gh<{ login: string }>(token, "/user");
+    return user.login ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** False when the branch is missing; throws if the repo cannot be reached. */
+export async function branchExists(token: string, repo: string, branch: string): Promise<boolean> {
+  try {
+    await gh(token, `/repos/${repo}/branches/${encodeRef(branch)}`);
+    return true;
+  } catch (error) {
+    if (error instanceof GitHubError && error.status === 404) {
+      return false;
+    }
+    throw error;
+  }
+}
+
 export async function readTextFile(
   token: string,
   repo: string,

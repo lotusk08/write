@@ -1,4 +1,12 @@
-import { commitFiles, GitHubError, listDirectory } from "../shared/github.ts";
+import {
+  branchExists,
+  commitFiles,
+  getDefaultBranch,
+  GitHubError,
+  listDirectory,
+  readTextFile,
+  tokenLogin,
+} from "../shared/github.ts";
 import type { AppConfig, PublishFile, PublishRequest, PublishResult } from "../shared/types.ts";
 
 export interface Env {
@@ -9,6 +17,8 @@ export interface Env {
   WRITE_PASSWORD?: string;
   BLOG_REPO?: string;
   BLOG_BRANCH?: string;
+  /** Public site URL, used to preview images already published. */
+  SITE_URL?: string;
   POSTS_DIR?: string;
   DRAFTS_DIR?: string;
   IMAGES_DIR?: string;
@@ -16,6 +26,15 @@ export interface Env {
 
 /** 20 MB of base64 across a single commit — comfortably under the API limits. */
 const MAX_REQUEST_BYTES = 20 * 1024 * 1024;
+
+/**
+ * Secrets are often piped in, and a trailing newline in the header makes
+ * GitHub treat the request as anonymous — which a private repo answers with a
+ * flat "not found".
+ */
+function githubToken(env: Env): string {
+  return (env.GITHUB_TOKEN ?? "").trim();
+}
 
 function dirs(env: Env) {
   return {
@@ -33,6 +52,7 @@ function appConfig(env: Env): AppConfig {
     authRequired: hasToken && hasPassword,
     repo: env.BLOG_REPO || "",
     branch: env.BLOG_BRANCH || "main",
+    siteUrl: env.SITE_URL || "",
     ...dirs(env),
     ...(hasToken && !hasPassword
       ? {
@@ -157,7 +177,7 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
 
   try {
     const result: PublishResult = await commitFiles({
-      token: env.GITHUB_TOKEN!,
+      token: githubToken(env),
       repo: env.BLOG_REPO!,
       branch,
       baseBranch: env.BLOG_BRANCH || undefined,
@@ -185,11 +205,74 @@ async function handleList(request: Request, env: Env): Promise<Response> {
   const branch = env.BLOG_BRANCH || "main";
 
   try {
-    const entries = await listDirectory(env.GITHUB_TOKEN!, env.BLOG_REPO!, branch, dir);
+    const entries = await listDirectory(githubToken(env), env.BLOG_REPO!, branch, dir);
     return json({ dir, branch, entries });
   } catch (error) {
     const status = error instanceof GitHubError ? error.status : 500;
     return json({ error: error instanceof Error ? error.message : "Listing failed." }, status);
+  }
+}
+
+/**
+ * GitHub answers 404 both for a file that is not there and for a repository a
+ * token was never granted, which are very different things to fix. Only runs
+ * when a read has already failed, so the extra calls cost nothing in normal
+ * use.
+ */
+async function whyMissing(env: Env, branch: string, path: string): Promise<string> {
+  const repo = env.BLOG_REPO!;
+  const token = githubToken(env);
+  try {
+    await getDefaultBranch(token, repo);
+  } catch {
+    // Whether GitHub knows who is asking separates a bad token from a good
+    // token that was never given this repository.
+    const login = await tokenLogin(token);
+    return login
+      ? `The token authenticates as @${login}, but that account cannot see ${repo}. Add the repository under the token's "Repository access" and give it Contents: Read & write — GitHub reports a private repo as "not found" for a token it was not granted. If @${login} is not the account that owns ${repo}, the token was made on the wrong account.`
+      : `GitHub rejected this deployment's token: it did not authenticate at all. Check GITHUB_TOKEN has not expired and was stored without stray spaces or line breaks (\`wrangler secret put GITHUB_TOKEN\`, pasted at the prompt rather than piped).`;
+  }
+  try {
+    if (!(await branchExists(token, repo, branch))) {
+      return `${repo} has no branch called "${branch}". Point BLOG_BRANCH at the branch the posts are on.`;
+    }
+  } catch {
+    // The branch check is only here to explain things; ignore its failures.
+  }
+  return `No such file on ${repo}@${branch}: ${path}`;
+}
+
+/**
+ * Reads one post back out of the repo so it can be edited here. Behind the
+ * same password as publishing: the blog repo is private, and this hands out
+ * its contents.
+ */
+async function handleSource(request: Request, env: Env): Promise<Response> {
+  const denied = authorize(request, env);
+  if (denied) {
+    return denied;
+  }
+
+  const url = new URL(request.url);
+  const path = (url.searchParams.get("path") ?? "").replace(/^\/+/, "");
+  const allowed = Object.values(dirs(env)).map((dir) => `${dir.replace(/\/+$/, "")}/`);
+  if (path.includes("..") || !allowed.some((dir) => path.startsWith(dir))) {
+    return json({ error: `Path outside the allowed directories (${allowed.join(", ")}): ${path}` }, 400);
+  }
+  if (!/\.(md|markdown)$/i.test(path)) {
+    return json({ error: "Only Markdown files can be opened." }, 400);
+  }
+
+  const branch = env.BLOG_BRANCH || "main";
+  try {
+    const markdown = await readTextFile(githubToken(env), env.BLOG_REPO!, branch, path);
+    if (markdown === null) {
+      return json({ error: await whyMissing(env, branch, path) }, 404);
+    }
+    return json({ path, branch, markdown });
+  } catch (error) {
+    const status = error instanceof GitHubError ? error.status : 500;
+    return json({ error: error instanceof Error ? error.message : "Read failed." }, status);
   }
 }
 
@@ -204,6 +287,11 @@ export default {
       return request.method === "POST"
         ? handlePublish(request, env)
         : json({ error: "Use POST." }, 405);
+    }
+    if (url.pathname === "/api/source") {
+      return request.method === "GET"
+        ? handleSource(request, env)
+        : json({ error: "Use GET." }, 405);
     }
     if (url.pathname === "/api/posts") {
       return request.method === "GET"

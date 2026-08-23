@@ -1,0 +1,139 @@
+import { Extension } from "@tiptap/core";
+import Code from "@tiptap/extension-code";
+import { NodeSelection } from "@tiptap/pm/state";
+
+declare module "@tiptap/core" {
+  interface Commands<ReturnType> {
+    blockAttributes: {
+      /** Sets the Kramdown attribute list on the block under the cursor. */
+      setBlockAttributes: (value: string | null) => ReturnType;
+      /** Sets it, or clears it when the block already carries that value. */
+      toggleBlockAttributes: (value: string) => ReturnType;
+    };
+  }
+}
+
+/** The blog's centred image row, the one block attribute worth a button. */
+export const CENTER_ROW = "{: .d-flex .c-center }";
+
+/**
+ * Blocks that can carry a Kramdown attribute list of their own — the
+ * `{: .d-flex .c-center }`, `{: file='…' }` and `{: data-toc-skip='' }` lines
+ * the blog's posts are written with. Held verbatim so a post survives a trip
+ * through the editor unchanged, whether or not this app understands the
+ * classes inside.
+ */
+const BLOCKS = [
+  "paragraph",
+  "heading",
+  "image",
+  "blockquote",
+  "codeBlock",
+  "bulletList",
+  "orderedList",
+  "taskList",
+  "table",
+  "mathBlock",
+  "rawBlock",
+  "embed",
+];
+
+export const BlockAttributes = Extension.create({
+  name: "blockAttributes",
+
+  addGlobalAttributes() {
+    return [
+      {
+        // Markdown carries column alignment in the divider row.
+        types: ["tableHeader", "tableCell"],
+        attributes: {
+          align: {
+            default: null,
+            parseHTML: (element) => element.style.textAlign || null,
+            renderHTML: (attributes) =>
+              attributes.align ? { style: `text-align: ${attributes.align as string}` } : {},
+          },
+        },
+      },
+      {
+        types: BLOCKS,
+        attributes: {
+          blockIal: {
+            default: null,
+            parseHTML: (element) => element.getAttribute("data-block-ial"),
+            renderHTML: (attributes) =>
+              attributes.blockIal ? { "data-block-ial": attributes.blockIal as string } : {},
+          },
+          /**
+           * Set on a block that shared a paragraph with the one before it —
+           * an image and its caption, or a row of images. The blog styles
+           * those as one paragraph, so they are written back as one.
+           */
+          joinPrevious: {
+            default: false,
+            parseHTML: (element) => element.hasAttribute("data-join"),
+            renderHTML: (attributes) => (attributes.joinPrevious ? { "data-join": "" } : {}),
+          },
+        },
+      },
+    ];
+  },
+
+  addCommands() {
+    /** The nearest enclosing block that takes an attribute list. */
+    const target = (selection: NodeSelection | { $from: { depth: number } }) => {
+      if (selection instanceof NodeSelection && selection.node.type.spec.attrs?.blockIal) {
+        return selection.from;
+      }
+      const { $from } = selection as { $from: NodeSelection["$from"] };
+      for (let depth = $from.depth; depth > 0; depth -= 1) {
+        if ($from.node(depth).type.spec.attrs?.blockIal) {
+          return $from.before(depth);
+        }
+      }
+      return null;
+    };
+
+    return {
+      setBlockAttributes:
+        (value) =>
+        ({ state, tr, dispatch }) => {
+          const at = target(state.selection as NodeSelection);
+          if (at === null) {
+            return false;
+          }
+          dispatch?.(tr.setNodeAttribute(at, "blockIal", value));
+          return true;
+        },
+
+      toggleBlockAttributes:
+        (value) =>
+        ({ state, tr, dispatch }) => {
+          const at = target(state.selection as NodeSelection);
+          if (at === null) {
+            return false;
+          }
+          const current = state.doc.nodeAt(at)?.attrs.blockIal;
+          dispatch?.(tr.setNodeAttribute(at, "blockIal", current === value ? null : value));
+          return true;
+        },
+    };
+  },
+});
+
+/**
+ * Inline code with the blog's `{: .filepath}` variant, which it renders as a
+ * path rather than as a code span.
+ */
+export const FilepathCode = Code.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      filepath: {
+        default: false,
+        parseHTML: (element) => element.classList.contains("filepath"),
+        renderHTML: (attributes) => (attributes.filepath ? { class: "filepath" } : {}),
+      },
+    };
+  },
+});

@@ -1,7 +1,15 @@
 import type { AppConfig } from "../../../shared/types.ts";
 import { usesServerPublishing } from "../../lib/api.ts";
 import type { Settings } from "../../lib/settings.ts";
+import { Icon, type IconName } from "../Icons.tsx";
 import { Section } from "./Section.tsx";
+
+/** One button cycles these in order, rather than a menu of three. */
+const THEMES: { value: Settings["theme"]; label: string; icon: IconName }[] = [
+  { value: "system", label: "Follow system", icon: "auto" },
+  { value: "light", label: "Light", icon: "sun" },
+  { value: "dark", label: "Dark", icon: "moon" },
+];
 
 export interface SettingsPanelProps {
   settings: Settings;
@@ -12,70 +20,53 @@ export interface SettingsPanelProps {
 export function SettingsPanel({ settings, config, onChange }: SettingsPanelProps) {
   const serverMode = usesServerPublishing(config);
 
+  const theme = Math.max(0, THEMES.findIndex((option) => option.value === settings.theme));
+  const nextTheme = THEMES[(theme + 1) % THEMES.length];
+
   return (
     <>
-      <div className={serverMode ? "notice ok" : "notice"}>
-        {serverMode
-          ? `Publishing runs through this deployment's Cloudflare Worker, so the GitHub token never reaches your browser. Target: ${config?.repo} on ${config?.branch}.`
-          : "No worker token found, so this browser talks to GitHub directly with the token below."}
-      </div>
       {config?.warning ? <div className="notice warn">{config.warning}</div> : null}
 
-      <Section title="Blog">
-        {serverMode ? (
-          <div className="field">
-            <label htmlFor="set-password">Publish password</label>
-            <input
-              id="set-password"
-              className="input"
-              type="password"
-              autoComplete="current-password"
-              value={settings.writePassword}
-              onChange={(event) => onChange({ writePassword: event.target.value })}
-            />
-            <p className="hint">Matches the worker's WRITE_PASSWORD secret.</p>
-          </div>
-        ) : (
-          <>
-            <div className="row wide-first">
-              <div className="field">
-                <label htmlFor="set-repo">Repository</label>
-                <input
-                  id="set-repo"
-                  className="input"
-                  value={settings.repo}
-                  onChange={(event) => onChange({ repo: event.target.value })}
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="set-branch">Branch</label>
-                <input
-                  id="set-branch"
-                  className="input"
-                  value={settings.branch}
-                  onChange={(event) => onChange({ branch: event.target.value })}
-                />
-              </div>
+      {serverMode ? null : (
+        <Section title="Blog">
+          <div className="row wide-first">
+            <div className="field">
+              <label htmlFor="set-repo">Repository</label>
+              <input
+                id="set-repo"
+                className="input"
+                value={settings.repo}
+                onChange={(event) => onChange({ repo: event.target.value })}
+              />
             </div>
             <div className="field">
-              <label htmlFor="set-token">GitHub token</label>
+              <label htmlFor="set-branch">Branch</label>
               <input
-                id="set-token"
+                id="set-branch"
                 className="input"
-                type="password"
-                autoComplete="off"
-                placeholder="github_pat_…"
-                value={settings.githubToken}
-                onChange={(event) => onChange({ githubToken: event.target.value })}
+                value={settings.branch}
+                onChange={(event) => onChange({ branch: event.target.value })}
               />
-              <p className="hint">
-                Fine-grained, Contents: Read &amp; write on the blog repo only. Kept in this browser's local
-                storage — deploy the worker with a GITHUB_TOKEN secret if you would rather it never be here.
-              </p>
             </div>
-          </>
-        )}
-      </Section>
+          </div>
+          <div className="field">
+            <label htmlFor="set-token">GitHub token</label>
+            <input
+              id="set-token"
+              className="input"
+              type="password"
+              autoComplete="off"
+              placeholder="github_pat_…"
+              value={settings.githubToken}
+              onChange={(event) => onChange({ githubToken: event.target.value })}
+            />
+            <p className="hint">
+              Only needed because this copy has no worker to publish for it — deploy one with a
+              GITHUB_TOKEN secret and this field disappears.
+            </p>
+          </div>
+        </Section>
+      )}
 
       <Section title="Post defaults">
         <div className="row">
@@ -103,6 +94,7 @@ export function SettingsPanel({ settings, config, onChange }: SettingsPanelProps
         <p className="hint">Offset in minutes; +0700 is 420.</p>
       </Section>
 
+      {serverMode ? null : (
       <Section title="Repository paths">
         <div className="row">
           <div className="field">
@@ -134,6 +126,7 @@ export function SettingsPanel({ settings, config, onChange }: SettingsPanelProps
           />
         </div>
       </Section>
+      )}
 
       <Section title="Editor">
         <ul className="switch-list">
@@ -165,17 +158,16 @@ export function SettingsPanel({ settings, config, onChange }: SettingsPanelProps
           </li>
         </ul>
         <div className="field">
-          <label htmlFor="set-theme">Theme</label>
-          <select
-            id="set-theme"
-            className="select"
-            value={settings.theme}
-            onChange={(event) => onChange({ theme: event.target.value as Settings["theme"] })}
+          <span className="field-label">Theme</span>
+          <button
+            type="button"
+            className="btn theme-toggle"
+            title={`${THEMES[theme].label} — click for ${nextTheme.label.toLowerCase()}`}
+            onClick={() => onChange({ theme: nextTheme.value })}
           >
-            <option value="system">Follow system</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
+            <Icon name={THEMES[theme].icon} />
+            {THEMES[theme].label}
+          </button>
         </div>
       </Section>
     </>

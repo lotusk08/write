@@ -16,6 +16,7 @@ export function newPostMeta(settings: Settings, title = ""): PostMeta {
     toc: true,
     math: false,
     mermaid: false,
+    chart: false,
     cover: null,
   };
 }

@@ -10,10 +10,16 @@
   "observability": {
     "enabled": true
   },
+  // The blog's edit button links here, so the Worker answers on this name.
+  // Needs stevehoang.com to be a zone on the same Cloudflare account.
+  "routes": [{ "pattern": "write.stevehoang.com", "custom_domain": true }],
   "vars": {
     // Public defaults. Override per-environment in the Cloudflare dashboard.
     "BLOG_REPO": "lotusk08/stevehoang.com",
-    "BLOG_BRANCH": "main",
+    // The branch the posts live on — the site's `_posts` are on `blog`.
+    "BLOG_BRANCH": "blog",
+    // Where the blog is served, so images already published can be previewed.
+    "SITE_URL": "https://stevehoang.com",
     "POSTS_DIR": "_posts",
     "DRAFTS_DIR": "_drafts",
     "IMAGES_DIR": "assets/img/post"

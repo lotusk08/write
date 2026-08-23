@@ -80,7 +80,8 @@ export const imageStore = {
 /** `local:<id>` srcs point at IndexedDB rather than the network. */
 export const LOCAL_PREFIX = "local:";
 
-export function isLocalSrc(src: string | null | undefined): src is string {
+/** Not a type predicate: narrowing its negative branch would land on `never`. */
+export function isLocalSrc(src: string | null | undefined): boolean {
   return typeof src === "string" && src.startsWith(LOCAL_PREFIX);
 }
 

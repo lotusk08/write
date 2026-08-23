@@ -27,6 +27,31 @@ export function usesServerPublishing(config: AppConfig | null): boolean {
   return config?.publishMode === "server";
 }
 
+export interface PostSource {
+  path: string;
+  branch: string;
+  markdown: string;
+}
+
+/**
+ * Fetches a published post's Markdown through the worker, which reads it with
+ * its own token — the blog repo is private, so this needs the same password
+ * publishing does.
+ */
+export async function fetchPostSource(path: string, password: string): Promise<PostSource> {
+  const response = await fetch(`/api/source?path=${encodeURIComponent(path)}`, {
+    headers: {
+      accept: "application/json",
+      ...(password ? { "x-write-password": password } : {}),
+    },
+  });
+  const payload = (await response.json().catch(() => ({}))) as Partial<PostSource> & { error?: string };
+  if (!response.ok || typeof payload.markdown !== "string") {
+    throw new Error(payload.error || `Could not open ${path} (${response.status}).`);
+  }
+  return payload as PostSource;
+}
+
 async function publishViaWorker(
   request: PublishRequest,
   password: string,
@@ -47,13 +72,18 @@ async function publishViaWorker(
   return payload as PublishResult;
 }
 
+/**
+ * `password` is typed into the publish dialog and used for this request only —
+ * it is never stored, so a browser left open cannot publish on its own.
+ */
 export async function publish(
   request: PublishRequest,
   config: AppConfig | null,
   settings: Settings,
+  password = "",
 ): Promise<PublishResult> {
   if (usesServerPublishing(config)) {
-    return publishViaWorker(request, settings.writePassword);
+    return publishViaWorker(request, password);
   }
 
   if (!settings.githubToken) {

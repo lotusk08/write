@@ -16,6 +16,8 @@ const LABELS: Record<NoteType, string> = {
   important: "Important",
   warning: "Warning",
   danger: "Danger",
+  // Not a callout: the blog's centred attribution under a pull quote.
+  author: "Author",
 };
 
 /** Quote styles that map onto the blog's `{: .note-* }` callouts. */

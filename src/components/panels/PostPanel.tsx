@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { PostMeta } from "../../../shared/types.ts";
 import { isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
+import { displaySrc } from "../../lib/site.ts";
 import { TokenInput } from "../TokenInput.tsx";
 import { Section } from "./Section.tsx";
 
@@ -11,11 +12,12 @@ export interface PostPanelProps {
   onSlugChange: (slug: string) => void;
 }
 
-const OPTIONS: { key: "toc" | "pin" | "math" | "mermaid"; label: string; hint: string }[] = [
+const OPTIONS: { key: "toc" | "pin" | "math" | "mermaid" | "chart"; label: string; hint: string }[] = [
   { key: "toc", label: "Table of contents", hint: "Sidebar outline on the post page" },
   { key: "pin", label: "Pin to home", hint: "Keeps the post at the top of the index" },
   { key: "math", label: "Math", hint: "Loads KaTeX for this post" },
   { key: "mermaid", label: "Diagrams", hint: "Loads Mermaid for this post" },
+  { key: "chart", label: "Charts", hint: "Loads Chart.js for this post" },
 ];
 
 export function PostPanel({ meta, slug, onChange, onSlugChange }: PostPanelProps) {
@@ -31,7 +33,7 @@ export function PostPanel({ meta, slug, onChange, onSlugChange }: PostPanelProps
     if (isLocalSrc(path)) {
       void resolveLocalSrc(path).then(setCoverUrl);
     } else {
-      setCoverUrl(path);
+      setCoverUrl(displaySrc(path));
     }
   }, [meta.cover?.path]);
 

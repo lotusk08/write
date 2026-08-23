@@ -5,17 +5,20 @@ import type { AppConfig, PostMeta, PublishResult } from "../shared/types.ts";
 import { DraftRail } from "./components/DraftRail.tsx";
 import { EditorPopover, type ExportFormat } from "./components/EditorPopover.tsx";
 import { Icon } from "./components/Icons.tsx";
+import { ImportDialog } from "./components/ImportDialog.tsx";
 import { PublishDialog } from "./components/PublishDialog.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
 import { editorExtensions } from "./editor/extensions.ts";
-import { fetchAppConfig } from "./lib/api.ts";
+import { fetchAppConfig, fetchPostSource } from "./lib/api.ts";
 import { draftStore, type Draft } from "./lib/db.ts";
-import { createDraft, draftLabel, sortDrafts } from "./lib/draft.ts";
+import { createDraft, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText } from "./lib/download.ts";
+import { markdownToDoc, parsePost, postPathFromLink, slugFromPath } from "./lib/import.ts";
 import { buildHtmlDocument } from "./lib/html.ts";
-import { docToPlainText } from "./lib/markdown.ts";
+import { docToMarkdown, docToPlainText } from "./lib/markdown.ts";
 import { draftSlug, markdownForExport, type PublishPlan } from "./lib/publish.ts";
 import { loadSettings, saveSettings, type Settings } from "./lib/settings.ts";
+import { setSiteUrl } from "./lib/site.ts";
 import { countWords, datePrefix, slugify } from "./lib/text.ts";
 
 type SaveState = "idle" | "saving" | "saved";
@@ -28,19 +31,27 @@ export default function App() {
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
-  const [query, setQuery] = useState("");
   const [saveState, setSaveState] = useState<SaveState>("idle");
   const [publishOpen, setPublishOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [toast, setToast] = useState<Toast>(null);
   const [exporting, setExporting] = useState(false);
   const [ready, setReady] = useState(false);
+  // Set by the blog's edit button (`?edit=…`), cleared once the post is open.
+  const [importPath, setImportPath] = useState<string | null>(null);
+  const [importBusy, setImportBusy] = useState(false);
+  const [importError, setImportError] = useState<string | null>(null);
+  // Typed once per tab, kept in memory only: never stored, gone on reload.
+  const [sessionPassword, setSessionPassword] = useState("");
+  // The post's Markdown while it is being edited as text; null in rich mode.
+  const [source, setSource] = useState<string | null>(null);
 
   const draftsRef = useRef<Draft[]>([]);
   const currentIdRef = useRef<string | null>(null);
   const pendingRef = useRef<Partial<Draft>>({});
   const timerRef = useRef<number | undefined>(undefined);
   const menuButton = useRef<HTMLButtonElement>(null);
+  const mainRegion = useRef<HTMLDivElement>(null);
 
   draftsRef.current = drafts;
   currentIdRef.current = currentId;
@@ -114,11 +125,13 @@ export default function App() {
     void (async () => {
       const [stored, remote] = await Promise.all([draftStore.all(), fetchAppConfig()]);
       setConfig(remote);
+      setSiteUrl(remote?.siteUrl || loadSettings().siteUrl);
       if (remote) {
         // The worker is authoritative about where posts go.
         updateSettings({
           repo: remote.repo || undefined,
           branch: remote.branch || undefined,
+          siteUrl: remote.siteUrl || undefined,
           postsDir: remote.postsDir,
           draftsDir: remote.draftsDir,
           imagesDir: remote.imagesDir,
@@ -139,6 +152,25 @@ export default function App() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // `?edit=_posts/…` — the blog's edit button pointing back here. The query is
+  // dropped straight away so a reload does not import the post twice.
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+    const requested = new URLSearchParams(window.location.search).get("edit");
+    if (!requested) {
+      return;
+    }
+    window.history.replaceState({}, "", window.location.pathname);
+    const path = postPathFromLink(requested);
+    if (path) {
+      setImportPath(path);
+    } else {
+      setToast({ message: `Not a post path: ${requested}`, kind: "error" });
+    }
+  }, [ready]);
 
   /* ----------------------------------------------------------------- theme */
 
@@ -172,35 +204,90 @@ export default function App() {
     window.setTimeout(() => document.querySelector<HTMLInputElement>(".title-input")?.focus(), 40);
   }, [flush, settings]);
 
+  /**
+   * Opens a published post in the editor: the other end of the blog's edit
+   * button. A draft already published to that path is reopened rather than
+   * duplicated, so local edits are never silently replaced by the live copy.
+   */
+  const importPost = useCallback(
+    async (path: string, password: string) => {
+      setImportBusy(true);
+      setImportError(null);
+      try {
+        const existing = draftsRef.current.find((draft) => draft.publishedPath === path);
+        if (existing) {
+          setImportPath(null);
+          setCurrentId(existing.id);
+          setToast({ message: `Opened your local draft of ${path}.`, kind: "info" });
+          return;
+        }
+
+        const source = await fetchPostSource(path, password);
+        const parsed = parsePost(source.markdown);
+        const now = Date.now();
+        const draft: Draft = {
+          id: crypto.randomUUID(),
+          title: parsed.meta.title ?? slugFromPath(path),
+          slug: slugFromPath(path),
+          doc: parsed.doc,
+          meta: { ...newPostMeta(settings), ...parsed.meta },
+          createdAt: now,
+          updatedAt: now,
+          publishedPath: path,
+        };
+        await draftStore.put(draft);
+        setDrafts((previous) => sortDrafts([draft, ...previous]));
+        setCurrentId(draft.id);
+        setSessionPassword(password);
+        setImportPath(null);
+        // Re-publishing should land back on the file it came from.
+        const drafts = settings.draftsDir.replace(/^\/+|\/+$/g, "");
+        updateSettings({ publishTarget: path.startsWith(`${drafts}/`) ? "drafts" : "posts" });
+        setToast({ message: `Opened ${path}.`, kind: "info" });
+      } catch (cause) {
+        setImportError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
+        setImportBusy(false);
+      }
+    },
+    [settings, updateSettings],
+  );
+
+  /**
+   * The same post as Markdown. Everything downstream reads the document, so
+   * the text is parsed back as it is typed rather than only on the way out.
+   */
+  const editSource = useCallback(async () => {
+    await flush();
+    const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
+    setSource(draft ? docToMarkdown(draft.doc) : "");
+  }, [flush]);
+
+  const editRich = useCallback(() => {
+    setSource((text) => {
+      if (text !== null) {
+        editor?.commands.setContent(markdownToDoc(text), { emitUpdate: false });
+      }
+      return null;
+    });
+  }, [editor]);
+
+  const changeSource = useCallback(
+    (text: string) => {
+      setSource(text);
+      queueSave({ doc: markdownToDoc(text) });
+    },
+    [queueSave],
+  );
+
   const selectDraft = useCallback(
     async (id: string) => {
       await flush();
+      // The text on screen belongs to the draft being left behind.
+      setSource(null);
       setCurrentId(id);
     },
     [flush],
-  );
-
-  const duplicateDraft = useCallback(
-    async (id: string) => {
-      const source = draftsRef.current.find((draft) => draft.id === id);
-      if (!source) {
-        return;
-      }
-      const copy: Draft = {
-        ...structuredClone(source),
-        id: crypto.randomUUID(),
-        title: `${draftLabel(source)} (copy)`,
-        meta: { ...source.meta, title: `${draftLabel(source)} (copy)` },
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        publishedPath: undefined,
-        publishedAt: undefined,
-      };
-      await draftStore.put(copy);
-      setDrafts((previous) => sortDrafts([copy, ...previous]));
-      setCurrentId(copy.id);
-    },
-    [],
   );
 
   const deleteDraft = useCallback(
@@ -352,17 +439,16 @@ export default function App() {
         <DraftRail
           drafts={drafts}
           currentId={currentId}
-          query={query}
-          onQuery={setQuery}
           onSelect={(id) => void selectDraft(id)}
           onNew={() => void newDraft()}
-          onDuplicate={(id) => void duplicateDraft(id)}
+          onRename={(title) => updateMeta({ title })}
           onDelete={(id) => void deleteDraft(id)}
         />
       )}
 
-      <div className="main">
-        {settings.focusMode ? (
+      <div className="main" ref={mainRegion}>
+        {/* The pop-up docks over this corner, so the button steps aside. */}
+        {settings.focusMode && !menuOpen ? (
           <button
             ref={menuButton}
             type="button"
@@ -371,7 +457,7 @@ export default function App() {
             aria-label="Open menu"
             onClick={() => setMenuOpen(true)}
           >
-            <Icon name="menu" />
+            <Icon name="command" />
           </button>
         ) : null}
 
@@ -400,7 +486,14 @@ export default function App() {
                   value={current.meta.description}
                   onChange={(event) => updateMeta({ description: event.target.value })}
                 />
-                {editor ? (
+                {source !== null ? (
+                  <textarea
+                    className="source-editor"
+                    spellCheck={false}
+                    value={source}
+                    onChange={(event) => changeSource(event.target.value)}
+                  />
+                ) : editor ? (
                   <>
                     <BubbleMenu editor={editor} className="bubble">
                       {(
@@ -441,10 +534,25 @@ export default function App() {
 
               {editor && !settings.focusMode ? (
                 <div className="card-dock">
-                  <Toolbar
-                    editor={editor}
-                    onToggleAllCollapsibles={(open) => editor.commands.setAllCollapsiblesOpen(open)}
-                  />
+                  {source === null ? (
+                    <Toolbar
+                      editor={editor}
+                      onToggleAllCollapsibles={(open) => editor.commands.setAllCollapsiblesOpen(open)}
+                    />
+                  ) : (
+                    <span className="hint source-note">
+                      Markdown source — exactly what gets published
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className={source === null ? "tool mode-toggle" : "tool mode-toggle is-active"}
+                    title={source === null ? "Edit the Markdown source" : "Back to the page view"}
+                    aria-pressed={source !== null}
+                    onClick={() => (source === null ? void editSource() : editRich())}
+                  >
+                    <span className="tool-text">MD</span>
+                  </button>
                   <span className="status">
                     {saveState === "saving" ? "Saving…" : `${words} words`}
                   </span>
@@ -458,7 +566,7 @@ export default function App() {
                     aria-expanded={menuOpen}
                     onClick={() => setMenuOpen((value) => !value)}
                   >
-                    <Icon name="menu" />
+                    <Icon name="command" />
                   </button>
                 </div>
               ) : null}
@@ -470,6 +578,7 @@ export default function App() {
       <EditorPopover
         open={menuOpen}
         anchorRef={menuButton}
+        regionRef={mainRegion}
         tab={settings.menuTab}
         onTab={(menuTab) => updateSettings({ menuTab })}
         onClose={() => setMenuOpen(false)}
@@ -486,12 +595,27 @@ export default function App() {
         escapeCloses={!publishOpen}
       />
 
+      {importPath ? (
+        <ImportDialog
+          path={importPath}
+          busy={importBusy}
+          error={importError}
+          onCancel={() => {
+            setImportPath(null);
+            setImportError(null);
+          }}
+          onUnlock={(password) => void importPost(importPath, password)}
+        />
+      ) : null}
+
       {publishOpen ? (
         <PublishDialog
           draft={current}
           settings={settings}
           config={config}
           onSettingsChange={updateSettings}
+          password={sessionPassword}
+          onPassword={setSessionPassword}
           onClose={() => setPublishOpen(false)}
           onPublished={onPublished}
           onOpenSettings={() => {

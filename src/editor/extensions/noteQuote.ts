@@ -1,7 +1,7 @@
 import Blockquote from "@tiptap/extension-blockquote";
 
 /** The callout classes the blog's stylesheet defines for blockquotes. */
-export const NOTE_TYPES = ["tip", "info", "important", "warning", "danger"] as const;
+export const NOTE_TYPES = ["tip", "info", "important", "warning", "danger", "author"] as const;
 
 export type NoteType = (typeof NOTE_TYPES)[number];
 

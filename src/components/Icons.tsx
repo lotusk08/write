@@ -125,6 +125,13 @@ const PATHS = {
       <path d="m6 9 6 6 6-6" />
     </>
   ),
+  /* Half lit: the theme follows whatever the system is doing. */
+  auto: (
+    <>
+      <circle cx="12" cy="12" r="8" />
+      <path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor" stroke="none" />
+    </>
+  ),
   sun: (
     <>
       <circle cx="12" cy="12" r="4" />
@@ -165,9 +172,21 @@ const PATHS = {
       <path d="M10 11v6M14 11v6" />
     </>
   ),
-  menu: (
+  /* The macOS command key: four loops on a closed square. */
+  command: (
     <>
-      <path d="M4 7h16M4 12h16M4 17h16" />
+      <path d="M9 9V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z" />
+    </>
+  ),
+  video: (
+    <>
+      <rect x="3" y="5" width="18" height="14" rx="2" />
+      <path d="M10 9.5v5l4.5-2.5z" />
+    </>
+  ),
+  center: (
+    <>
+      <path d="M4 6h16M7 12h10M4 18h16" />
     </>
   ),
   close: (

@@ -13,6 +13,8 @@ export interface PostMeta {
   toc: boolean;
   math: boolean;
   mermaid: boolean;
+  /** Chirpy's `chart:` key — loads Chart.js for this post. */
+  chart: boolean;
   /** Cover image, rendered as the `image:` front matter block. */
   cover: { path: string; alt: string } | null;
 }
@@ -49,6 +51,8 @@ export interface AppConfig {
   authRequired: boolean;
   repo: string;
   branch: string;
+  /** Where the blog is served, so published images can be previewed. */
+  siteUrl: string;
   postsDir: string;
   draftsDir: string;
   imagesDir: string;

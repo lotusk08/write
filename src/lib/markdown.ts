@@ -1,5 +1,6 @@
 import type { JSONContent } from "@tiptap/core";
 import type { PostMeta } from "../../shared/types.ts";
+import { embedLiquid } from "../editor/extensions/embed.ts";
 
 export interface SerializeOptions {
   /** Maps an editor image src (often `local:<id>`) to its final URL. */
@@ -9,7 +10,12 @@ export interface SerializeOptions {
 type Mark = { type: string; attrs?: Record<string, unknown> };
 
 function escapeText(text: string): string {
-  return text.replace(/([\\`*_[\]<>])/g, "\\$1");
+  // `[^note]` is a footnote reference; escaping its brackets would turn the
+  // reference into literal text on the blog.
+  return text
+    .split(/(\[\^[^\]\s]+\])/)
+    .map((part, index) => (index % 2 ? part : part.replace(/([\\`*_[\]<>])/g, "\\$1")))
+    .join("");
 }
 
 function applyMarks(text: string, marks: Mark[] | undefined): string {
@@ -17,14 +23,26 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
     return text;
   }
   // `code` wins: Markdown cannot nest emphasis inside a code span.
-  if (marks.some((mark) => mark.type === "code")) {
+  const code = marks.find((mark) => mark.type === "code");
+  if (code) {
     const fence = text.includes("`") ? "``" : "`";
     const padding = text.startsWith("`") || text.endsWith("`") ? " " : "";
-    return `${fence}${padding}${text}${padding}${fence}`;
+    const filepath = code.attrs?.filepath ? "{: .filepath}" : "";
+    const span = `${fence}${padding}${text}${padding}${fence}${filepath}`;
+    // Emphasis cannot nest inside a code span, but a link can wrap one.
+    const link = marks.find((mark) => mark.type === "link");
+    if (!link) {
+      return span;
+    }
+    const href = String(link.attrs?.href ?? "");
+    const title = link.attrs?.title ? ` "${String(link.attrs.title)}"` : "";
+    return `[${span}](${href}${title})`;
   }
 
   let out = text;
-  for (const mark of marks) {
+  // Marks are stored outermost first, and each one here wraps what came
+  // before, so they are applied inside out to nest the way they were written.
+  for (const mark of [...marks].reverse()) {
     switch (mark.type) {
       case "bold":
         out = `**${out}**`;
@@ -54,6 +72,34 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
   return out;
 }
 
+/** Puts `addition` on the line after `block`, hard breaks on either side of
+ * the seam included — those two trailing spaces belong to the line above. */
+function nextLine(block: string, addition: string): string {
+  const leadingBreak = /^[ \t]{2,}\n/.exec(addition);
+  if (leadingBreak) {
+    return block + addition;
+  }
+  return block.endsWith("\n") ? block + addition : `${block}\n${addition}`;
+}
+
+function withoutEdgeBreaks(
+  nodes: JSONContent[] | undefined,
+  keepLeading: boolean,
+  keepTrailing: boolean,
+): JSONContent[] | undefined {
+  if (!nodes?.length) {
+    return nodes;
+  }
+  const content = [...nodes];
+  while (!keepTrailing && content[content.length - 1]?.type === "hardBreak") {
+    content.pop();
+  }
+  while (!keepLeading && content[0]?.type === "hardBreak") {
+    content.shift();
+  }
+  return content;
+}
+
 function inline(nodes: JSONContent[] | undefined, options: SerializeOptions): string {
   if (!nodes?.length) {
     return "";
@@ -61,7 +107,12 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions): st
   return nodes
     .map((node) => {
       if (node.type === "text") {
-        return applyMarks(escapeText(node.text ?? ""), node.marks as Mark[] | undefined);
+        const marks = node.marks as Mark[] | undefined;
+        const raw = node.text ?? "";
+        // A code span is literal, so escaping it would write the backslashes
+        // into the code itself.
+        const code = marks?.some((mark) => mark.type === "code");
+        return applyMarks(code ? raw : escapeText(raw), marks);
       }
       if (node.type === "hardBreak") {
         return "  \n";
@@ -80,7 +131,9 @@ function image(node: JSONContent, options: SerializeOptions): string {
   const src = options.resolveImage ? options.resolveImage(rawSrc) : rawSrc;
   const alt = String(node.attrs?.alt ?? "").replace(/[[\]]/g, "");
   const title = node.attrs?.title ? ` "${String(node.attrs.title)}"` : "";
-  return `![${alt}](${src}${title})`;
+  // Kramdown attaches `{: … }` to the image on the same line.
+  const ial = node.attrs?.ial ? String(node.attrs.ial) : "";
+  return `![${alt}](${src}${title})${ial}`;
 }
 
 function indentContinuation(block: string, indent: string): string {
@@ -107,7 +160,8 @@ function listBlock(node: JSONContent, options: SerializeOptions, ordered: boolea
         if (position === 0) {
           return rendered;
         }
-        return `${text}${LIST_TYPES.has(child.type ?? "") ? "\n" : "\n\n"}${rendered}`;
+        const hugs = LIST_TYPES.has(child.type ?? "") || Boolean(child.attrs?.joinPrevious);
+        return `${text}${hugs ? "\n" : "\n\n"}${rendered}`;
       }, "");
       return marker + checkbox + indentContinuation(body, indent);
     })
@@ -130,7 +184,16 @@ function tableBlock(node: JSONContent, options: SerializeOptions): string {
   const width = Math.max(...rows.map((row) => row.length));
   const pad = (row: string[]) => `| ${Array.from({ length: width }, (_, i) => row[i] ?? "").join(" | ")} |`;
   const [head, ...body] = rows;
-  return [pad(head), `| ${Array.from({ length: width }, () => "---").join(" | ")} |`, ...body.map(pad)].join("\n");
+  // The divider carries each column's alignment, as the header cells hold it.
+  const heading = node.content?.[0]?.content ?? [];
+  const divider = Array.from({ length: width }, (_, i) => {
+    const align = heading[i]?.attrs?.align;
+    if (align === "center") {
+      return ":---:";
+    }
+    return align === "right" ? "---:" : align === "left" ? ":---" : "---";
+  });
+  return [pad(head), `| ${divider.join(" | ")} |`, ...body.map(pad)].join("\n");
 }
 
 function collapsibleBlock(node: JSONContent, options: SerializeOptions): string {
@@ -149,11 +212,17 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
   }
   const out: string[] = [];
 
-  for (const node of nodes) {
+  for (const [index, node] of nodes.entries()) {
+    const start = out.length;
     switch (node.type) {
       case "paragraph": {
-        const text = inline(node.content, options);
-        out.push(text);
+        // A break at the end of the paragraph is only real when something is
+        // written on the line under it.
+        // A break at either edge of the paragraph is only real when there is
+        // a line on that side of it to break from.
+        const after = Boolean(nodes[index + 1]?.attrs?.joinPrevious);
+        const before = Boolean(node.attrs?.joinPrevious);
+        out.push(inline(withoutEdgeBreaks(node.content, before, after), options));
         break;
       }
       case "heading": {
@@ -168,7 +237,8 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
           .map((line) => (line ? `> ${line}` : ">"))
           .join("\n");
         // Kramdown attaches the class to the block on the following line.
-        const note = node.attrs?.note ? `\n{: .note-${String(node.attrs.note)} }` : "";
+        const name = node.attrs?.note ? String(node.attrs.note) : "";
+        const note = name ? `\n{: ${name === "author" ? ".author" : `.note-${name}`} }` : "";
         out.push(quoted + note);
         break;
       }
@@ -185,6 +255,23 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         const language = String(node.attrs?.language ?? "");
         const code = (node.content ?? []).map((child) => child.text ?? "").join("");
         out.push(`\`\`\`${language}\n${code}\n\`\`\``);
+        break;
+      }
+      case "embed":
+        out.push(
+          embedLiquid(
+            String(node.attrs?.platform ?? "youtube"),
+            String(node.attrs?.id ?? ""),
+            String(node.attrs?.quote ?? "'"),
+          ),
+        );
+        break;
+      case "rawBlock":
+        out.push((node.content ?? []).map((child) => child.text ?? "").join(""));
+        break;
+      case "mathBlock": {
+        const tex = (node.content ?? []).map((child) => child.text ?? "").join("").trim();
+        out.push(`$$\n${tex}\n$$`);
         break;
       }
       case "horizontalRule":
@@ -209,6 +296,20 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
           out.push(...blocks(node.content, options));
         }
         break;
+    }
+
+    // An image and its caption, or a row of images, were one paragraph in the
+    // source: put them back on adjacent lines so the blog lays them out the
+    // way it always did.
+    if (node.attrs?.joinPrevious && out.length === start + 1 && start > 0) {
+      out[start - 1] = nextLine(out[start - 1], out.pop() ?? "");
+    }
+
+    // Kramdown reads `{: … }` on the line after a block as that block's
+    // attributes, so it rides along on the same entry.
+    const ial = node.attrs?.blockIal ? String(node.attrs.blockIal) : "";
+    if (ial && out.length) {
+      out[out.length - 1] = nextLine(out[out.length - 1], ial);
     }
   }
 
@@ -294,6 +395,7 @@ export function buildFrontMatter(meta: PostMeta): string {
     `toc: ${meta.toc}`,
     `math: ${meta.math}`,
     `mermaid: ${meta.mermaid}`,
+    `chart: ${meta.chart}`,
   );
   if (meta.cover?.path) {
     lines.push("image:", `  path: ${yamlString(meta.cover.path)}`);

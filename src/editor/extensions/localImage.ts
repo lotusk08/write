@@ -2,6 +2,7 @@ import Image from "@tiptap/extension-image";
 import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { NodeView } from "@tiptap/pm/view";
 import { LOCAL_PREFIX, isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
+import { displaySrc } from "../../lib/site.ts";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -26,6 +27,65 @@ function imageFilesFrom(list: FileList | DataTransferItemList | null | undefined
   return files;
 }
 
+/** Widths the blog's stylesheet defines, as fractions of the column. */
+const WIDTH_CLASSES: Record<string, string> = {
+  "w-25": "25%",
+  "w-50": "50%",
+  "w-75": "75%",
+  normal: "100%",
+};
+
+/**
+ * Splits a Kramdown attribute list into its classes and its key/value pairs.
+ * Quoted values are taken whole, so the base64 sitting inside `lqip="…"` can
+ * never be mistaken for a class or a width of its own.
+ */
+function parseIal(ial: string): { classes: string[]; attrs: Record<string, string> } {
+  const classes: string[] = [];
+  const attrs: Record<string, string> = {};
+  const token = /\.([\w-]+)|([\w-]+)=(["'])((?:(?!\3).)*)\3|([\w-]+)=(\S+)/g;
+  for (const match of ial.matchAll(token)) {
+    if (match[1]) {
+      classes.push(match[1]);
+    } else if (match[2]) {
+      attrs[match[2]] = match[4];
+    } else if (match[5]) {
+      attrs[match[5]] = match[6];
+    }
+  }
+  return { classes, attrs };
+}
+
+/**
+ * Reads a Kramdown attribute list the way the blog's stylesheet does, so an
+ * imported photo is the size and shape here that it is on the site. Width is a
+ * class there; `w`/`h` are the natural dimensions the blog's build writes, and
+ * are worth only an aspect ratio, which keeps the page from jumping as the
+ * photos arrive.
+ */
+function applyLayout(figure: HTMLElement, image: HTMLImageElement, ial: string): void {
+  const { classes, attrs } = parseIal(ial);
+  const fraction = classes.find((name) => name in WIDTH_CLASSES);
+  const width = Number(attrs.width ?? attrs.w);
+  const height = Number(attrs.height ?? attrs.h);
+
+  figure.style.width = fraction ? WIDTH_CLASSES[fraction] : "";
+  image.style.aspectRatio = width && height ? `${width} / ${height}` : "";
+  figure.style.float = classes.includes("left")
+    ? "left"
+    : classes.includes("right")
+      ? "right"
+      : "";
+  figure.classList.toggle("is-shadowed", classes.includes("shadow"));
+  figure.classList.toggle("is-rounded", classes.some((name) => name.startsWith("rounded")));
+  // The site serves one of these per theme; showing both would be a surprise.
+  figure.dataset.scheme = classes.includes("light")
+    ? "light"
+    : classes.includes("dark")
+      ? "dark"
+      : "";
+}
+
 /**
  * Images live in IndexedDB, not in the document: the node stores a
  * `local:<id>` src that is resolved to an object URL for display and to a real
@@ -36,6 +96,16 @@ export const LocalImage = Image.extend({
     return {
       ...this.parent?.(),
       title: { default: null },
+      /**
+       * The Kramdown attribute list an imported image was published with —
+       * `{: lqip="…" w="…" }`, which the blog's build writes and its lazy
+       * loading reads. Carried through untouched so re-publishing keeps it.
+       */
+      ial: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-ial"),
+        renderHTML: (attributes) => (attributes.ial ? { "data-ial": attributes.ial as string } : {}),
+      },
     };
   },
 
@@ -76,6 +146,10 @@ export const LocalImage = Image.extend({
 
       const paint = (attrs: Record<string, unknown>) => {
         const src = String(attrs.src ?? "");
+        // The blog lays images out from the attribute list they carry, so the
+        // editor reads the same one rather than guessing.
+        applyLayout(figure, img, String(attrs.ial ?? ""));
+        figure.toggleAttribute("data-join", Boolean(attrs.joinPrevious));
         img.alt = String(attrs.alt ?? "");
         caption.textContent = attrs.alt ? String(attrs.alt) : "Add alt text";
         caption.classList.toggle("is-empty", !attrs.alt);
@@ -85,7 +159,7 @@ export const LocalImage = Image.extend({
             figure.classList.toggle("is-missing", !url);
           });
         } else {
-          img.src = src;
+          img.src = displaySrc(src);
         }
       };
       paint(node.attrs);

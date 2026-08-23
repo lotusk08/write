@@ -45,9 +45,29 @@ export function draftSlug(draft: Draft): string {
 }
 
 /**
+ * File names the post already points at. Editing a published post means most
+ * of its images are already on the blog, and a new one must not be given a
+ * name one of them is using.
+ */
+function publishedNames(doc: JSONContent): Set<string> {
+  const names = new Set<string>();
+  for (const src of collectImageSrcs(doc).filter((candidate) => !isLocalSrc(candidate))) {
+    const file = (src.split("/").pop() ?? "").split(/[?#]/)[0];
+    const base = file.replace(/\.[A-Za-z0-9]+$/, "");
+    if (base) {
+      names.add(base);
+    }
+  }
+  return names;
+}
+
+/**
  * Names every local image after the post slug, matching the blog's flat
  * `assets/img/post/<slug>.webp` convention. The cover keeps the bare slug and
- * inline images are numbered in document order.
+ * inline images are numbered in document order — skipping any number the post
+ * is already using, so editing a post never overwrites the images it came in
+ * with. Images already on the blog are left alone entirely: they are not
+ * re-encoded, re-uploaded or renamed.
  */
 async function planImages(draft: Draft, slug: string): Promise<PlannedImage[]> {
   const planned: PlannedImage[] = [];
@@ -57,9 +77,15 @@ async function planImages(draft: Draft, slug: string): Promise<PlannedImage[]> {
     planned.push({ src: cover, baseName: slug, stored: await imageStore.get(localId(cover)) });
   }
 
-  const inline = collectImageSrcs(draft.doc).filter(isLocalSrc);
-  for (const [index, src] of inline.entries()) {
-    planned.push({ src, baseName: `${slug}-${index + 1}`, stored: await imageStore.get(localId(src)) });
+  const taken = publishedNames(draft.doc);
+  let next = 1;
+  for (const src of collectImageSrcs(draft.doc).filter(isLocalSrc)) {
+    while (taken.has(`${slug}-${next}`)) {
+      next += 1;
+    }
+    const baseName = `${slug}-${next}`;
+    taken.add(baseName);
+    planned.push({ src, baseName, stored: await imageStore.get(localId(src)) });
   }
 
   return planned;

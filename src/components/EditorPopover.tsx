@@ -9,8 +9,10 @@ export type ExportFormat = "markdown" | "docx" | "html" | "copy";
 
 interface EditorPopoverProps {
   open: boolean;
-  /** The menu button the pop-up hangs from. */
+  /** The menu button — excluded from the outside-click close. */
   anchorRef: RefObject<HTMLButtonElement | null>;
+  /** The writing surface the pop-up docks to the right of. */
+  regionRef: RefObject<HTMLElement | null>;
   tab: MenuTab;
   onTab: (tab: MenuTab) => void;
   onClose: () => void;
@@ -36,12 +38,13 @@ const EXPORTS: { id: ExportFormat; label: string }[] = [
 ];
 
 /**
- * Front matter, settings and the publish actions, in a pop-up anchored to the
- * menu button in the toolbar. Drafts are not here — they live on the rail.
+ * Front matter, settings and the publish actions, in a pop-up docked to the
+ * right of the writing surface. Drafts are not here — they live on the rail.
  */
 export function EditorPopover({
   open,
   anchorRef,
+  regionRef,
   tab,
   onTab,
   onClose,
@@ -53,11 +56,28 @@ export function EditorPopover({
   escapeCloses = true,
 }: EditorPopoverProps) {
   const panel = useRef<HTMLDivElement>(null);
-  const [anchor, setAnchor] = useState<DOMRect | null>(null);
+  const [frame, setFrame] = useState<DOMRect | null>(null);
 
+  // Measured from the editor region, not the button: the pop-up hangs off the
+  // region's right edge, so it holds still while the document scrolls under it
+  // and only has to be re-measured when that region changes size.
   useLayoutEffect(() => {
-    setAnchor(open ? (anchorRef.current?.getBoundingClientRect() ?? null) : null);
-  }, [open, anchorRef]);
+    const region = regionRef.current;
+    if (!open || !region) {
+      setFrame(null);
+      return;
+    }
+    const measure = () => setFrame(region.getBoundingClientRect());
+    measure();
+    // The observer catches the rail and focus mode; the window covers the rest.
+    const observer = new ResizeObserver(measure);
+    observer.observe(region);
+    window.addEventListener("resize", measure);
+    return () => {
+      observer.disconnect();
+      window.removeEventListener("resize", measure);
+    };
+  }, [open, regionRef]);
 
   useEffect(() => {
     if (!open) {
@@ -76,53 +96,35 @@ export function EditorPopover({
       }
       onClose();
     };
-    // The pop-up is placed once, so anything that moves the anchor closes it —
-    // the toolbar it hangs from is sticky, and settles as the document ends.
-    const onMove = () => onClose();
     document.addEventListener("keydown", onKey);
     document.addEventListener("mousedown", onDown);
-    window.addEventListener("resize", onMove);
-    window.addEventListener("scroll", onMove, true);
     return () => {
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("mousedown", onDown);
-      window.removeEventListener("resize", onMove);
-      window.removeEventListener("scroll", onMove, true);
     };
   }, [open, escapeCloses, onClose, anchorRef]);
 
-  if (!open || !anchor) {
+  if (!open || !frame) {
     return null;
   }
 
-  const publishRepo = settings.config?.repo || settings.settings.repo;
   const publishDir = (
     settings.settings.publishTarget === "drafts"
       ? settings.settings.draftsDir
       : settings.settings.postsDir
   ).replace(/^\/+|\/+$/g, "");
 
-  // Opens upward from the toolbar, and flips down when the anchor sits near
-  // the top of the window (focus mode's floating button).
-  const spaceAbove = anchor.top - 24;
-  const placement =
-    spaceAbove >= 320 || spaceAbove >= window.innerHeight - anchor.bottom - 24 ? "up" : "down";
-  const position =
-    placement === "up"
-      ? { bottom: window.innerHeight - anchor.top + 8, maxHeight: Math.max(240, spaceAbove) }
-      : {
-          top: anchor.bottom + 8,
-          maxHeight: Math.max(240, window.innerHeight - anchor.bottom - 24),
-        };
+  // Inset from the top-right corner of the writing surface, tall enough to run
+  // its length — past that the body takes the scroll.
+  const inset = 16;
+  const position = {
+    top: frame.top + inset,
+    right: window.innerWidth - frame.right + inset,
+    maxHeight: Math.max(240, frame.height - inset * 2),
+  };
 
   return createPortal(
-    <div
-      ref={panel}
-      className="popover"
-      role="dialog"
-      aria-label="Editor menu"
-      style={{ right: Math.max(12, window.innerWidth - anchor.right), ...position }}
-    >
+    <div ref={panel} className="popover" role="dialog" aria-label="Editor menu" style={position}>
       <header className="popover-head">
         <div className="popover-tabs" role="tablist">
           {TABS.map(({ id, label }) => (
@@ -169,7 +171,7 @@ export function EditorPopover({
           Publish to blog
         </button>
         <p className="hint publish-target">
-          {publishRepo} · <span className="mono">{publishDir}/</span>
+          <span className="mono">{publishDir}/</span>
         </p>
       </footer>
     </div>,
