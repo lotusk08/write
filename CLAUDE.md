@@ -26,7 +26,9 @@ its own npm lockfile.
   IndexedDB-backed images, `{% include embed/… %}` players, mermaid/chart/TeX
   previews, and the attribute lists the blog lays posts out with.
 - `src/lib/` holds storage, export and publishing logic. `markdown.ts` writes a
-  post; `import.ts` reads one back and is the inverse of it.
+  post; `import.ts` reads one back and is the inverse of it. `viewport.ts`
+  measures the part of the window a phone keyboard leaves on screen; the shell
+  is pinned to it and every pop-up is placed against it, not `innerHeight`.
 - `worker/index.ts` — `/api/config`, `/api/publish`, `/api/posts`,
   `/api/source`. It only ever writes inside the configured post/draft/image
   directories, and only to `BLOG_REPO`; `/api/source` reads from the same

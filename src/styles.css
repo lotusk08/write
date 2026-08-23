@@ -77,10 +77,18 @@ textarea {
 }
 
 /* ---------------------------------------------------------------- shell */
+
+/* Fixed, not merely full-height: `--app-top`/`--app-height` come from the
+   visual viewport (see `lib/viewport.ts`), and on a phone that is the window
+   minus the keyboard. Without them this is the window, as before. */
 .app {
+  position: fixed;
+  top: var(--app-top, 0);
+  left: 0;
   display: flex;
+  width: 100%;
+  height: var(--app-height, 100%);
   overflow: hidden;
-  height: 100%;
 }
 
 .main {
@@ -532,7 +540,29 @@ textarea {
   align-items: center;
   gap: 2px;
   overflow-x: auto;
+  /* The row is its own scroller: swiping it should not drag the page back. */
+  overscroll-behavior-x: contain;
   scrollbar-width: thin;
+}
+
+/* Too narrow for every tool, the row fades out on whichever side still has
+   some — the only edge a touch screen gets, having no scrollbar to draw. */
+.toolbar[data-more="end"] {
+  mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+}
+
+.toolbar[data-more="start"] {
+  mask-image: linear-gradient(to right, transparent, #000 28px);
+}
+
+.toolbar[data-more="both"] {
+  mask-image: linear-gradient(
+    to right,
+    transparent,
+    #000 28px,
+    #000 calc(100% - 28px),
+    transparent
+  );
 }
 
 .tool-group {
@@ -597,6 +627,8 @@ textarea {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
+  /* There is nothing behind this to scroll on to. */
+  overscroll-behavior: contain;
 }
 
 .editor-page {
@@ -1423,13 +1455,15 @@ textarea {
   display: grid;
   padding: 24px;
   background: rgb(13 13 13 / 32%);
-  inset: 0;
+  /* Inset from the keyboard as well, so the dialog centres on what is left. */
+  inset: var(--app-top, 0) 0 var(--app-bottom, 0);
   place-items: center;
 }
 
 .dialog {
   width: min(580px, 100%);
-  max-height: 86vh;
+  /* Of the scrim, which stops at the keyboard — not of the whole window. */
+  max-height: 100%;
   padding: 22px 24px;
   border: 1px solid var(--border);
   border-radius: 16px;
@@ -1526,12 +1560,15 @@ textarea {
   text-align: left;
 }
 
-/* Portalled above its anchor, for menus inside the scrolling toolbar. */
+/* Portalled for menus inside the scrolling toolbar, and placed by the
+   component: above its button, or under it when the keyboard has taken the
+   room above. Taller than the band that is left, it scrolls. */
 .menu.floating {
   position: fixed;
   right: auto;
   min-width: 168px;
-  transform: translateY(-100%);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .menu button:hover {
@@ -1548,7 +1585,7 @@ textarea {
 .toast {
   position: fixed;
   z-index: 50;
-  bottom: 24px;
+  bottom: calc(24px + var(--app-bottom, 0px));
   left: 50%;
   max-width: min(520px, calc(100vw - 40px));
   padding: 10px 14px;
@@ -1588,5 +1625,143 @@ textarea {
 
   .editor-body {
     padding: 24px 20px 56px;
+  }
+}
+
+/* A phone, either way up: the card runs the height of the screen, so its dock
+   lands where a thumb is — at the foot of the window, or on top of the
+   keyboard — instead of halfway up it under a short post. */
+@media (width <= 640px), (pointer: coarse) and (height <= 560px) {
+  .editor-page {
+    display: flex;
+    min-height: 100%;
+    padding: 8px 8px 0;
+  }
+
+  .editor-card {
+    display: flex;
+    width: 100%;
+    flex-direction: column;
+    border-bottom: none;
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+  }
+
+  .editor-body {
+    min-height: 0;
+    flex: 1;
+    padding: 20px 16px 32px;
+  }
+
+  .card-dock {
+    border-radius: 0;
+  }
+}
+
+/* Phone. Kept in step with `PHONE_QUERY` in `lib/viewport.ts`, which switches
+   the pop-up to a sheet at the same width. */
+@media (width <= 640px) {
+  .rail {
+    width: 34px;
+    padding-top: 8px;
+  }
+
+  .title-input {
+    font-size: 26px;
+  }
+
+  /* Every pixel here is another tool in view, so the dock gives up its
+     padding, the gaps between 36px targets that do not need them, and the
+     word count — the one thing in the row that is not a control. */
+  .card-dock {
+    gap: 2px;
+    padding: 4px;
+  }
+
+  .card-dock .status {
+    display: none;
+  }
+
+  .card-dock .status.is-saving {
+    display: inline;
+  }
+
+  .tool-sep {
+    margin: 0 3px;
+  }
+
+  /* Two dozen tools do not fit on a phone, so the row scrolls — a group at a
+     time, rather than stopping halfway through an icon. */
+  .toolbar {
+    gap: 0;
+    scroll-snap-type: x proximity;
+  }
+
+  .tool-group {
+    gap: 0;
+    scroll-snap-align: start;
+  }
+
+  /* Across the foot of the writing surface, not down its side: the component
+     positions it, this is only the shape. */
+  .popover.is-sheet {
+    width: auto;
+  }
+
+  .popover.is-sheet .popover-body {
+    padding: 12px 14px 14px;
+  }
+}
+
+/* Touch. Fingers, not pointers: bigger targets, no hover to fall back on, and
+   nothing under 16px to type into — iOS zooms the page in on anything smaller
+   and never zooms back out, which leaves the toolbar off the side of it. */
+@media (pointer: coarse) {
+  .tool {
+    width: 36px;
+    height: 36px;
+  }
+
+  .bubble {
+    padding: 3px;
+  }
+
+  .toolbar {
+    scrollbar-width: none;
+  }
+
+  .toolbar::-webkit-scrollbar {
+    display: none;
+  }
+
+  .menu button {
+    padding: 10px;
+    font-size: 14px;
+  }
+
+  .description-input,
+  .source-editor,
+  .input,
+  .select,
+  .token-input,
+  .rail-tab-field {
+    font-size: 16px;
+  }
+
+  .input,
+  .select {
+    height: 38px;
+  }
+
+  /* Sized across, not down: the field runs vertically, so this is the room
+     the larger type needs to sit in the tab without being clipped. */
+  .rail-tab-field {
+    width: 20px;
+  }
+
+  /* The delete button is only ever a tap away here — there is no hover to
+     bring it out, and the tab it sits on belongs to the open draft alone. */
+  .rail-tab-delete {
+    opacity: 1;
+    pointer-events: auto;
   }
 }

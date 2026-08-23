@@ -2,7 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <!-- `resizes-content` hands the keyboard to the browser where that is
+         supported; where it is not, `lib/viewport.ts` measures it instead. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1.0, interactive-widget=resizes-content"
+    />
     <meta name="color-scheme" content="light dark" />
     <meta name="description" content="A quiet place to write, keep drafts, and publish to the blog." />
     <meta name="application-name" content="write" />

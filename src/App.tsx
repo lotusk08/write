@@ -20,6 +20,7 @@ import { draftSlug, markdownForExport, type PublishPlan } from "./lib/publish.ts
 import { loadSettings, saveSettings, type Settings } from "./lib/settings.ts";
 import { setSiteUrl } from "./lib/site.ts";
 import { countWords, datePrefix, slugify } from "./lib/text.ts";
+import { usePinnedViewport } from "./lib/viewport.ts";
 
 type SaveState = "idle" | "saving" | "saved";
 type Toast = { message: string; kind: "info" | "error"; href?: string } | null;
@@ -29,6 +30,10 @@ const SAVE_DEBOUNCE_MS = 600;
 const PARSE_DEBOUNCE_MS = 300;
 
 export default function App() {
+  // Keeps the shell inside the part of the window the keyboard leaves on
+  // screen, so the toolbar and its menus stay reachable on a phone.
+  usePinnedViewport();
+
   const [settings, setSettings] = useState<Settings>(loadSettings);
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
@@ -599,7 +604,9 @@ export default function App() {
                   >
                     <span className="tool-text">MD</span>
                   </button>
-                  <span className="status">
+                  {/* On a phone the count gives way to the tools; the save
+                      state, which is only up for a moment, does not. */}
+                  <span className={saveState === "saving" ? "status is-saving" : "status"}>
                     {saveState === "saving" ? "Saving…" : `${words} words`}
                   </span>
                   <span className="tool-sep" />

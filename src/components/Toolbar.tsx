@@ -1,7 +1,7 @@
 import type { Editor } from "@tiptap/react";
 import { useEditorState } from "@tiptap/react";
 import type { ReactNode } from "react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 import { CENTER_ROW } from "../editor/extensions/blogFormat.ts";
 import { embedFromUrl } from "../editor/extensions/embed.ts";
 import type { NoteType } from "../editor/extensions/noteQuote.ts";
@@ -40,8 +40,37 @@ function Tool({ title, onClick, icon, label, active }: ToolProps) {
   );
 }
 
+/** How much of the row is still off to one side before it counts as more. */
+const EDGE_SLACK = 2;
+
 export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
   const fileInput = useRef<HTMLInputElement>(null);
+  const row = useRef<HTMLDivElement>(null);
+
+  // A phone cannot show two dozen tools at once, so the row scrolls — and says
+  // so by fading out on whichever side it still has tools on. Nothing else
+  // marks the edge: a touch screen draws no scrollbar.
+  useEffect(() => {
+    const element = row.current;
+    if (!element) {
+      return;
+    }
+    const sync = () => {
+      const hidden = element.scrollWidth - element.clientWidth;
+      const start = element.scrollLeft > EDGE_SLACK;
+      const end = element.scrollLeft < hidden - EDGE_SLACK;
+      element.dataset.more = start && end ? "both" : start ? "start" : end ? "end" : "none";
+    };
+    sync();
+    element.addEventListener("scroll", sync, { passive: true });
+    // The dock is what changes width — the rail, focus mode, the window.
+    const observer = new ResizeObserver(sync);
+    observer.observe(element);
+    return () => {
+      element.removeEventListener("scroll", sync);
+      observer.disconnect();
+    };
+  }, []);
 
   const state = useEditorState({
     editor,
@@ -99,7 +128,7 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
   };
 
   return (
-    <div className="toolbar" role="toolbar" aria-label="Formatting">
+    <div ref={row} className="toolbar" role="toolbar" aria-label="Formatting">
       <div className="tool-group">
         {/* The post title is front matter, so the body starts at H2 — the
             level the blog's own posts and table of contents use. */}

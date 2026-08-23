@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import { resolvedTheme, type MenuTab } from "../lib/settings.ts";
+import { PHONE_QUERY, useMediaQuery } from "../lib/viewport.ts";
 import { Icon } from "./Icons.tsx";
 import { PostPanel, type PostPanelProps } from "./panels/PostPanel.tsx";
 import { SettingsPanel, type SettingsPanelProps } from "./panels/SettingsPanel.tsx";
@@ -57,6 +58,9 @@ export function EditorPopover({
 }: EditorPopoverProps) {
   const panel = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState<DOMRect | null>(null);
+  // A phone has no room beside the writing surface, so the pop-up becomes a
+  // sheet across the foot of it instead of a panel docked to one corner.
+  const sheet = useMediaQuery(PHONE_QUERY);
 
   // Measured from the editor region, not the button: the pop-up hangs off the
   // region's right edge, so it holds still while the document scrolls under it
@@ -69,13 +73,18 @@ export function EditorPopover({
     }
     const measure = () => setFrame(region.getBoundingClientRect());
     measure();
-    // The observer catches the rail and focus mode; the window covers the rest.
+    // The observer catches the rail and focus mode; the window covers the
+    // rest, and the visual viewport the keyboard sliding the page around.
     const observer = new ResizeObserver(measure);
     observer.observe(region);
     window.addEventListener("resize", measure);
+    window.visualViewport?.addEventListener("resize", measure);
+    window.visualViewport?.addEventListener("scroll", measure);
     return () => {
       observer.disconnect();
       window.removeEventListener("resize", measure);
+      window.visualViewport?.removeEventListener("resize", measure);
+      window.visualViewport?.removeEventListener("scroll", measure);
     };
   }, [open, regionRef]);
 
@@ -115,17 +124,31 @@ export function EditorPopover({
       : settings.settings.postsDir
   ).replace(/^\/+|\/+$/g, "");
 
-  // Inset from the top-right corner of the writing surface, tall enough to run
-  // its length — past that the body takes the scroll.
-  const inset = 16;
-  const position = {
-    top: frame.top + inset,
-    right: window.innerWidth - frame.right + inset,
-    maxHeight: Math.max(240, frame.height - inset * 2),
-  };
+  // Inset from the writing surface: down its right-hand edge, or across its
+  // foot on a phone. The surface is pinned to the part of the window the
+  // keyboard leaves on screen, so both stay above it.
+  const inset = sheet ? 10 : 16;
+  const position = sheet
+    ? {
+        left: frame.left + inset,
+        right: window.innerWidth - frame.right + inset,
+        bottom: window.innerHeight - frame.bottom + inset,
+        maxHeight: Math.max(200, frame.height - inset * 2),
+      }
+    : {
+        top: frame.top + inset,
+        right: window.innerWidth - frame.right + inset,
+        maxHeight: Math.max(240, frame.height - inset * 2),
+      };
 
   return createPortal(
-    <div ref={panel} className="popover" role="dialog" aria-label="Editor menu" style={position}>
+    <div
+      ref={panel}
+      className={sheet ? "popover is-sheet" : "popover"}
+      role="dialog"
+      aria-label="Editor menu"
+      style={position}
+    >
       <header className="popover-head">
         <button
           type="button"
