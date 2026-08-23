@@ -125,13 +125,6 @@ const PATHS = {
       <path d="m6 9 6 6 6-6" />
     </>
   ),
-  /* Half lit: the theme follows whatever the system is doing. */
-  auto: (
-    <>
-      <circle cx="12" cy="12" r="8" />
-      <path d="M12 4a8 8 0 0 0 0 16z" fill="currentColor" stroke="none" />
-    </>
-  ),
   sun: (
     <>
       <circle cx="12" cy="12" r="4" />

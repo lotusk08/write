@@ -4,6 +4,8 @@
   "version": "0.1.0",
   "type": "module",
   "description": "A Tiptap-based writing app: drafts, collapsible sections, Markdown/DOCX export, and one-click publishing to a Jekyll blog. Deploys to Cloudflare Workers.",
+  "author": "Steve Hoang (https://stevehoang.com)",
+  "license": "MIT",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",

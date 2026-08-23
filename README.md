@@ -176,3 +176,15 @@ behind the same password, since the blog repository is private.
   `npm run build`.
 - The app is a standalone npm project inside this repository; it does not join
   the BlockNote pnpm workspace and has no dependency on the packages around it.
+
+## License
+
+MIT © [Steve Hoang](https://stevehoang.com) — see [LICENSE](LICENSE).
+
+The repository began as a fork of
+[BlockNote](https://github.com/TypeCellOS/BlockNote) (MPL-2.0); that tree is
+preserved on the `blocknote-upstream` branch under its own licence. No code
+from it remains on `main`.
+
+Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before opening an issue
+or a pull request.

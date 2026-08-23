@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
-import type { MenuTab } from "../lib/settings.ts";
+import { resolvedTheme, type MenuTab } from "../lib/settings.ts";
 import { Icon } from "./Icons.tsx";
 import { PostPanel, type PostPanelProps } from "./panels/PostPanel.tsx";
 import { SettingsPanel, type SettingsPanelProps } from "./panels/SettingsPanel.tsx";
@@ -108,6 +108,7 @@ export function EditorPopover({
     return null;
   }
 
+  const scheme = resolvedTheme(settings.settings.theme);
   const publishDir = (
     settings.settings.publishTarget === "drafts"
       ? settings.settings.draftsDir
@@ -126,6 +127,15 @@ export function EditorPopover({
   return createPortal(
     <div ref={panel} className="popover" role="dialog" aria-label="Editor menu" style={position}>
       <header className="popover-head">
+        <button
+          type="button"
+          className="btn icon ghost"
+          title={scheme === "dark" ? "Switch to light" : "Switch to dark"}
+          aria-label={scheme === "dark" ? "Switch to light" : "Switch to dark"}
+          onClick={() => settings.onChange({ theme: scheme === "dark" ? "light" : "dark" })}
+        >
+          <Icon name={scheme === "dark" ? "sun" : "moon"} />
+        </button>
         <div className="popover-tabs" role="tablist">
           {TABS.map(({ id, label }) => (
             <button

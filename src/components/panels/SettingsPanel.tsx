@@ -1,15 +1,7 @@
 import type { AppConfig } from "../../../shared/types.ts";
 import { usesServerPublishing } from "../../lib/api.ts";
 import type { Settings } from "../../lib/settings.ts";
-import { Icon, type IconName } from "../Icons.tsx";
 import { Section } from "./Section.tsx";
-
-/** One button cycles these in order, rather than a menu of three. */
-const THEMES: { value: Settings["theme"]; label: string; icon: IconName }[] = [
-  { value: "system", label: "Follow system", icon: "auto" },
-  { value: "light", label: "Light", icon: "sun" },
-  { value: "dark", label: "Dark", icon: "moon" },
-];
 
 export interface SettingsPanelProps {
   settings: Settings;
@@ -19,9 +11,6 @@ export interface SettingsPanelProps {
 
 export function SettingsPanel({ settings, config, onChange }: SettingsPanelProps) {
   const serverMode = usesServerPublishing(config);
-
-  const theme = Math.max(0, THEMES.findIndex((option) => option.value === settings.theme));
-  const nextTheme = THEMES[(theme + 1) % THEMES.length];
 
   return (
     <>
@@ -157,18 +146,6 @@ export function SettingsPanel({ settings, config, onChange }: SettingsPanelProps
             </label>
           </li>
         </ul>
-        <div className="field">
-          <span className="field-label">Theme</span>
-          <button
-            type="button"
-            className="btn theme-toggle"
-            title={`${THEMES[theme].label} — click for ${nextTheme.label.toLowerCase()}`}
-            onClick={() => onChange({ theme: nextTheme.value })}
-          >
-            <Icon name={THEMES[theme].icon} />
-            {THEMES[theme].label}
-          </button>
-        </div>
       </Section>
     </>
   );

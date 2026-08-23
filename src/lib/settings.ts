@@ -44,6 +44,17 @@ export const defaultSettings: Settings = {
   focusMode: false,
 };
 
+/**
+ * The theme actually on screen. A new browser follows the system until a mode
+ * is picked, and picking one overrides it from then on.
+ */
+export function resolvedTheme(theme: Settings["theme"]): "light" | "dark" {
+  if (theme === "light" || theme === "dark") {
+    return theme;
+  }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY);

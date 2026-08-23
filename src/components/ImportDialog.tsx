@@ -12,7 +12,8 @@ interface ImportDialogProps {
 
 /**
  * Shown when the blog's edit button sends a post here. The repo is private, so
- * reading it back needs the same password publishing does.
+ * reading it back needs the same password publishing does — which is the whole
+ * dialog: the file being opened, one field, and a way in.
  */
 export function ImportDialog({ path, busy, error, onCancel, onUnlock }: ImportDialogProps) {
   const [password, setPassword] = useState("");
@@ -24,12 +25,12 @@ export function ImportDialog({ path, busy, error, onCancel, onUnlock }: ImportDi
 
   return (
     <Dialog
-      title="Edit the post from the blog"
-      subtitle={path}
+      compact
+      title="Open from the blog"
       onClose={onCancel}
       footer={
         <>
-          <button type="button" className="btn" onClick={onCancel}>
+          <button type="button" className="btn ghost" onClick={onCancel}>
             Cancel
           </button>
           <button type="button" className="btn primary" disabled={!password || busy} onClick={submit}>
@@ -38,29 +39,27 @@ export function ImportDialog({ path, busy, error, onCancel, onUnlock }: ImportDi
         </>
       }
     >
-      {error ? <div className="notice warn">{error}</div> : null}
-      <div className="field">
-        <label htmlFor="import-password">Publish password</label>
-        <input
-          id="import-password"
-          className="input"
-          type="password"
-          autoComplete="current-password"
-          autoFocus
-          placeholder="••••••••"
-          value={password}
-          onChange={(event) => setPassword(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              submit();
-            }
-          }}
-        />
-        <p className="hint">
-          I built this feature just for myself - Steve Hoang
-        </p>
-      </div>
+      <p className="unlock-path mono">{path}</p>
+
+      <input
+        className="input unlock-field"
+        type="password"
+        autoComplete="current-password"
+        aria-label="Publish password"
+        autoFocus
+        placeholder="Password"
+        value={password}
+        onChange={(event) => setPassword(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            submit();
+          }
+        }}
+      />
+
+      {error ? <p className="unlock-error">{error}</p> : null}
+      <p className="hint unlock-note">I built this feature just for myself — Steve Hoang</p>
     </Dialog>
   );
 }
