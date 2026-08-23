@@ -212,14 +212,14 @@ export function EditorPopover({
               {exporting ? "Exporting…" : "Export"}
             </button>
             <p className="hint publish-target">
-              {chosen.length === 0 ? "Tick what you want" : `${chosen.length} selected`}
+              {chosen.length === 0 ? "Choose the format before download" : `${chosen.length} selected`}
             </p>
           </>
         ) : (
           <>
             <button type="button" className="btn primary block" onClick={onPublish}>
               <Icon name="upload" />
-              Publish to blog
+              Publish
             </button>
             <p className="hint publish-target">
               <span className="mono">{publishDir}/</span>

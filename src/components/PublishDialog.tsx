@@ -120,7 +120,7 @@ export function PublishDialog({
 
   return (
     <Dialog
-      title="Publish to blog"
+      title="Publish"
       subtitle={`${repo} · ${settings.openPullRequest ? "pull request" : baseBranch}`}
       onClose={onClose}
       footer={
