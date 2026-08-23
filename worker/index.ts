@@ -7,18 +7,13 @@ import {
   tokenLogin,
 } from "../shared/github.ts";
 import type { AppConfig, PublishFile, PublishRequest, PublishResult } from "../shared/types.ts";
-import { verifyAccess, type AccessConfig } from "./access.ts";
 
 export interface Env {
   ASSETS: Fetcher;
   /** Fine-grained PAT with Contents: Read & write on the blog repo. Secret. */
   GITHUB_TOKEN?: string;
-  /** `example.cloudflareaccess.com` — the Zero Trust team this app belongs to. */
-  ACCESS_TEAM_DOMAIN?: string;
-  /** The Access application's Audience tag. */
-  ACCESS_AUD?: string;
-  /** Optional belt and braces: the one address allowed to publish. */
-  ACCESS_EMAIL?: string;
+  /** The password the app must send before this will touch the blog. Secret. */
+  WRITE_PASSWORD?: string;
   BLOG_REPO?: string;
   BLOG_BRANCH?: string;
   /** Public site URL, used to preview images already published. */
@@ -48,15 +43,19 @@ function dirs(env: Env) {
   };
 }
 
-function accessConfig(env: Env): AccessConfig | null {
-  if (!env.ACCESS_TEAM_DOMAIN || !env.ACCESS_AUD) {
-    return null;
+/**
+ * Compares in constant time. A password check that returns early on the first
+ * wrong character tells you, in how long it took, how much of it was right.
+ */
+function sameSecret(a: string, b: string): boolean {
+  if (a.length !== b.length) {
+    return false;
   }
-  return {
-    teamDomain: env.ACCESS_TEAM_DOMAIN,
-    aud: env.ACCESS_AUD,
-    ...(env.ACCESS_EMAIL ? { email: env.ACCESS_EMAIL } : {}),
-  };
+  let differences = 0;
+  for (let index = 0; index < a.length; index++) {
+    differences |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  }
+  return differences === 0;
 }
 
 /** What is missing before this deployment can publish, in the order to fix it. */
@@ -64,8 +63,8 @@ function problem(env: Env): string | null {
   if (!env.GITHUB_TOKEN) {
     return "This deployment has no GITHUB_TOKEN, so it cannot reach the blog. Add one with `wrangler secret put GITHUB_TOKEN`.";
   }
-  if (!accessConfig(env)) {
-    return "Publishing is disabled until Cloudflare Access is configured: set ACCESS_TEAM_DOMAIN and ACCESS_AUD in wrangler.jsonc. Without them this endpoint would let anyone write to the blog.";
+  if (!env.WRITE_PASSWORD) {
+    return "Publishing is disabled until WRITE_PASSWORD is set (`wrangler secret put WRITE_PASSWORD`), otherwise this endpoint would let anyone write to the blog.";
   }
   if (!env.BLOG_REPO) {
     return "No BLOG_REPO configured on this deployment.";
@@ -85,20 +84,36 @@ function json(body: unknown, status = 200): Response {
 
 /**
  * Guards everything that touches the blog. The order matters: a deployment
- * that is not configured says so plainly, and one that is verifies the caller
+ * that is not configured says so plainly, and one that is checks the caller
  * before it will use its token for them.
+ *
+ * 401 is the app's cue to ask for the password again, so a wrong one has to be
+ * distinguishable from a deployment that was never given one.
  */
-async function authorize(request: Request, env: Env): Promise<Response | null> {
+function authorize(request: Request, env: Env): Response | null {
   const missing = problem(env);
   if (missing) {
     return json({ error: missing }, env.GITHUB_TOKEN ? 500 : 501);
   }
-  try {
-    await verifyAccess(request, accessConfig(env)!);
-    return null;
-  } catch (error) {
-    return json({ error: error instanceof Error ? error.message : "Not signed in." }, 403);
+  const supplied = request.headers.get("x-write-password") ?? "";
+  if (!sameSecret(supplied, env.WRITE_PASSWORD!)) {
+    return json({ error: supplied ? "Wrong password." : "This needs the publish password." }, 401);
   }
+  return null;
+}
+
+/**
+ * What to answer when GitHub refuses. Its 401 and 403 are about this
+ * deployment's own token, not about the caller — and 401 is the app's signal to
+ * forget the password and ask again, which would be exactly the wrong move. So
+ * a credential problem upstream is reported as one, and never mistaken for the
+ * password being wrong.
+ */
+function upstreamStatus(error: unknown): number {
+  if (!(error instanceof GitHubError)) {
+    return 500;
+  }
+  return error.status === 401 || error.status === 403 ? 502 : error.status;
 }
 
 const BRANCH_RE = /^[A-Za-z0-9._\-/]{1,120}$/;
@@ -143,15 +158,8 @@ function validateFiles(files: unknown, env: Env): { files: PublishFile[] } | { e
   return { files: validated };
 }
 
-async function handleConfig(request: Request, env: Env): Promise<Response> {
+function handleConfig(env: Env): Response {
   const missing = problem(env);
-  const access = accessConfig(env);
-  let email: string | undefined;
-  if (access) {
-    email = await verifyAccess(request, access)
-      .then((identity) => identity.email)
-      .catch(() => undefined);
-  }
   const config: AppConfig = {
     repo: env.BLOG_REPO || "",
     branch: env.BLOG_BRANCH || "main",
@@ -159,13 +167,12 @@ async function handleConfig(request: Request, env: Env): Promise<Response> {
     ...dirs(env),
     ready: !missing,
     ...(missing ? { problem: missing } : {}),
-    ...(email ? { email } : {}),
   };
   return json(config);
 }
 
 async function handlePublish(request: Request, env: Env): Promise<Response> {
-  const denied = await authorize(request, env);
+  const denied = authorize(request, env);
   if (denied) {
     return denied;
   }
@@ -201,8 +208,10 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
     });
     return json(result);
   } catch (error) {
-    const status = error instanceof GitHubError ? error.status : 500;
-    return json({ error: error instanceof Error ? error.message : "Publish failed." }, status);
+    return json(
+      { error: error instanceof Error ? error.message : "Publish failed." },
+      upstreamStatus(error),
+    );
   }
 }
 
@@ -237,7 +246,7 @@ async function whyMissing(env: Env, branch: string, path: string): Promise<strin
 
 /** Reads one post back out of the repo so it can be edited here. */
 async function handleSource(request: Request, env: Env): Promise<Response> {
-  const denied = await authorize(request, env);
+  const denied = authorize(request, env);
   if (denied) {
     return denied;
   }
@@ -260,8 +269,10 @@ async function handleSource(request: Request, env: Env): Promise<Response> {
     }
     return json({ path, branch, markdown });
   } catch (error) {
-    const status = error instanceof GitHubError ? error.status : 500;
-    return json({ error: error instanceof Error ? error.message : "Read failed." }, status);
+    return json(
+      { error: error instanceof Error ? error.message : "Read failed." },
+      upstreamStatus(error),
+    );
   }
 }
 
@@ -270,7 +281,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/config") {
-      return handleConfig(request, env);
+      return handleConfig(env);
     }
     if (url.pathname === "/api/publish") {
       return request.method === "POST"

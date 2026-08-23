@@ -23,16 +23,11 @@
     "SITE_URL": "https://stevehoang.com",
     "POSTS_DIR": "_posts",
     "DRAFTS_DIR": "_drafts",
-    "IMAGES_DIR": "assets/img/post",
-    // Cloudflare Access is what stands between the internet and the token
-    // below, so the Worker refuses to publish until both of these are set.
-    // ACCESS_AUD is the Application Audience tag from the Access app's
-    // overview page; ACCESS_EMAIL is optional and narrows it to one address
-    // whatever the Access policy happens to allow.
-    "ACCESS_TEAM_DOMAIN": "stevehoang.cloudflareaccess.com",
-    "ACCESS_AUD": "",
-    "ACCESS_EMAIL": ""
+    "IMAGES_DIR": "assets/img/post"
   }
-  // Secret (never in this file — use `wrangler secret put GITHUB_TOKEN`):
-  //   GITHUB_TOKEN – fine-grained PAT, Contents: read & write on the blog repo
+  // Secrets (never in this file — `wrangler secret put NAME`):
+  //   GITHUB_TOKEN   – fine-grained PAT, Contents: read & write on the blog repo
+  //   WRITE_PASSWORD – the password the app sends before this will use it.
+  //                    Without it the Worker refuses to publish at all, rather
+  //                    than sitting on the internet holding a write token.
 }

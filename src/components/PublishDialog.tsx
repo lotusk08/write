@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import type { AppConfig, PublishResult } from "../../shared/types.ts";
-import { publish } from "../lib/api.ts";
+import { PasswordRejected, publish } from "../lib/api.ts";
 import type { Draft } from "../lib/db.ts";
 import { buildPublishPlan, defaultCommitMessage, publishBranchName, type PublishPlan } from "../lib/publish.ts";
 import type { Settings } from "../lib/settings.ts";
@@ -27,6 +27,11 @@ export function PublishDialog({
   const [message, setMessage] = useState(() => defaultCommitMessage(draft, Boolean(draft.publishedPath)));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Asked for only when there is none to send, or when the Worker has just
+  // said the one we sent is wrong. Otherwise publishing is one button.
+  const [password, setPassword] = useState(settings.publishPassword);
+  const [rejected, setRejected] = useState(false);
+  const asking = !settings.publishPassword || rejected;
 
   const repo = settings.repo;
   const baseBranch = settings.branch;
@@ -74,23 +79,39 @@ export function PublishDialog({
   );
 
   const run = async () => {
-    if (!plan || blocked) {
+    if (!plan || blocked || (asking && !password)) {
       return;
     }
     setBusy(true);
     setError(null);
     try {
       const branch = settings.openPullRequest ? publishBranchName(plan.slug) : baseBranch;
-      const result = await publish({
-        message,
-        files: plan.files,
-        branch,
-        pullRequest: settings.openPullRequest
-          ? { title: message, body: `Published from write.\n\n\`${plan.markdownPath}\`` }
-          : null,
-      });
+      const result = await publish(
+        {
+          message,
+          files: plan.files,
+          branch,
+          pullRequest: settings.openPullRequest
+            ? { title: message, body: `Published from write.\n\n\`${plan.markdownPath}\`` }
+            : null,
+        },
+        password,
+      );
+      // It worked, so it is worth keeping: this is the last time this device
+      // asks, until the password on the Worker changes.
+      if (password !== settings.publishPassword) {
+        onSettingsChange({ publishPassword: password });
+      }
       onPublished(result, plan);
     } catch (cause) {
+      if (cause instanceof PasswordRejected) {
+        // A stored password that has stopped working is worse than none: it
+        // would fail the same way every time without ever asking.
+        setRejected(true);
+        if (settings.publishPassword) {
+          onSettingsChange({ publishPassword: "" });
+        }
+      }
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
       setBusy(false);
@@ -110,7 +131,7 @@ export function PublishDialog({
           <button
             type="button"
             className="btn primary"
-            disabled={!plan || busy || Boolean(blocked)}
+            disabled={!plan || busy || Boolean(blocked) || (asking && !password)}
             onClick={() => void run()}
           >
             {busy ? "Publishing…" : settings.openPullRequest ? "Open pull request" : "Commit"}
@@ -127,6 +148,31 @@ export function PublishDialog({
         </div>
       ) : null}
       {error ? <div className="notice warn">{error}</div> : null}
+
+      {asking ? (
+        <div className="field">
+          <label htmlFor="publish-password">Password</label>
+          <input
+            id="publish-password"
+            className="input"
+            type="password"
+            autoComplete="current-password"
+            autoFocus
+            placeholder="••••••••"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault();
+                void run();
+              }
+            }}
+          />
+          <p className="hint">
+            Remembered on this device once it works, so this is the only time it is asked for.
+          </p>
+        </div>
+      ) : null}
 
       <div className="row">
         <div className="field">

@@ -2,17 +2,35 @@ import type { AppConfig, PublishRequest, PublishResult } from "../../shared/type
 
 /**
  * The blog is reached through this app's own Worker, which holds the one token
- * that can read and write it.
+ * that can read and write it. No GitHub credential ever reaches this browser.
  *
- * Nothing here carries a credential. Cloudflare Access sits in front of the
- * hostname and signs you in; the browser gets a session cookie for it and sends
- * it with these requests the way it sends any cookie. So there is no token in
- * this browser to leak and no password to type per post — signing out of Access,
- * or letting the session lapse, is what takes the ability to publish away.
+ * What does reach it is a password, sent as a header on these calls. It is
+ * typed once and remembered, so publishing does not ask again — the Worker is
+ * the thing that has to be convinced, not this browser, and it will say so with
+ * a 401 if the password stops being right.
  */
+
+/** A 401 from the Worker: the password is missing or no longer the one it has. */
+export class PasswordRejected extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "PasswordRejected";
+  }
+}
+
+function headers(password: string, extra?: Record<string, string>): Record<string, string> {
+  return {
+    accept: "application/json",
+    ...(password ? { "x-write-password": password } : {}),
+    ...extra,
+  };
+}
 
 async function readJson<T>(response: Response, whenItFails: string): Promise<T> {
   const payload = (await response.json().catch(() => ({}))) as Partial<T> & { error?: string };
+  if (response.status === 401) {
+    throw new PasswordRejected(payload.error || "Wrong password.");
+  }
   if (!response.ok) {
     throw new Error(payload.error || `${whenItFails} (${response.status}).`);
   }
@@ -22,7 +40,8 @@ async function readJson<T>(response: Response, whenItFails: string): Promise<T> 
 /**
  * Asks the Worker how this deployment is configured. A `problem` in the answer
  * is something to fix on the deployment, not in the browser, so it is shown as
- * it is rather than translated.
+ * it is rather than translated. Needs no password: it says what is missing, not
+ * what is in the repository.
  */
 export async function fetchAppConfig(): Promise<AppConfig | null> {
   try {
@@ -43,9 +62,9 @@ export interface PostSource {
 }
 
 /** Reads a published post back out of the repository, for `?edit=`. */
-export async function fetchPostSource(path: string): Promise<PostSource> {
+export async function fetchPostSource(path: string, password: string): Promise<PostSource> {
   const response = await fetch(`/api/source?path=${encodeURIComponent(path)}`, {
-    headers: { accept: "application/json" },
+    headers: headers(password),
   });
   const source = await readJson<PostSource>(response, `Could not open ${path}`);
   if (typeof source.markdown !== "string") {
@@ -55,10 +74,13 @@ export async function fetchPostSource(path: string): Promise<PostSource> {
 }
 
 /** Commits a post and its images in one go. */
-export async function publish(request: PublishRequest): Promise<PublishResult> {
+export async function publish(
+  request: PublishRequest,
+  password: string,
+): Promise<PublishResult> {
   const response = await fetch("/api/publish", {
     method: "POST",
-    headers: { "content-type": "application/json", accept: "application/json" },
+    headers: headers(password, { "content-type": "application/json" }),
     body: JSON.stringify(request),
   });
   return readJson<PublishResult>(response, "Publish failed");

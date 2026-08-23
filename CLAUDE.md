@@ -5,20 +5,21 @@ live in the browser and posts are published to the Jekyll blog repository.
 Published posts can be read back out of the repository and edited here, so the
 app has to be able to write a post it did not create without changing it.
 
-The blog is reached through this app's own Worker, which holds one fine-grained
-GitHub token (Contents: read and write) as a secret. The browser holds no
-credential at all: Cloudflare Access sits in front of the hostname, and the
-session cookie it issues is what lets a request through. So there is nothing to
-paste into Settings and nothing to type per post — signing out of Access, or
-letting the session lapse, is what takes the ability to publish away.
+The blog is reached through this app's own Worker, which holds two secrets: one
+fine-grained GitHub token (Contents: read and write) and a `WRITE_PASSWORD`. No
+GitHub credential ever reaches the browser. What the browser sends is that
+password, as `x-write-password` on every `/api` call — typed once on a device
+and remembered, so publishing is one button rather than a password prompt per
+post.
 
-`worker/access.ts` is the whole of that trust. It verifies the
-`Cf-Access-Jwt-Assertion` header rather than trusting it for being present:
-signature against the team's published keys, then audience, issuer and expiry.
-The Worker fails closed — without `ACCESS_TEAM_DOMAIN` and `ACCESS_AUD` set it
-refuses to publish at all, because it would otherwise be an open endpoint
-holding a write token. Everything to do with media — WebP, placeholders, sizes
-— belongs to the blog's own build, not here.
+The Worker fails closed: with no `WRITE_PASSWORD` set it refuses to publish at
+all, because it would otherwise be an open endpoint holding a write token.
+
+`401` is reserved for that password and nothing else — it is the app's cue to
+forget what it stored and ask again, so GitHub's own 401 and 403 are reported
+as `502` instead. A bad deployment token must never look like a bad password.
+Everything to do with media — WebP, placeholders, sizes — belongs to the blog's
+own build, not here.
 
 This repository began as a fork of BlockNote. That tree is preserved on the
 `blocknote-upstream` branch — `main` is this app, at the repository root, with
@@ -28,7 +29,7 @@ its own npm lockfile.
 
 - `npm run dev` — Vite on :5173. The editor only; `/api` is not there, so
   publishing and `?edit=` need `wrangler dev` (which serves `dist`, so build
-  first) with a `.dev.vars` holding `GITHUB_TOKEN`.
+  first) with a `.dev.vars` holding `GITHUB_TOKEN` and `WRITE_PASSWORD`.
 - `npm run typecheck` — `tsc -b` across the app, `worker/` and `shared/`.
 - `npm run build` — emits `dist`, flat. Wrangler bundles `worker/` itself, so
   there is no Cloudflare plugin in the Vite build and nothing nested under
@@ -46,10 +47,10 @@ its own npm lockfile.
   post; `import.ts` reads one back and is the inverse of it. `viewport.ts`
   measures the part of the window a phone keyboard leaves on screen; the shell
   is pinned to it and every pop-up is placed against it, not `innerHeight`.
-- `worker/` — the only thing holding a credential. `index.ts` has the three
-  endpoints (`/api/config`, `/api/source`, `/api/publish`), validates every
-  path against the configured directories so a stolen session cannot rewrite
-  workflows, and `access.ts` decides who is asking.
+- `worker/index.ts` — the only thing holding a credential. Three endpoints
+  (`/api/config`, `/api/source`, `/api/publish`), a constant-time check on the
+  password, and path validation against the configured directories so a leaked
+  password cannot rewrite workflows.
 - `shared/` — GitHub calls, base64 and the post types. No DOM in it, so it is
   read by both the app and the Worker; `lib/api.ts` is the browser's only door
   to the network, and it only ever calls `/api`.

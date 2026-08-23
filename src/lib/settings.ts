@@ -3,8 +3,9 @@ import type { AppConfig } from "../../shared/types.ts";
 /**
  * What this browser remembers. Not the blog's address, its branch or its
  * directories — those belong to the deployment and arrive from `/api/config`
- * at startup — and no credentials at all: the Worker holds the only token, and
- * Cloudflare Access decides who reaches it.
+ * at startup — and no GitHub token: the Worker holds the only one there is.
+ * The password that unlocks it is kept here, so it is typed once on a device
+ * rather than once a post.
  */
 export interface Settings {
   theme: "light" | "dark" | "system";
@@ -20,6 +21,8 @@ export interface Settings {
   postsDir: string;
   draftsDir: string;
   imagesDir: string;
+  /** Sent to the Worker with every publish. Typed once, then remembered. */
+  publishPassword: string;
   publishTarget: "posts" | "drafts";
   openPullRequest: boolean;
   /** Which tab the pop-up menu opens on. */
@@ -42,6 +45,7 @@ export const defaultSettings: Settings = {
   postsDir: "_posts",
   draftsDir: "_drafts",
   imagesDir: "assets/img/post",
+  publishPassword: "",
   publishTarget: "posts",
   openPullRequest: false,
   menuTab: "post",
@@ -64,7 +68,6 @@ export function loadSettings(): Settings {
     const raw = localStorage.getItem(KEY);
     const parsed = raw
       ? (JSON.parse(raw) as Partial<Settings> & {
-          writePassword?: string;
           githubToken?: string;
           publishToken?: unknown;
         })
@@ -73,10 +76,10 @@ export function loadSettings(): Settings {
     // "drafts" was a tab before drafts moved onto the rail.
     const menuTab: MenuTab = stored.menuTab === "settings" ? "settings" : "post";
     const settings: Settings = { ...stored, menuTab };
-    // Tokens used to be kept here, one of them locked behind a password. The
-    // Worker holds the only one now, so loading is the moment to get them out
-    // of this browser for good.
-    const stale = ["writePassword", "githubToken", "publishToken"] as const;
+    // GitHub tokens used to be kept here, one of them locked behind a
+    // password. The Worker holds the only one now, so loading is the moment to
+    // get them out of this browser for good.
+    const stale = ["githubToken", "publishToken"] as const;
     for (const key of stale) {
       delete (settings as Partial<typeof parsed>)[key];
     }

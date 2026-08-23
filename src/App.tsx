@@ -244,7 +244,7 @@ export default function App() {
           return;
         }
 
-        const source = await fetchPostSource(path);
+        const source = await fetchPostSource(path, settings.publishPassword);
         const parsed = parsePost(source.markdown);
         const now = Date.now();
         const draft: Draft = {

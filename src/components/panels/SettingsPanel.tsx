@@ -39,15 +39,45 @@ function Blog({ config }: { config: AppConfig | null }) {
           {config.postsDir} · {config.draftsDir} · {config.imagesDir}
         </p>
       </div>
-      <div className="field">
-        <span className="field-label">Signed in</span>
-        <p className="hint">
-          {config.email
-            ? `${config.email}, through Cloudflare Access. Nothing is kept in this browser — the session is what lets you publish.`
-            : "Cloudflare Access has not identified anyone on this request. Reload to sign in again."}
-        </p>
-      </div>
     </>
+  );
+}
+
+/**
+ * The one thing this browser is trusted with. The token itself is on the
+ * Worker; this only says it is you asking. Kept here so it is typed when a
+ * device is set up and not once a post — clearing it is what makes the next
+ * publish ask again.
+ */
+function Password({ settings, onChange }: SettingsPanelProps) {
+  return (
+    <div className="field">
+      <label htmlFor="set-password">Password</label>
+      <div className="row wide-first">
+        <input
+          id="set-password"
+          className="input"
+          type="password"
+          autoComplete="current-password"
+          placeholder={settings.publishPassword ? "••••••••" : "Asked for at the first publish"}
+          value={settings.publishPassword}
+          onChange={(event) => onChange({ publishPassword: event.target.value })}
+        />
+        {settings.publishPassword ? (
+          <button
+            type="button"
+            className="btn tiny danger"
+            onClick={() => onChange({ publishPassword: "" })}
+          >
+            Forget it
+          </button>
+        ) : null}
+      </div>
+      <p className="hint">
+        Sent to this app's own Worker, which holds the GitHub token. Nothing here can reach the
+        blog without it, and it is checked there rather than in this browser.
+      </p>
+    </div>
   );
 }
 
@@ -56,6 +86,7 @@ export function SettingsPanel({ settings, config, onChange }: SettingsPanelProps
     <>
       <Section title="Blog">
         <Blog config={config} />
+        <Password settings={settings} config={config} onChange={onChange} />
       </Section>
 
       <Section title="Post defaults">

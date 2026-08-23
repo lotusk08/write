@@ -5,14 +5,14 @@ draft in the browser, fold sections away while you work, export to Markdown or
 Word, and publish straight to the blog repository — text and images in a single
 commit. Posts already on the blog can be opened here and edited in place.
 
-There is nothing to sign into and no token to remember. Cloudflare Access
-guards the address; behind it a small Worker holds the one GitHub token and
-makes the commit. The browser never sees a credential.
+No token to remember. A small Worker holds the one GitHub token and makes the
+commit; the browser sends a password to reach it, typed once on a device and
+remembered after that. No GitHub credential ever touches the browser.
 
 ```
 .
 ├── src/          the editor app (React + Tiptap 3)
-├── worker/       the three API routes, and the Access check in front of them
+├── worker/       the three API routes, and the password in front of them
 ├── shared/       the GitHub commit flow, the post types, base64
 └── wrangler.jsonc
 ```
@@ -82,8 +82,9 @@ npm run build        # dist
 npx wrangler dev     # the whole thing, /api included (serves dist — build first)
 ```
 
-`wrangler dev` reads `.dev.vars` for `GITHUB_TOKEN`. Leave `ACCESS_AUD` unset
-there and publishing stays disabled locally, which is usually what you want.
+`wrangler dev` reads `.dev.vars` for `GITHUB_TOKEN` and `WRITE_PASSWORD`. Leave
+`WRITE_PASSWORD` out and publishing stays disabled locally, which is usually
+what you want.
 
 ## Deploying
 
@@ -103,78 +104,27 @@ Deploy anywhere else — a Pages project of the same name included — and the
 domain stays on the Worker, serving whatever was last pushed to it. That is the
 one way this can look like it worked and change nothing.
 
-### The token, and who may use it
+### The token, and the password in front of it
 
-One fine-grained token on `lotusk08/stevehoang.com` and nothing else, *Contents:
-Read & write*, kept as a Worker secret:
+Two secrets on the Worker, and nothing anywhere else:
 
 ```bash
 npx wrangler secret put GITHUB_TOKEN
+npx wrangler secret put WRITE_PASSWORD
 ```
 
-Paste it at the prompt rather than piping it — a trailing newline makes GitHub
-treat the request as anonymous, which a private repo answers with a flat "not
-found".
+`GITHUB_TOKEN` is one fine-grained token on `lotusk08/stevehoang.com` and
+nothing else, *Contents: Read & write*. Paste it at the prompt rather than
+piping it — a trailing newline makes GitHub treat the request as anonymous,
+which a private repo answers with a flat "not found".
 
-That token is worth exactly as much as the thing standing in front of it, which
-is **Cloudflare Access**. In Zero Trust → Access → Applications, add a
-self-hosted application for `write.stevehoang.com` with a policy that allows
-your own address, then copy its **Application Audience (AUD) tag** into
-`ACCESS_AUD` in `wrangler.jsonc` and deploy again. `ACCESS_EMAIL` is optional
-and narrows it further, to one address whatever the policy allows.
+`WRITE_PASSWORD` is the whole of what stands in front of it, so make it long.
+It is the only thing the browser is trusted with: the app asks for it the first
+time you publish on a device, keeps it once it works, and never asks again
+until the Worker's answer changes. Until it is set the Worker refuses to
+publish at all — an endpoint holding a write token with nothing in front of it
+is worse than a broken one, so it fails closed and says so.
 
-Until `ACCESS_AUD` is set the Worker refuses to publish — an endpoint holding a
-write token with nothing in front of it is worse than a broken one, so it fails
-closed and says so. `worker/access.ts` verifies the assertion Access attaches
-rather than trusting the header: signature against the team's published keys,
-then audience, issuer and expiry.
-
-Revoking is two independent moves: end the Access session (or delete the policy)
-to stop this browser, and revoke the token on GitHub to stop the Worker.
-
-### Where posts go
-
-Repository, branch and the three directories are all in Settings, and they are
-the app's own — nothing hands them to it:
-
-| Setting | Default |
-| --- | --- |
-| Repository | `lotusk08/stevehoang.com` |
-| Branch | `blog` — the branch the posts are on |
-| Posts | `_posts` |
-| Drafts | `_drafts` |
-| Images | `assets/img/post` |
-| Site URL | `https://stevehoang.com` — where published images are previewed from |
-
-## Notes
-
-- The interface is deliberately neutral — monochrome greys, hairline borders,
-  one violet accent, icon-only toolbar — and rides on the system sans (SF on
-  Apple devices, Inter where installed), so no web fonts are downloaded.
-- Front matter and settings share one pop-up rather than a sidebar, a top bar
-  and two dialogs; only publishing and opening a post are modals. Settings holds
-  what is yours to set: the repository, the two tokens, the paths and the post
-  defaults.
-- Reading a published post back is the inverse of writing one, and is checked
-  against the real blog: every post is parsed, re-serialised and rendered with
-  kramdown, and 60 of 62 come out byte-identical. The two that differ have
-  unbalanced `*` in the source. `CLAUDE.md` lists what that exercise taught.
-- Images go up in the format they arrived in. Converting them here meant
-  carrying a WebP encoder in the page, because WebKit has none behind its
-  canvas — and the blog's own build is better placed to do it: `npm run build`
-  there converts every post image to WebP and fills in the placeholders and
-  intrinsic sizes, on the way to the site and without writing back.
-- The app is a standalone npm project inside this repository; it does not join
-  the BlockNote pnpm workspace and has no dependency on the packages around it.
-
-## License
-
-MIT © [Steve Hoang](https://stevehoang.com) — see [LICENSE](LICENSE).
-
-The repository began as a fork of
-[BlockNote](https://github.com/TypeCellOS/BlockNote) (MPL-2.0); that tree is
-preserved on the `blocknote-upstream` branch under its own licence. No code
-from it remains on `main`.
-
-Please read the [Code of Conduct](CODE_OF_CONDUCT.md) before opening an issue
-or a pull request.
+Changing the password locks every browser out at once: the next publish gets a
+401, forgets what it had, and asks. Revoking the token on GitHub stops the
+Worker itself. Those are the two independent ways back.

@@ -21,8 +21,6 @@ export interface AppConfig {
   ready: boolean;
   /** What is missing, when it is not ready. */
   problem?: string;
-  /** Who Cloudflare Access says is signed in. */
-  email?: string;
 }
 
 /** Jekyll (Chirpy) front matter for a post. */
