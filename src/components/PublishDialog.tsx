@@ -29,9 +29,9 @@ export function PublishDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [passphrase, setPassphrase] = useState("");
-  // Asked for here and nowhere else, and asked every time: the token is opened
-  // for this one commit and is not held afterwards, in this dialog or beyond
-  // it. Writing a post needs none of this — only sending it does.
+  // Asked for here and nowhere else, and asked every time: the password opens
+  // the token for this one commit and is not held afterwards, in this dialog
+  // or beyond it. Writing a post needs none of this — only sending it does.
   const locked = settings.publishToken;
 
   const repo = settings.repo;
@@ -70,7 +70,7 @@ export function PublishDialog({
     () =>
       settings.publishToken
         ? null
-        : "No publish token yet — add one in Settings, scoped to the blog repo with Contents: read and write, and lock it with a passphrase.",
+        : "No publish token yet — open Settings, add one under Access, and lock it with a password.",
     [settings.publishToken],
   );
 
@@ -143,7 +143,7 @@ export function PublishDialog({
 
       {locked ? (
         <div className="field">
-          <label htmlFor="publish-passphrase">Passphrase</label>
+          <label htmlFor="publish-passphrase">Password</label>
           <input
             id="publish-passphrase"
             className="input"

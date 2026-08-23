@@ -101,18 +101,20 @@ comes from `.node-version`.
 Reading the blog and writing to it are different privileges, so they are
 different fine-grained tokens on `lotusk08/stevehoang.com` and nothing else.
 
-**Read token** — *Contents: Read*. Opens a published post for editing. Paste it
-into Settings; it stays in that browser as it is, because what it can reach is
-on the blog anyway.
+Both are pasted once, under Settings → Blog → **Access**, which folds itself
+away as soon as they are in: the only part of this you meet again is the
+password at the publish step.
 
-**Publish token** — *Contents: Read & write*. Paste it into Settings with a
-passphrase and it is locked there (PBKDF2 + AES-GCM, in WebCrypto); the token
-itself is never stored. Every publish asks for the passphrase and opens the
-token for that one commit.
+**Read token** — *Contents: Read*. Opens a published post for editing. It stays
+in that browser as it is, because what it can reach is on the blog anyway.
 
-So a phone left unlocked reads; it does not write. Forgetting the passphrase
-costs you a token, not the blog — issue another and lock it again. Either token
-can be revoked on GitHub in a minute, which is the recovery plan for both.
+**Publish token** — *Contents: Read & write*. Paste it with a password and it is
+locked there (PBKDF2 + AES-GCM, in WebCrypto); the token itself is never stored.
+Every publish asks for the password and opens the token for that one commit.
+
+So a phone left unlocked reads; it does not write. Forgetting the password costs
+you a token, not the blog — issue another and lock it again. Either token can be
+revoked on GitHub in a minute, which is the recovery plan for both.
 
 ### Where posts go
 

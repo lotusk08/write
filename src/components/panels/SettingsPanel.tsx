@@ -10,9 +10,9 @@ export interface SettingsPanelProps {
 }
 
 /**
- * The token that can write. It is locked with a passphrase here and opened
- * again at the moment of publishing, so the one credential that can change the
- * blog is not sitting in this browser in the clear.
+ * The token that can write. It is locked with a password here and opened again
+ * at the moment of publishing, so the one credential that can change the blog
+ * is not sitting in this browser in the clear.
  */
 function PublishToken({ settings, onChange }: SettingsPanelProps) {
   const [token, setToken] = useState("");
@@ -25,7 +25,7 @@ function PublishToken({ settings, onChange }: SettingsPanelProps) {
       <div className="field">
         <span className="field-label">Publish token</span>
         <div className="row wide-first">
-          <p className="hint">Locked. The passphrase is asked for when you publish.</p>
+          <p className="hint">Locked. The password is asked for when you publish.</p>
           <button
             type="button"
             className="btn tiny danger"
@@ -75,8 +75,8 @@ function PublishToken({ settings, onChange }: SettingsPanelProps) {
           className="input"
           type="password"
           autoComplete="new-password"
-          aria-label="Passphrase for the publish token"
-          placeholder="Passphrase"
+          aria-label="Password for the publish token"
+          placeholder="Password"
           value={passphrase}
           onChange={(event) => setPassphrase(event.target.value)}
         />
@@ -91,9 +91,61 @@ function PublishToken({ settings, onChange }: SettingsPanelProps) {
       </div>
       {error ? <p className="hint" style={{ color: "var(--danger)" }}>{error}</p> : null}
       <p className="hint">
-        Fine-grained, Contents: read and write. It is locked with that passphrase and never kept
-        unlocked — forget the passphrase and you issue a new token, nothing worse.
+        Fine-grained, Contents: read and write. It is locked with that password and never kept
+        unlocked — forget the password and you issue a new token, nothing worse.
       </p>
+    </div>
+  );
+}
+
+/**
+ * Both tokens, behind a fold. They are pasted once and then never touched
+ * again — the password at the publish step is the only part of this anyone
+ * meets twice — so the menu does not carry them about.
+ */
+function Access({ settings, onChange }: SettingsPanelProps) {
+  const ready = Boolean(settings.githubToken) && Boolean(settings.publishToken);
+  // Open on a browser that cannot publish yet: there is nothing else to do.
+  const [open, setOpen] = useState(!ready);
+
+  return (
+    <div className="field">
+      <div className="field-head">
+        <div>
+          <span className="field-label">Access</span>
+          <p className="hint">
+            {ready
+              ? "A read token, and a publish token under your password."
+              : "Needs a read token and a publish token before it can publish."}
+          </p>
+        </div>
+        <button type="button" className="btn tiny ghost" onClick={() => setOpen(!open)}>
+          {open ? "Hide" : "Change"}
+        </button>
+      </div>
+
+      {open ? (
+        <>
+          <div className="field">
+            <label htmlFor="set-token">Read token</label>
+            <input
+              id="set-token"
+              className="input"
+              type="password"
+              autoComplete="off"
+              placeholder="github_pat_…"
+              value={settings.githubToken}
+              onChange={(event) => onChange({ githubToken: event.target.value })}
+            />
+            <p className="hint">
+              Fine-grained, Contents: read on the blog repo. It opens published posts for editing
+              and is kept in this browser as it is — what it can reach is on the blog anyway.
+            </p>
+          </div>
+
+          <PublishToken settings={settings} onChange={onChange} />
+        </>
+      ) : null}
     </div>
   );
 }
@@ -122,24 +174,7 @@ export function SettingsPanel({ settings, onChange }: SettingsPanelProps) {
             />
           </div>
         </div>
-        <div className="field">
-          <label htmlFor="set-token">Read token</label>
-          <input
-            id="set-token"
-            className="input"
-            type="password"
-            autoComplete="off"
-            placeholder="github_pat_…"
-            value={settings.githubToken}
-            onChange={(event) => onChange({ githubToken: event.target.value })}
-          />
-          <p className="hint">
-            Fine-grained, Contents: read on the blog repo. It opens published posts for editing
-            and is kept in this browser as it is — what it can reach is on the blog anyway.
-          </p>
-        </div>
-
-        <PublishToken settings={settings} onChange={onChange} />
+        <Access settings={settings} onChange={onChange} />
       </Section>
 
       <Section title="Post defaults">

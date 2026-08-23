@@ -515,6 +515,18 @@ textarea {
   font-weight: 500;
 }
 
+/* A label and its state on the left, the control that opens it on the right. */
+.field-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.field-head .hint {
+  margin-top: 2px;
+}
+
 .hint {
   margin: 0;
   color: var(--faint);
