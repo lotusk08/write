@@ -27,6 +27,7 @@ interface EditorPopoverProps {
   settings: MenuSettings;
   share: SharePanelProps;
   onPublish: () => void;
+  onMindmap: () => void;
   onExport: (formats: ExportFormat[]) => void;
   exporting: boolean;
   escapeCloses?: boolean;
@@ -49,6 +50,7 @@ export function EditorPopover({
   settings,
   share,
   onPublish,
+  onMindmap,
   onExport,
   exporting,
   escapeCloses = true,
@@ -204,6 +206,15 @@ export function EditorPopover({
                 onClick={() => onExport(["copy"])}
               >
                 <Icon name="copy" />
+              </button>
+              <button
+                type="button"
+                className="btn icon"
+                title="Open in the mindmap — think.stevehoang.com"
+                aria-label="Open in the mindmap"
+                onClick={onMindmap}
+              >
+                <Icon name="mindmap" />
               </button>
             </div>
             <p className="hint publish-target">

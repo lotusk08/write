@@ -51,6 +51,7 @@ const LABELS: Record<ExportFormat, string> = {
 
 const SAVE_DEBOUNCE_MS = 600;
 const PARSE_DEBOUNCE_MS = 300;
+const THINK_URL = "https://think.stevehoang.com";
 
 export default function App() {
   usePinnedViewport();
@@ -560,6 +561,19 @@ export default function App() {
     }
   }, []);
 
+  const openMindmap = useCallback(() => {
+    const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
+    if (!draft || !editor) {
+      return;
+    }
+    const doc = sourceRef.current !== null ? markdownToDoc(sourceRef.current) : editor.getJSON();
+    const meta = { ...draft.meta, ...pendingRef.current.meta };
+    const title = meta.title.trim();
+    const body = docToMarkdown(doc);
+    const markdown = title ? `# ${title}\n\n${body}` : body;
+    window.open(`${THINK_URL}/#${encodeURI(markdown)}`, "_blank", "noopener");
+  }, [editor]);
+
   const onPublished = useCallback(
     (result: PublishResult, plan: PublishPlan) => {
       setPublishOpen(false);
@@ -787,6 +801,7 @@ export default function App() {
             setPublishOpen(true);
           })
         }
+        onMindmap={openMindmap}
         onExport={(formats) => void exportAs(formats)}
         exporting={exporting}
         escapeCloses={!publishOpen}
