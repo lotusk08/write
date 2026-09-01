@@ -20,6 +20,7 @@ import { draftStore, type Draft } from "./lib/db.ts";
 import { createDraft, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
 import { markdownToDoc, parsePost, postPathFromLink, slugFromPath } from "./lib/import.ts";
+import { mindmapUrl } from "./lib/mindmap.ts";
 import { rememberPassword, sessionPassword } from "./lib/password.ts";
 import {
   collabExtensions,
@@ -51,7 +52,6 @@ const LABELS: Record<ExportFormat, string> = {
 
 const SAVE_DEBOUNCE_MS = 600;
 const PARSE_DEBOUNCE_MS = 300;
-const THINK_URL = "https://think.stevehoang.com";
 
 export default function App() {
   usePinnedViewport();
@@ -566,12 +566,16 @@ export default function App() {
     if (!draft || !editor) {
       return;
     }
-    const doc = sourceRef.current !== null ? markdownToDoc(sourceRef.current) : editor.getJSON();
-    const meta = { ...draft.meta, ...pendingRef.current.meta };
-    const title = meta.title.trim();
-    const body = docToMarkdown(doc);
-    const markdown = title ? `# ${title}\n\n${body}` : body;
-    window.open(`${THINK_URL}/#${encodeURI(markdown)}`, "_blank", "noopener");
+    try {
+      const doc = sourceRef.current !== null ? markdownToDoc(sourceRef.current) : editor.getJSON();
+      const meta = { ...draft.meta, ...pendingRef.current.meta };
+      window.open(mindmapUrl(doc, meta.title), "_blank", "noopener");
+    } catch (cause) {
+      setToast({
+        message: cause instanceof Error ? cause.message : "Could not open the mindmap.",
+        kind: "error",
+      });
+    }
   }, [editor]);
 
   const onPublished = useCallback(
