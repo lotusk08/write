@@ -47,7 +47,6 @@ function docxImageType(mime: string): DocxImageType | null {
   return null;
 }
 
-/** Word only accepts a few formats, so anything else (webp, avif…) is re-encoded as PNG. */
 async function prepareImage(blob: Blob): Promise<PreparedImage | null> {
   try {
     const bitmap = await createImageBitmap(blob);
@@ -88,14 +87,12 @@ async function loadImage(src: string): Promise<PreparedImage | null> {
       }
       return prepareImage(await response.blob());
     } catch {
-      // Cross-origin images without CORS headers simply cannot be embedded.
       return null;
     }
   }
   return null;
 }
 
-/** Collects every image in the document up front; docx needs bytes, not URLs. */
 async function collectImages(doc: JSONContent): Promise<Map<string, PreparedImage>> {
   const srcs = new Set<string>();
   const walk = (node: JSONContent) => {
@@ -305,7 +302,6 @@ function blocks(nodes: JSONContent[] | undefined, context: BlockContext): (Parag
   return out;
 }
 
-/** Renders the document (plus a title block) as a real .docx file. */
 export async function docToDocxBlob(doc: JSONContent, meta: PostMeta): Promise<Blob> {
   const images = await collectImages(doc);
 

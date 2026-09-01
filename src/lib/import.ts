@@ -2,24 +2,14 @@ import type { JSONContent } from "@tiptap/core";
 import type { PostMeta } from "../../shared/types.ts";
 import { EMBED_LIQUID } from "../editor/extensions/embed.ts";
 
-/**
- * Reads a published post back into the editor: the inverse of `markdown.ts`.
- *
- * It is written against what this app emits, but the blog's older hand-written
- * posts parse too — anything it does not recognise survives as paragraph text
- * rather than being dropped.
- */
-
 type Mark = { type: string; attrs?: Record<string, unknown> };
 
 const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---[^\S\n]*(?:\r?\n|$)/;
 
-/** Trims layout whitespace only — a non-breaking space is content. */
 function trimAscii(value: string): string {
   return value.replace(/^[ \t\n]+|[ \t\n]+$/g, "");
 }
 
-/** `"a"` / `'a'` / bare, plus the escapes js-yaml uses inside double quotes. */
 function scalar(raw: string): string {
   const value = raw.trim();
   if (/^"[\s\S]*"$/.test(value)) {
@@ -28,10 +18,6 @@ function scalar(raw: string): string {
   if (/^'[\s\S]*'$/.test(value)) {
     return value.slice(1, -1).replace(/''/g, "'");
   }
-  // A bare `null` or `~` is YAML's null, not the word. The blog's build writes
-  // one wherever a post has no description — reading it as text put "null" in
-  // the description, and writing it back quoted it, which made it permanent.
-  // Quoted stays text: `description: "null"` is someone meaning it.
   if (/^(null|~)$/i.test(value)) {
     return "";
   }
@@ -42,10 +28,6 @@ function boolean(raw: string): boolean {
   return /^(true|yes|on)$/i.test(raw.trim());
 }
 
-/**
- * Enough YAML for post front matter: scalars, block and inline sequences, and
- * the one nested map the blog uses (`image:`). Unknown keys are ignored.
- */
 export function parseFrontMatter(yaml: string): Partial<PostMeta> {
   const meta: Partial<PostMeta> = {};
   const lines = yaml.split(/\r?\n/);
@@ -61,7 +43,6 @@ export function parseFrontMatter(yaml: string): Partial<PostMeta> {
     const key = match[1];
     let value = match[2].trim();
 
-    // A bare key introduces either a block sequence or a nested map.
     const items: string[] = [];
     if (!value) {
       while (i + 1 < lines.length && /^\s+-\s+/.test(lines[i + 1])) {
@@ -76,8 +57,6 @@ export function parseFrontMatter(yaml: string): Partial<PostMeta> {
           }
         }
         if (nested.path) {
-          // lqip is the blog build's, not ours: carried through untouched so
-          // re-publishing a post does not blank its placeholder.
           cover = {
             path: nested.path,
             alt: nested.alt ?? "",
@@ -118,14 +97,11 @@ export function parseFrontMatter(yaml: string): Partial<PostMeta> {
         meta[key] = boolean(value);
         break;
       case "image":
-        // `image: path/to.png` — the shorthand form.
         if (value) {
           cover = { path: scalar(value), alt: "" };
         }
         break;
       default:
-        // Whatever this is, it is the blog's and not ours: kept verbatim,
-        // continuation lines and all.
         extra.push(...lines.slice(start, i + 1));
         break;
     }
@@ -144,12 +120,10 @@ function text(value: string, marks: Mark[]): JSONContent {
   return marks.length ? { type: "text", text: value, marks } : { type: "text", text: value };
 }
 
-// A target may contain spaces — the blog links to PDFs whose names have them.
 const IMAGE = /^!\[([^\]]*)\]\(\s*([^)"]*?)(?:\s+"([^"]*)")?\s*\)/;
 const LINK = /^\[((?:[^[\]\\]|\\.)*)\]\(\s*([^)"]*?)(?:\s+"([^"]*)")?\s*\)/;
 const TAG = /^<(u|mark)>([\s\S]*?)<\/\1>/;
 
-/** Text with marks → text nodes. Recurses so marks nest. */
 export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
   const out: JSONContent[] = [];
   let buffer = "";
@@ -171,12 +145,6 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
       i += 2;
       continue;
     }
-    // Every newline inside a paragraph is a break. The blog runs kramdown with
-    // `hard_wrap: true` (`_config.yml`), so a line the author ended by pressing
-    // Enter is a `<br>` on the site — reading it as a wrap and joining the two
-    // lines with a space took that break out of every post opened here.
-    // Trailing spaces before it are the older way of writing the same break and
-    // are no part of the text.
     const wrap = /^[^\S\n]*\n/.exec(rest);
     if (wrap) {
       flush();
@@ -188,7 +156,6 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
       const code = /^(`+)([\s\S]*?)\1(?!`)/.exec(rest);
       if (code) {
         flush();
-        // The blog styles a code span as a path when it is tagged this way.
         const tagged = /^\{:\s*\.filepath\s*\}/.exec(rest.slice(code[0].length));
         out.push(
           text(code[2].replace(/^ (.*) $/, "$1"), [
@@ -241,8 +208,6 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
         /^(\*\*|__)(?=\S)([\s\S]*?\S)\1/.exec(rest) ??
         /^(~~)(?=\S)([\s\S]*?\S)\1/.exec(rest) ??
         /^(\*|_)(?=\S)([\s\S]*?\S)\1/.exec(rest);
-      // `_` only marks emphasis between word boundaries, so file_name_here
-      // and snake_case survive intact.
       const underscore = emphasis?.[1].startsWith("_");
       const boundary = !underscore || !/\w/.test(source[i - 1] ?? "");
       if (emphasis && boundary) {
@@ -269,15 +234,8 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
   return out;
 }
 
-/**
- * Whitespace at either end of a paragraph is not content, and leaving it in
- * would come back changed the next time the post was read.
- */
 function trimRun(nodes: JSONContent[]): JSONContent[] {
   const out = [...nodes];
-  // The break that ended the line an image was on is the layout, not text.
-  // Left in, it becomes a paragraph of its own between two images — which is a
-  // blank line on the way out, and a blank line is the end of the row.
   while (out[0]?.type === "hardBreak") {
     out.shift();
   }
@@ -300,14 +258,8 @@ function trimRun(nodes: JSONContent[]): JSONContent[] {
   return out;
 }
 
-/** A Kramdown attribute list: `{: lqip="…" w="600" .light }`. */
 const IAL = /^\{:[^}\n]*\}/;
 
-/**
- * Images are block nodes here, so an image found mid-paragraph is lifted out
- * and the text around it stays behind. A Kramdown attribute list written right
- * after one belongs to the image, and rides along on the node.
- */
 function blocksFromInline(nodes: JSONContent[]): JSONContent[] {
   if (!nodes.some((node) => node.type === "image")) {
     const only = trimRun(nodes);
@@ -315,12 +267,6 @@ function blocksFromInline(nodes: JSONContent[]): JSONContent[] {
   }
 
   const out: JSONContent[] = [];
-  /**
-   * Whether each block carried on the line the one before it was on, rather
-   * than starting a new one. A caption written beside its image and a caption
-   * written under it are the same paragraph but not the same rendering: with
-   * `hard_wrap` the second has a `<br>` between them and the first does not.
-   */
   const carriesOn: boolean[] = [];
   let run: JSONContent[] = [];
   const flush = () => {
@@ -339,8 +285,6 @@ function blocksFromInline(nodes: JSONContent[]): JSONContent[] {
       run.push(node);
       continue;
     }
-    // Read before the flush clears it: a break at the end of what came before
-    // put this image on a line of its own.
     const sameLine = run.length > 0 && run[run.length - 1]?.type !== "hardBreak";
     flush();
     const next = nodes[i + 1];
@@ -359,7 +303,6 @@ function blocksFromInline(nodes: JSONContent[]): JSONContent[] {
   }
 
   flush();
-  // They were one paragraph, and are written back as one.
   return out.map((block, index) =>
     index === 0
       ? block
@@ -381,25 +324,16 @@ function paragraph(source: string): JSONContent {
 
 const FENCE = /^(\s*)(```+|~~~+)\s*([\w+-]*)\s*$/;
 const MATH = /^\s*\$\$\s*$/;
-/** Any Liquid tag on a line of its own — an embed, or something to keep. */
 const LIQUID = /^\{%[\s\S]*%\}$/;
-/** `[^note]: …` — a footnote definition, which has to start its own block. */
 const FOOTNOTE_DEF = /^\[\^[^\]\s]+\]:/;
-/** `: definition` under its term — a Kramdown description list. */
 const DESCRIPTION = /^:\s+\S/;
-/** A line that opens raw HTML — an embed, mostly. Kept verbatim. */
 const HTML_BLOCK = /^\s*<(\/?)([a-zA-Z][\w-]*)(\s[^>]*)?>/;
 const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const BULLET = /^(\s*)([-*+])\s+(.*)$/;
 const ORDERED = /^(\s*)(\d+)[.)]\s+(.*)$/;
-/**
- * A marker indented four spaces or more is not a list — it is a continuation
- * of the block above it, which is how the blog's older posts read.
- */
 const LIST_START = /^ {0,3}(?:[-*+]|\d+[.)])\s+/;
 const NOTE = /^\{:\s*\.(?:note-)?(tip|info|important|warning|danger|author)\s*\}\s*$/;
-/** Any other attribute list written on a line of its own. */
 const BLOCK_IAL = /^\{:[^}\n]*\}\s*$/;
 const TABLE_DIVIDER = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
 
@@ -430,7 +364,6 @@ function splitRow(line: string): string[] {
     .map((cell) => cell.replace(/\\\|/g, "|").trim());
 }
 
-/** `:---` left, `---:` right, `:---:` centre — the divider row's alignment. */
 function alignments(divider: string): (string | null)[] {
   return splitRow(divider).map((rule) => {
     const left = rule.startsWith(":");
@@ -453,11 +386,9 @@ function cells(row: string[], header: boolean, align: (string | null)[]): JSONCo
   };
 }
 
-/** Markdown body (no front matter) → a Tiptap document body. */
 function parseBlocks(lines: string[]): JSONContent[] {
   const out: JSONContent[] = [];
   let i = 0;
-  // An attribute list written above its block waits here for it to arrive.
   let pending: string | null = null;
   let pendingAt = 0;
 
@@ -479,8 +410,6 @@ function parseBlocks(lines: string[]): JSONContent[] {
 
     if (BLOCK_IAL.test(line.trim())) {
       const value = line.trim();
-      // Kramdown attaches it to the block it is written against; a blank line
-      // between the two means it belongs to the one on the other side.
       if (out.length && lines[i - 1]?.trim()) {
         out[out.length - 1].attrs = { ...out[out.length - 1].attrs, blockIal: value };
       } else {
@@ -509,13 +438,12 @@ function parseBlocks(lines: string[]): JSONContent[] {
 
     if (LIQUID.test(line.trim())) {
       const embed = EMBED_LIQUID.exec(line.trim());
-      // Written directly under a line of text, it was part of that paragraph.
       const joins = out.length > 0 && Boolean(lines[i - 1]?.trim());
       const attrs = joins ? { joinPrevious: true } : {};
       out.push(
         embed
           ? { type: "embed", attrs: { platform: embed[1], quote: embed[2], id: embed[3], ...attrs } }
-          : // Some other Liquid tag: hold it exactly as written.
+          :
             {
               type: "rawBlock",
               attrs,
@@ -526,7 +454,6 @@ function parseBlocks(lines: string[]): JSONContent[] {
       continue;
     }
 
-    // Raw HTML, and description lists, which have no node of their own.
     if (HTML_BLOCK.test(line) || DESCRIPTION.test(lines[i + 1] ?? "")) {
       const verbatim: string[] = [];
       while (i < lines.length && lines[i].trim()) {
@@ -598,14 +525,10 @@ function parseBlocks(lines: string[]): JSONContent[] {
         quoted.push(lines[i].trimStart().replace(/^>\s?/, ""));
         i += 1;
       }
-      // A quote runs to the blank line: headings, lists and fences written
-      // under it without a marker are still inside it. The one thing that is
-      // not is its own attribute list.
       while (i < lines.length && lines[i].trim() && !BLOCK_IAL.test(lines[i].trim())) {
         quoted.push(lines[i]);
         i += 1;
       }
-      // Kramdown hangs the callout class off the line after the block.
       let note: string | null = null;
       const attribute = i < lines.length ? NOTE.exec(lines[i].trim()) : null;
       if (attribute) {
@@ -652,8 +575,6 @@ function parseBlocks(lines: string[]): JSONContent[] {
 
     const marker = LIST_START.test(line) ? (BULLET.exec(line) ?? ORDERED.exec(line)) : null;
     if (marker) {
-      // The list starts at its own indent, so a stray indented bullet with no
-      // parent still reads as a list rather than consuming nothing.
       const [list, next] = parseList(lines, i, marker[1].length);
       if (next > i) {
         out.push(list);
@@ -662,7 +583,6 @@ function parseBlocks(lines: string[]): JSONContent[] {
       }
     }
 
-    // Anything else runs to the next blank line or block opener.
     const buffer: string[] = [line];
     i += 1;
     while (i < lines.length && !isBlockStart(lines[i])) {
@@ -676,11 +596,6 @@ function parseBlocks(lines: string[]): JSONContent[] {
   return rowAttributes(out);
 }
 
-/**
- * A row of images is one block as far as Kramdown is concerned, and its
- * attribute list is written under the last line. Moving it there keeps a row
- * reading the same after a trip through the editor.
- */
 function rowAttributes(blocks: JSONContent[]): JSONContent[] {
   for (let i = 0; i < blocks.length; i++) {
     if (blocks[i].type !== "image" || !blocks[i].attrs?.blockIal) {
@@ -705,10 +620,6 @@ function blocksOrEmpty(lines: string[]): JSONContent[] {
 
 const TASK = /^\[([ xX])\]\s+(.*)$/;
 
-/**
- * One list and everything nested under it. Items keep their own blocks, so a
- * paragraph or a nested list inside an item comes back as such.
- */
 function parseList(lines: string[], start: number, indent: number): [JSONContent, number] {
   const items: JSONContent[] = [];
   let ordered = false;
@@ -724,7 +635,6 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
       break;
     }
     if (match[1].length > indent) {
-      // Deeper marker without a parent item: treat it as this list's level.
       break;
     }
     if (items.length === 0) {
@@ -743,8 +653,6 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
     body.push(task ? task[2] : match[3]);
     i += 1;
 
-    // Continuation lines belong to the item while they stay indented past the
-    // marker, or are blank and followed by more of the same item.
     while (i < lines.length) {
       const next = lines[i];
       if (!next.trim()) {
@@ -761,8 +669,6 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
         i += 1;
         continue;
       }
-      // Lazy continuation: a plain line under an item belongs to it, as long
-      // as it does not start a block of its own.
       if (!isBlockStart(next)) {
         body.push(next);
         i += 1;
@@ -789,10 +695,6 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
   ];
 }
 
-/**
- * A tab indents to the next four-column stop, so nesting written with tabs
- * lines up with nesting written with spaces. Code keeps its tabs.
- */
 function expandTabs(markdown: string): string {
   let fenced = false;
   return markdown
@@ -816,17 +718,11 @@ function expandTabs(markdown: string): string {
     .join("\n");
 }
 
-/** Markdown body (no front matter) → a Tiptap document. */
 export function markdownToDoc(markdown: string): JSONContent {
   const content = parseBlocks(expandTabs(markdown.replace(/\r\n/g, "\n")).split("\n"));
   return { type: "doc", content: content.length ? content : [{ type: "paragraph" }] };
 }
 
-/**
- * The blog's edit button hands over whatever it links to. Accepts a repo path
- * as well as the GitHub blob/edit URLs the button used to point at, so an old
- * link pasted into the address bar still opens the right post.
- */
 export function postPathFromLink(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) {
@@ -840,7 +736,6 @@ export function postPathFromLink(value: string): string | null {
   return /\.(md|markdown)$/i.test(path) ? decodeURIComponent(path) : null;
 }
 
-/** `_posts/2026-08-22-coffee-notes.md` → `coffee-notes`. */
 export function slugFromPath(path: string): string {
   const file = path.split("/").pop() ?? "";
   return file.replace(/\.(md|markdown)$/i, "").replace(/^\d{4}-\d{2}-\d{2}-/, "");
@@ -851,7 +746,6 @@ export interface ImportedPost {
   doc: JSONContent;
 }
 
-/** Splits a post file into its front matter and its body. */
 export function parsePost(source: string): ImportedPost {
   const normalized = source.replace(/^﻿/, "").replace(/\r\n/g, "\n");
   const front = FRONT_MATTER.exec(normalized);

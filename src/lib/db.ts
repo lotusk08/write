@@ -9,9 +9,9 @@ export interface Draft {
   meta: PostMeta;
   createdAt: number;
   updatedAt: number;
-  /** Repo path this draft was last published to, if any. */
   publishedPath?: string;
   publishedAt?: number;
+  shareToken?: string;
 }
 
 export interface StoredImage {
@@ -77,10 +77,8 @@ export const imageStore = {
   all: () => tx<StoredImage[]>(IMAGES, "readonly", (s) => s.getAll() as IDBRequest<StoredImage[]>),
 };
 
-/** `local:<id>` srcs point at IndexedDB rather than the network. */
 export const LOCAL_PREFIX = "local:";
 
-/** Not a type predicate: narrowing its negative branch would land on `never`. */
 export function isLocalSrc(src: string | null | undefined): boolean {
   return typeof src === "string" && src.startsWith(LOCAL_PREFIX);
 }
@@ -91,7 +89,6 @@ export function localId(src: string): string {
 
 const objectUrls = new Map<string, string>();
 
-/** Resolves a `local:` src to an object URL, caching one URL per image id. */
 export async function resolveLocalSrc(src: string): Promise<string | null> {
   const id = localId(src);
   const cached = objectUrls.get(id);

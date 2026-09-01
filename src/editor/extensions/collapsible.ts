@@ -5,17 +5,13 @@ import { TextSelection } from "@tiptap/pm/state";
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     collapsible: {
-      /** Wraps the cursor position in a new collapsible section. */
       setCollapsible: () => ReturnType;
-      /** Replaces the surrounding collapsible with its plain content. */
       unsetCollapsible: () => ReturnType;
-      /** Opens or closes every collapsible in the document. */
       setAllCollapsiblesOpen: (open: boolean) => ReturnType;
     };
   }
 }
 
-/** The clickable summary line of a collapsible section. */
 export const CollapsibleSummary = Node.create({
   name: "collapsibleSummary",
   content: "inline*",
@@ -39,7 +35,6 @@ export const CollapsibleSummary = Node.create({
 
   addKeyboardShortcuts() {
     return {
-      // Enter in the summary drops into the body instead of splitting the node.
       Enter: () => {
         const { state, view } = this.editor;
         const { $from } = state.selection;
@@ -68,7 +63,6 @@ export const CollapsibleSummary = Node.create({
   },
 });
 
-/** The body of a collapsible section — any block content. */
 export const CollapsibleContent = Node.create({
   name: "collapsibleContent",
   content: "block+",
@@ -140,7 +134,6 @@ export const Collapsible = Node.create({
       paint(Boolean(node.attrs.open));
 
       toggle.addEventListener("mousedown", (event) => {
-        // Keep the click from moving the text cursor into the summary.
         event.preventDefault();
         const pos = getPos();
         if (typeof pos !== "number") {
@@ -191,8 +184,6 @@ export const Collapsible = Node.create({
             return false;
           }
 
-          // The current block becomes the summary line, so `>>> Recipe` and
-          // "select a paragraph, make it a section" both do the obvious thing.
           const text = $from.parent.textContent.trim();
           const node = schema.nodes[this.name].createChecked({ open: true }, [
             summaryType.createChecked(null, text ? schema.text(text) : null),
@@ -204,7 +195,6 @@ export const Collapsible = Node.create({
           }
           const from = $from.before($from.depth);
           tr.replaceRangeWith(from, $from.after($from.depth), node);
-          // +1 enters the collapsible, +1 more enters the summary's content.
           tr.setSelection(TextSelection.near(tr.doc.resolve(from + 2 + text.length)));
           dispatch(tr.scrollIntoView());
           return true;
@@ -261,7 +251,6 @@ export const Collapsible = Node.create({
   addInputRules() {
     return [
       new InputRule({
-        // `>>> ` (or `::: `) at the start of a paragraph starts a collapsible.
         find: /^(>>>|:::)\s$/,
         handler: ({ range, chain }) => {
           chain().deleteRange(range).setCollapsible().run();

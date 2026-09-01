@@ -53,10 +53,12 @@ its own npm lockfile.
   post; `import.ts` reads one back and is the inverse of it. `viewport.ts`
   measures the part of the window a phone keyboard leaves on screen; the shell
   is pinned to it and every pop-up is placed against it, not `innerHeight`.
-- `worker/index.ts` — the only thing holding a credential. Three endpoints
-  (`/api/config`, `/api/source`, `/api/publish`), a constant-time check on the
+- `worker/index.ts` — the only thing holding a credential. The blog endpoints
+  (`/api/config`, `/api/source`, `/api/publish`), the share endpoints
+  (`/api/share`, `/api/share/<token>`), a constant-time check on the
   password, and path validation against the configured directories so a leaked
-  password cannot rewrite workflows.
+  password cannot rewrite workflows. `worker/share.ts` is the `ShareRoom`
+  Durable Object behind sharing: a y-websocket server, one room per token.
 - `shared/` — GitHub calls, base64 and the post types. No DOM in it, so it is
   read by both the app and the Worker; `lib/api.ts` is the browser's only door
   to the network, and it only ever calls `/api`.
@@ -172,6 +174,24 @@ paragraph is the way out of it.
 The publish password lives in session storage (`src/lib/password.ts`), never in
 Settings: one prompt per sitting, and closing the tab — or the app going away
 on a phone — is what forgets it.
+
+## Sharing a draft
+
+The Share tab holds one switch. Turning it on takes the publish password: the
+draft is copied into a `ShareRoom` Durable Object and the app hands back
+`?share=<token>`. The token is the whole credential for joining — the link
+opens the same live document for anyone holding it, password-free, the same
+trade `?edit=` makes. Turning the switch off (or deleting the draft while the
+password is in the session) deletes the room and closes every connection with
+code 4404, which each participant's app reads as the cue to drop the token and
+carry on with its local copy — autosave ran the whole time, so nothing typed
+together is lost. While a draft carries a `shareToken` the editor runs on Yjs
+(`src/lib/share.ts` client-side): its own undo is off, content comes from the
+room rather than `setContent`, and carets show who is where. Only the body is
+shared; title and front matter stay per-device. Trying it locally means
+`wrangler dev` — the room is a Durable Object, and Vite serves no `/api`. In
+wrangler's local runtime a binary WebSocket message arrives as a Blob, not the
+ArrayBuffer production hands over, so the room reads both.
 
 ## Editing a published post
 

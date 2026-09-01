@@ -19,7 +19,6 @@ async function inlineImages(root: Document): Promise<void> {
   );
 }
 
-/** Rewrites the editor's collapsible markup into real `<details>` elements. */
 function toDetails(root: Document): void {
   for (const node of [...root.querySelectorAll("[data-collapsible]")]) {
     const details = root.createElement("details");
@@ -41,7 +40,6 @@ function escapeHtml(value: string): string {
   return value.replace(/[&<>"]/g, (char) => `&${{ "&": "amp", "<": "lt", ">": "gt", '"': "quot" }[char]};`);
 }
 
-/** A self-contained HTML file: images inlined, minimal reading styles. */
 export async function buildHtmlDocument(editorHtml: string, meta: PostMeta): Promise<string> {
   const parsed = new DOMParser().parseFromString(`<body>${editorHtml}</body>`, "text/html");
   toDetails(parsed);

@@ -59,8 +59,6 @@ export function PostPanel({
       return;
     }
     const stored = await storeImageFile(file);
-    // No lqip carried over: it is a thumbnail of the picture being replaced,
-    // and the blog's build makes a new one.
     onChange({ cover: { path: `local:${stored.id}`, alt: meta.cover?.alt ?? "" } });
   };
 

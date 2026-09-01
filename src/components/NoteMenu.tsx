@@ -17,29 +17,17 @@ const LABELS: Record<NoteType, string> = {
   important: "Important",
   warning: "Warning",
   danger: "Danger",
-  // Not a callout: the blog's centred attribution under a pull quote.
   author: "Author",
 };
 
-/** Gap between the menu and the button, and between the menu and the screen. */
 const GAP = 6;
 const EDGE = 8;
 
-/** Quote styles that map onto the blog's `{: .note-* }` callouts. */
 export function NoteMenu({ editor, active, note }: NoteMenuProps) {
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const menu = useRef<HTMLDivElement>(null);
 
-  /**
-   * Puts the menu against its button, inside the part of the window that is on
-   * screen. It opens upward — the toolbar is at the foot of the window — and
-   * flips under the button when the keyboard has taken the room above it.
-   *
-   * It re-runs rather than closing when things move: the row this button sits
-   * in scrolls, and on a phone tapping a half-visible tool scrolls it into
-   * view, which would otherwise shut the menu on the way open.
-   */
   const place = useCallback(() => {
     const element = menu.current;
     const anchor = button.current?.getBoundingClientRect();
@@ -47,8 +35,6 @@ export function NoteMenu({ editor, active, note }: NoteMenuProps) {
       return;
     }
     const band = viewportBand();
-    // Measured from a corner it cannot be squeezed into, and never taller than
-    // the band — with a keyboard out there is not much of one left.
     element.style.left = "0px";
     element.style.top = "0px";
     element.style.maxHeight = `${band.height - EDGE * 2}px`;
@@ -59,7 +45,6 @@ export function NoteMenu({ editor, active, note }: NoteMenuProps) {
       above >= band.top + EDGE
         ? above
         : Math.max(band.top + EDGE, Math.min(anchor.bottom + GAP, band.bottom - EDGE - box.height));
-    // Left-hand edge wins when the menu is wider than what is left of the band.
     const left = Math.max(band.left + EDGE, Math.min(anchor.left - GAP, band.right - EDGE - box.width));
     element.style.top = `${Math.round(top)}px`;
     element.style.left = `${Math.round(left)}px`;
@@ -78,7 +63,6 @@ export function NoteMenu({ editor, active, note }: NoteMenuProps) {
     const close = () => setOpen(false);
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        // Kept off the document, where Escape closes the editor menu.
         event.stopPropagation();
         close();
         button.current?.focus();
@@ -90,7 +74,6 @@ export function NoteMenu({ editor, active, note }: NoteMenuProps) {
         close();
       }
     };
-    // One placement a frame: a scroll fires far more often than that.
     let frame = 0;
     const follow = () => {
       window.cancelAnimationFrame(frame);
@@ -146,7 +129,6 @@ export function NoteMenu({ editor, active, note }: NoteMenuProps) {
         <Icon name="quote" />
       </button>
 
-      {/* Portalled: the toolbar scrolls horizontally, which would clip it. */}
       {open
         ? createPortal(
             <div ref={menu} className="menu floating" role="menu">

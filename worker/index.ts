@@ -8,29 +8,23 @@ import {
 } from "../shared/github.ts";
 import type { AppConfig, PublishFile, PublishRequest, PublishResult } from "../shared/types.ts";
 
+export { ShareRoom } from "./share.ts";
+
 export interface Env {
   ASSETS: Fetcher;
-  /** Fine-grained PAT with Contents: Read & write on the blog repo. Secret. */
+  SHARE: DurableObjectNamespace;
   GITHUB_TOKEN?: string;
-  /** The password the app must send before this will touch the blog. Secret. */
   WRITE_PASSWORD?: string;
   BLOG_REPO?: string;
   BLOG_BRANCH?: string;
-  /** Public site URL, used to preview images already published. */
   SITE_URL?: string;
   POSTS_DIR?: string;
   DRAFTS_DIR?: string;
   IMAGES_DIR?: string;
 }
 
-/** 20 MB of base64 across a single commit — comfortably under the API limits. */
 const MAX_REQUEST_BYTES = 20 * 1024 * 1024;
 
-/**
- * Secrets are often piped in, and a trailing newline in the header makes
- * GitHub treat the request as anonymous — which a private repo answers with a
- * flat "not found".
- */
 function githubToken(env: Env): string {
   return (env.GITHUB_TOKEN ?? "").trim();
 }
@@ -43,10 +37,6 @@ function dirs(env: Env) {
   };
 }
 
-/**
- * Compares in constant time. A password check that returns early on the first
- * wrong character tells you, in how long it took, how much of it was right.
- */
 function sameSecret(a: string, b: string): boolean {
   if (a.length !== b.length) {
     return false;
@@ -58,7 +48,6 @@ function sameSecret(a: string, b: string): boolean {
   return differences === 0;
 }
 
-/** What is missing before this deployment can reach the blog at all. */
 function unreachable(env: Env): string | null {
   if (!env.GITHUB_TOKEN) {
     return "This deployment has no GITHUB_TOKEN, so it cannot reach the blog. Add one with `wrangler secret put GITHUB_TOKEN`.";
@@ -69,7 +58,6 @@ function unreachable(env: Env): string | null {
   return null;
 }
 
-/** What is missing before it can publish, in the order to fix it. */
 function problem(env: Env): string | null {
   if (!env.GITHUB_TOKEN) {
     return unreachable(env);
@@ -90,14 +78,6 @@ function json(body: unknown, status = 200): Response {
   });
 }
 
-/**
- * Guards everything that touches the blog. The order matters: a deployment
- * that is not configured says so plainly, and one that is checks the caller
- * before it will use its token for them.
- *
- * 401 is the app's cue to ask for the password again, so a wrong one has to be
- * distinguishable from a deployment that was never given one.
- */
 function authorize(request: Request, env: Env): Response | null {
   const missing = problem(env);
   if (missing) {
@@ -110,13 +90,6 @@ function authorize(request: Request, env: Env): Response | null {
   return null;
 }
 
-/**
- * What to answer when GitHub refuses. Its 401 and 403 are about this
- * deployment's own token, not about the caller — and 401 is the app's signal to
- * forget the password and ask again, which would be exactly the wrong move. So
- * a credential problem upstream is reported as one, and never mistaken for the
- * password being wrong.
- */
 function upstreamStatus(error: unknown): number {
   if (!(error instanceof GitHubError)) {
     return 500;
@@ -126,10 +99,6 @@ function upstreamStatus(error: unknown): number {
 
 const BRANCH_RE = /^[A-Za-z0-9._\-/]{1,120}$/;
 
-/**
- * Only ever writes inside the configured post/draft/image directories, so a
- * session someone else got hold of cannot rewrite workflows or other files.
- */
 function validateFiles(files: unknown, env: Env): { files: PublishFile[] } | { error: string } {
   if (!Array.isArray(files) || files.length === 0) {
     return { error: "No files to publish." };
@@ -223,20 +192,12 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
   }
 }
 
-/**
- * GitHub answers 404 both for a file that is not there and for a repository a
- * token was never granted, which are very different things to fix. Only runs
- * when a read has already failed, so the extra calls cost nothing in normal
- * use.
- */
 async function whyMissing(env: Env, branch: string, path: string): Promise<string> {
   const repo = env.BLOG_REPO!;
   const token = githubToken(env);
   try {
     await getDefaultBranch(token, repo);
   } catch {
-    // Whether GitHub knows who is asking separates a bad token from a good
-    // token that was never given this repository.
     const login = await tokenLogin(token);
     return login
       ? `The token authenticates as @${login}, but that account cannot see ${repo}. Add the repository under the token's "Repository access" and give it Contents: Read & write — GitHub reports a private repo as "not found" for a token it was not granted.`
@@ -247,21 +208,10 @@ async function whyMissing(env: Env, branch: string, path: string): Promise<strin
       return `${repo} has no branch called "${branch}". Point BLOG_BRANCH at the branch the posts are on.`;
     }
   } catch {
-    // The branch check is only here to explain things; ignore its failures.
   }
   return `No such file on ${repo}@${branch}: ${path}`;
 }
 
-/**
- * Reads one post back out of the repo so it can be edited here.
- *
- * A published post is asked for without a password. The repository is private,
- * but a file under `_posts` is on the blog already — the same words, rendered —
- * so a password on the way to it buys nothing and costs the thing the blog's
- * *Edit this post* button is for: following that link and simply arriving in
- * the editor. Drafts are the opposite case and stay behind the password: they
- * are the writing nobody has seen.
- */
 async function handleSource(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const path = (url.searchParams.get("path") ?? "").replace(/^\/+/, "");
@@ -301,12 +251,62 @@ async function handleSource(request: Request, env: Env): Promise<Response> {
   }
 }
 
+const SHARE_SEED_MAX_BYTES = 4 * 1024 * 1024;
+const SHARE_PATH = /^\/api\/share\/([0-9a-f]{32})$/;
+
+async function handleShareCreate(request: Request, env: Env): Promise<Response> {
+  const denied = authorize(request, env);
+  if (denied) {
+    return denied;
+  }
+  const seed = await request.arrayBuffer();
+  if (seed.byteLength > SHARE_SEED_MAX_BYTES) {
+    return json({ error: "Draft is too large to share (max ~4 MB)." }, 400);
+  }
+  const token = [...crypto.getRandomValues(new Uint8Array(16))]
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+  const room = env.SHARE.get(env.SHARE.idFromName(token));
+  const seeded = await room.fetch("https://share/seed", { method: "POST", body: seed });
+  if (!seeded.ok) {
+    return json({ error: "Could not start the share." }, 500);
+  }
+  return json({ token });
+}
+
+async function handleShareRoom(request: Request, env: Env, token: string): Promise<Response> {
+  const room = env.SHARE.get(env.SHARE.idFromName(token));
+  if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+    return room.fetch(request);
+  }
+  if (request.method === "DELETE") {
+    const denied = authorize(request, env);
+    if (denied) {
+      return denied;
+    }
+    return room.fetch("https://share/", { method: "DELETE" });
+  }
+  if (request.method === "GET") {
+    return room.fetch("https://share/", { method: "GET" });
+  }
+  return json({ error: "Use GET, DELETE, or a WebSocket." }, 405);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/config") {
       return handleConfig(env);
+    }
+    if (url.pathname === "/api/share") {
+      return request.method === "POST"
+        ? handleShareCreate(request, env)
+        : json({ error: "Use POST." }, 405);
+    }
+    const share = SHARE_PATH.exec(url.pathname);
+    if (share) {
+      return handleShareRoom(request, env, share[1]);
     }
     if (url.pathname === "/api/publish") {
       return request.method === "POST"
@@ -322,7 +322,6 @@ export default {
       return json({ error: "Not found." }, 404);
     }
 
-    // Everything else is the SPA; `not_found_handling` serves index.html.
     return env.ASSETS.fetch(request);
   },
 } satisfies ExportedHandler<Env>;

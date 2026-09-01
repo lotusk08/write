@@ -8,7 +8,6 @@ import type { NoteType } from "../editor/extensions/noteQuote.ts";
 import { Icon, type IconName } from "./Icons.tsx";
 import { NoteMenu } from "./NoteMenu.tsx";
 
-/** Blocks the centre-row attribute can sit on, in the order it is looked for. */
 const CENTERABLE = ["image", "paragraph", "blockquote", "heading", "table"];
 
 interface ToolbarProps {
@@ -22,7 +21,6 @@ interface ToolProps {
   icon?: IconName;
   label?: ReactNode;
   active?: boolean;
-  /** Kept in place rather than hidden, so the row never shifts under a tap. */
   disabled?: boolean;
 }
 
@@ -43,16 +41,12 @@ function Tool({ title, onClick, icon, label, active, disabled }: ToolProps) {
   );
 }
 
-/** How much of the row is still off to one side before it counts as more. */
 const EDGE_SLACK = 2;
 
 export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
   const fileInput = useRef<HTMLInputElement>(null);
   const row = useRef<HTMLDivElement>(null);
 
-  // A phone cannot show two dozen tools at once, so the row scrolls — and says
-  // so by fading out on whichever side it still has tools on. Nothing else
-  // marks the edge: a touch screen draws no scrollbar.
   useEffect(() => {
     const element = row.current;
     if (!element) {
@@ -66,7 +60,6 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
     };
     sync();
     element.addEventListener("scroll", sync, { passive: true });
-    // The dock is what changes width — the rail, focus mode, the window.
     const observer = new ResizeObserver(sync);
     observer.observe(element);
     return () => {
@@ -83,7 +76,6 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
       strike: instance.isActive("strike"),
       code: instance.isActive("code"),
       filepath: instance.isActive("code", { filepath: true }),
-      // The blog's `{: .d-flex .c-center }`, wherever the cursor is sitting.
       centered: CENTERABLE.some((type) => instance.getAttributes(type).blockIal === CENTER_ROW),
       imageRow: inImageRow(instance.state),
       canImageRow: canImageRow(instance.state),
@@ -102,7 +94,6 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
     }),
   });
 
-  /** Takes the page URL and works out the include the blog needs. */
   const insertEmbed = () => {
     const url = window.prompt(
       "Video or post URL (YouTube, X, Bilibili, Spotify, Twitch)",
@@ -135,8 +126,6 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
   return (
     <div ref={row} className="toolbar" role="toolbar" aria-label="Formatting">
       <div className="tool-group">
-        {/* The post title is front matter, so the body starts at H2 — the
-            level the blog's own posts and table of contents use. */}
         {([2, 3, 4] as const).map((level) => (
           <Tool
             key={level}

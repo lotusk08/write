@@ -8,16 +8,10 @@ interface DraftRailProps {
   currentId: string | null;
   onSelect: (id: string) => void;
   onNew: () => void;
-  /** Renames the open draft — the only one whose title is on show. */
   onRename: (title: string) => void;
   onDelete: (id: string) => void;
 }
 
-/**
- * Drafts live entirely on the rail: two decks of sheets with the open draft
- * between them. That one sheet renames in place on a double-click and carries
- * the delete button; the rest are one click away.
- */
 export function DraftRail({
   drafts,
   currentId,
@@ -27,17 +21,12 @@ export function DraftRail({
   onDelete,
 }: DraftRailProps) {
   const ordered = [...drafts].sort((a, b) => a.createdAt - b.createdAt);
-  // Non-null only while the open title is being edited, so the tab can swap
-  // its label for a field without a second flag.
   const [editing, setEditing] = useState<string | null>(null);
   const field = useRef<HTMLInputElement>(null);
   const renaming = editing !== null;
 
-  // Switching drafts abandons a rename rather than carrying it across.
   useEffect(() => setEditing(null), [currentId]);
 
-  // Keyed off the flag, not the text: selecting on every keystroke would eat
-  // each character as it was typed.
   useEffect(() => {
     if (renaming) {
       field.current?.select();
@@ -51,8 +40,6 @@ export function DraftRail({
     }
   };
 
-  // The open draft splits the rail in two, and each deck fans on its own:
-  // reaching for the sheets above leaves the ones below stacked.
   const open = ordered.findIndex((draft) => draft.id === currentId);
   const openDraft = open === -1 ? null : ordered[open];
   const label = openDraft ? draftLabel(openDraft) : "";
@@ -64,8 +51,6 @@ export function DraftRail({
           key={draft.id}
           type="button"
           className="rail-tab is-layer"
-          // Earlier drafts paint over later ones, so each sheet tucks behind
-          // the one above and leaves only its edge showing.
           style={{ "--z": ordered.length - ordered.indexOf(draft) } as CSSProperties}
           title={draftLabel(draft)}
           onClick={() => onSelect(draft.id)}
@@ -110,8 +95,6 @@ export function DraftRail({
                 ref={field}
                 className="rail-tab-label rail-tab-field"
                 value={editing}
-                // Sizes the field along its vertical run, so it grows with the
-                // name the way the label it replaced did.
                 size={Math.max(8, editing.length + 1)}
                 aria-label="Draft title"
                 autoFocus
@@ -121,7 +104,6 @@ export function DraftRail({
                   if (event.key === "Enter") {
                     commit();
                   } else if (event.key === "Escape") {
-                    // Kept off the document, where Escape closes the menu.
                     event.stopPropagation();
                     setEditing(null);
                   }

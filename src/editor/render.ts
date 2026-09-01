@@ -1,13 +1,3 @@
-/**
- * Live previews for the three block types the blog renders with a JavaScript
- * library rather than with Markdown: Mermaid diagrams, Chart.js charts and
- * TeX. Each library is imported on first use, so a post without them never
- * pays for them.
- *
- * Every renderer paints into the element it is given and returns a teardown
- * for whatever it left behind.
- */
-
 export type Teardown = () => void;
 
 const noop: Teardown = () => {};
@@ -33,7 +23,6 @@ export async function renderMermaid(
 ): Promise<Teardown> {
   try {
     const mermaid = await loadMermaid();
-    // Re-initialised per render so the diagram follows the app's theme.
     mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: dark ? "dark" : "default" });
     const { svg } = await mermaid.render(id, source);
     target.innerHTML = svg;
@@ -42,7 +31,6 @@ export async function renderMermaid(
       target.innerHTML = "";
     };
   } catch (error) {
-    // A half-typed diagram leaves its error element behind on the body.
     document.querySelector(`#d${id}`)?.remove();
     return fail(target, error);
   }
@@ -61,8 +49,6 @@ export async function renderChart(source: string, target: HTMLElement, dark: boo
     const Chart = await loadChart();
     target.innerHTML = "";
     delete target.dataset.state;
-    // Chart.js measures its own box, so the preview gets a fixed one rather
-    // than a pie chart as tall as the editor is wide.
     const frame = document.createElement("div");
     frame.className = "chart-frame";
     const canvas = document.createElement("canvas");
@@ -92,10 +78,6 @@ async function loadKatex() {
   return katexLoader;
 }
 
-/**
- * The blog typesets with MathJax, not KaTeX, so this is a preview of the same
- * TeX rather than the exact glyphs the published page will show.
- */
 export async function renderMath(source: string, target: HTMLElement): Promise<Teardown> {
   try {
     const katex = await loadKatex();

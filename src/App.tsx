@@ -8,12 +8,28 @@ import { Icon } from "./components/Icons.tsx";
 import { PublishDialog } from "./components/PublishDialog.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
 import { editorExtensions } from "./editor/extensions.ts";
-import { fetchAppConfig, fetchPostSource } from "./lib/api.ts";
+import {
+  createShareRoom,
+  endShareRoom,
+  fetchAppConfig,
+  fetchPostSource,
+  shareRoomLive,
+  PasswordRejected,
+} from "./lib/api.ts";
 import { draftStore, type Draft } from "./lib/db.ts";
 import { createDraft, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
 import { markdownToDoc, parsePost, postPathFromLink, slugFromPath } from "./lib/import.ts";
-import { sessionPassword } from "./lib/password.ts";
+import { rememberPassword, sessionPassword } from "./lib/password.ts";
+import {
+  collabExtensions,
+  joinShare,
+  leaveShare,
+  seedUpdate,
+  shareLink,
+  SHARE_TOKEN,
+  type ShareSession,
+} from "./lib/share.ts";
 import { buildHtmlDocument } from "./lib/html.ts";
 import { docToMarkdown, docToPlainText } from "./lib/markdown.ts";
 import { draftSlug, markdownForExport, type PublishPlan } from "./lib/publish.ts";
@@ -25,7 +41,6 @@ import { usePinnedViewport } from "./lib/viewport.ts";
 type SaveState = "idle" | "saving" | "saved";
 type Toast = { message: string; kind: "info" | "error"; href?: string } | null;
 
-/** Names a format in a failure, where the toast is all there is to go on. */
 const LABELS: Record<ExportFormat, string> = {
   markdown: "Markdown",
   docx: "Word",
@@ -35,16 +50,12 @@ const LABELS: Record<ExportFormat, string> = {
 };
 
 const SAVE_DEBOUNCE_MS = 600;
-/** Long enough that a long post is not re-parsed on every keystroke. */
 const PARSE_DEBOUNCE_MS = 300;
 
 export default function App() {
-  // Keeps the shell inside the part of the window the keyboard leaves on
-  // screen, so the toolbar and its menus stay reachable on a phone.
   usePinnedViewport();
 
   const [settings, setSettings] = useState<Settings>(loadSettings);
-  // How the deployment is configured, as its own Worker reports it.
   const [config, setConfig] = useState<AppConfig | null>(null);
   const [drafts, setDrafts] = useState<Draft[]>([]);
   const [currentId, setCurrentId] = useState<string | null>(null);
@@ -54,8 +65,10 @@ export default function App() {
   const [toast, setToast] = useState<Toast>(null);
   const [exporting, setExporting] = useState(false);
   const [ready, setReady] = useState(false);
-  // The post's Markdown while it is being edited as text; null in rich mode.
   const [source, setSource] = useState<string | null>(null);
+  const [session, setSession] = useState<ShareSession | null>(null);
+  const [shareBusy, setShareBusy] = useState(false);
+  const [shareError, setShareError] = useState<string | null>(null);
 
   const draftsRef = useRef<Draft[]>([]);
   const currentIdRef = useRef<string | null>(null);
@@ -76,8 +89,6 @@ export default function App() {
     [drafts, currentId],
   );
 
-  /* ----------------------------------------------------------- persistence */
-
   const flush = useCallback(async () => {
     const id = currentIdRef.current;
     const patch = pendingRef.current;
@@ -92,12 +103,6 @@ export default function App() {
     const next: Draft = { ...base, ...patch, updatedAt: Date.now() };
     await draftStore.put(next);
     const merge = (list: Draft[]) => sortDrafts(list.map((draft) => (draft.id === id ? next : draft)));
-    // The ref, not just the state: everything that reads the document after
-    // awaiting a flush — the source view, the next draft, an export — reads it
-    // through here, and React has not re-rendered yet to refill it. Saving and
-    // immediately opening the Markdown source used to hand back the post as it
-    // was a keystroke ago, and coming back out of it wrote that copy over the
-    // real one.
     draftsRef.current = merge(draftsRef.current);
     setDrafts(merge);
     setSaveState("saved");
@@ -121,12 +126,6 @@ export default function App() {
     });
   }, []);
 
-  /**
-   * Brings the draft up to date with whatever is still in flight: a Markdown
-   * parse waiting on its debounce, then the save queue. Anything that reads
-   * the document rather than the screen — publishing, exporting — goes through
-   * here first, or it would work from a copy up to a second old.
-   */
   const settle = useCallback(async () => {
     window.clearTimeout(parseTimer.current);
     if (sourceRef.current !== null) {
@@ -135,22 +134,46 @@ export default function App() {
     await flush();
   }, [flush, queueSave]);
 
-  /* ---------------------------------------------------------------- editor */
+  const shareToken = current?.shareToken ?? null;
 
-  const editor = useEditor({
-    extensions: editorExtensions,
-    content: { type: "doc", content: [{ type: "paragraph" }] },
-    autofocus: false,
-    onUpdate: ({ editor: instance }) => queueSave({ doc: instance.getJSON() }),
-  });
+  const endedShare = useCallback(() => {
+    const id = currentIdRef.current;
+    if (!id) {
+      return;
+    }
+    pendingRef.current = { ...pendingRef.current, shareToken: undefined };
+    void flush();
+    setToast({ message: "Sharing ended.", kind: "info" });
+  }, [flush]);
+
+  useEffect(() => {
+    if (!shareToken) {
+      setSession(null);
+      return;
+    }
+    const joined = joinShare(shareToken, endedShare);
+    setSession(joined);
+    return () => {
+      leaveShare(joined);
+      setSession(null);
+    };
+  }, [shareToken, currentId, endedShare]);
+
+  const editor = useEditor(
+    {
+      extensions: session ? collabExtensions(session, settings.author) : editorExtensions,
+      ...(session ? {} : { content: { type: "doc", content: [{ type: "paragraph" }] } }),
+      autofocus: false,
+      onUpdate: ({ editor: instance }) => queueSave({ doc: instance.getJSON() }),
+    },
+    [session],
+  );
 
   useEffect(() => {
     window.clearTimeout(parseTimer.current);
     setSource(null);
   }, [currentId]);
 
-  // The browser tab carries the draft's name, so a window full of them can be
-  // told apart.
   useEffect(() => {
     document.title = current ? draftLabel(current) : "write";
   }, [current]);
@@ -160,20 +183,13 @@ export default function App() {
       return;
     }
     const draft = draftsRef.current.find((item) => item.id === currentId);
-    if (draft) {
+    if (draft && !draft.shareToken) {
       editor.commands.setContent(draft.doc, { emitUpdate: false });
     }
-    // Only re-run when the open draft changes, never on every keystroke.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editor, currentId]);
-
-  /* ------------------------------------------------------------ first load */
 
   useEffect(() => {
     void (async () => {
-      // The deployment knows where it publishes; this browser only remembers
-      // how the writing is set up. Ask both before the first draft is made,
-      // so a new post is stamped with the right paths from the start.
       const [stored, remote] = await Promise.all([draftStore.all(), fetchAppConfig()]);
       let active = loadSettings();
       if (remote) {
@@ -195,7 +211,6 @@ export default function App() {
       }
       setReady(true);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -206,8 +221,6 @@ export default function App() {
     field.style.height = "auto";
     field.style.height = `${field.scrollHeight}px`;
   }, [current?.meta.description, currentId, ready]);
-
-  /* ----------------------------------------------------------------- theme */
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-color-scheme: dark)");
@@ -228,8 +241,6 @@ export default function App() {
     return () => window.clearTimeout(id);
   }, [toast]);
 
-  /* -------------------------------------------------------------- commands */
-
   const newDraft = useCallback(async () => {
     await settle();
     const draft = createDraft(settings);
@@ -239,11 +250,6 @@ export default function App() {
     window.setTimeout(() => document.querySelector<HTMLInputElement>(".title-input")?.focus(), 40);
   }, [settle, settings]);
 
-  /**
-   * Opens a published post in the editor: the other end of the blog's edit
-   * button. A draft already published to that path is reopened rather than
-   * duplicated, so local edits are never silently replaced by the live copy.
-   */
   const importPost = useCallback(
     async (path: string) => {
       try {
@@ -270,7 +276,6 @@ export default function App() {
         await draftStore.put(draft);
         setDrafts((previous) => sortDrafts([draft, ...previous]));
         setCurrentId(draft.id);
-        // Re-publishing should land back on the file it came from.
         const drafts = settings.draftsDir.replace(/^\/+|\/+$/g, "");
         updateSettings({ publishTarget: path.startsWith(`${drafts}/`) ? "drafts" : "posts" });
         setToast({ message: `Opened ${path}.`, kind: "info" });
@@ -284,8 +289,6 @@ export default function App() {
     [settings, updateSettings],
   );
 
-  // `?edit=_posts/…` — the blog's edit button pointing back here. The query is
-  // dropped straight away so a reload does not import the post twice.
   useEffect(() => {
     if (!ready) {
       return;
@@ -303,10 +306,36 @@ export default function App() {
     }
   }, [ready, importPost]);
 
-  /**
-   * The same post as Markdown. Everything downstream reads the document, so
-   * the text is parsed back as it is typed rather than only on the way out.
-   */
+  useEffect(() => {
+    if (!ready) {
+      return;
+    }
+    const token = new URLSearchParams(window.location.search).get("share");
+    if (!token) {
+      return;
+    }
+    window.history.replaceState({}, "", window.location.pathname);
+    if (!SHARE_TOKEN.test(token)) {
+      setToast({ message: "Not a share link.", kind: "error" });
+      return;
+    }
+    void (async () => {
+      const existing = draftsRef.current.find((draft) => draft.shareToken === token);
+      if (existing) {
+        setCurrentId(existing.id);
+        return;
+      }
+      if (!(await shareRoomLive(token))) {
+        setToast({ message: "That share has ended.", kind: "error" });
+        return;
+      }
+      const draft: Draft = { ...createDraft(loadSettings()), shareToken: token };
+      await draftStore.put(draft);
+      setDrafts((previous) => sortDrafts([draft, ...previous]));
+      setCurrentId(draft.id);
+    })();
+  }, [ready]);
+
   const editSource = useCallback(async () => {
     await settle();
     const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
@@ -315,8 +344,6 @@ export default function App() {
 
   const editRich = useCallback(() => {
     if (source !== null) {
-      // Reading the state rather than updating from it: a state updater has to
-      // stay pure, and React may run it more than once.
       editor?.commands.setContent(markdownToDoc(source), { emitUpdate: false });
     }
     setSource(null);
@@ -325,9 +352,6 @@ export default function App() {
   const changeSource = useCallback(
     (text: string) => {
       setSource(text);
-      // Parsing a long post on every keystroke is wasted work, so the document
-      // catches up a beat behind the text — and `flush` is not what saves it,
-      // so the debounce is here rather than in the save queue.
       window.clearTimeout(parseTimer.current);
       parseTimer.current = window.setTimeout(
         () => queueSave({ doc: markdownToDoc(text) }),
@@ -352,6 +376,9 @@ export default function App() {
         return;
       }
       pendingRef.current = {};
+      if (draft.shareToken && sessionPassword()) {
+        void endShareRoom(draft.shareToken, sessionPassword()).catch(() => undefined);
+      }
       await draftStore.remove(id);
       const remaining = draftsRef.current.filter((item) => item.id !== id);
       setDrafts(remaining);
@@ -377,7 +404,6 @@ export default function App() {
       const next: Partial<Draft> = { meta };
       if (patch.title !== undefined) {
         next.title = patch.title;
-        // Keep the slug following the title until it is edited by hand.
         if (!draft.slug || draft.slug === slugify(draft.meta.title)) {
           next.slug = slugify(patch.title);
         }
@@ -410,14 +436,9 @@ export default function App() {
         await settle();
         const draft = draftsRef.current.find((item) => item.id === current.id) ?? current;
         const slug = draftSlug(draft);
-        // Built once even when several formats want it, and only when they do.
         let html: string | null = null;
         const page = async () => (html ??= await buildHtmlDocument(editor.getHTML(), draft.meta));
 
-        // One format failing is not the others failing. The clipboard alone
-        // refuses for reasons that have nothing to do with the post — a window
-        // that lost focus is enough — and taking four files down with it would
-        // be the wrong end of the trade.
         const done: ExportFormat[] = [];
         const failed: string[] = [];
 
@@ -469,6 +490,76 @@ export default function App() {
     [current, editor, flush, settings],
   );
 
+  const enableShare = useCallback(
+    async (password: string) => {
+      if (!password) {
+        setShareError("The publish password turns sharing on.");
+        return;
+      }
+      setShareBusy(true);
+      setShareError(null);
+      try {
+        await settle();
+        const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
+        if (!draft) {
+          return;
+        }
+        const token = await createShareRoom(seedUpdate(draft.doc), password);
+        rememberPassword(password);
+        setSource(null);
+        queueSave({ shareToken: token });
+        await flush();
+      } catch (cause) {
+        if (cause instanceof PasswordRejected) {
+          rememberPassword("");
+        }
+        setShareError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
+        setShareBusy(false);
+      }
+    },
+    [settle, flush, queueSave],
+  );
+
+  const disableShare = useCallback(
+    async (password: string) => {
+      const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
+      const token = draft?.shareToken;
+      if (!token) {
+        return;
+      }
+      setShareBusy(true);
+      setShareError(null);
+      try {
+        await endShareRoom(token, password);
+        rememberPassword(password);
+        queueSave({ shareToken: undefined });
+        await flush();
+      } catch (cause) {
+        if (cause instanceof PasswordRejected) {
+          rememberPassword("");
+        }
+        setShareError(cause instanceof Error ? cause.message : String(cause));
+      } finally {
+        setShareBusy(false);
+      }
+    },
+    [flush, queueSave],
+  );
+
+  const copyShareLink = useCallback(async () => {
+    const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
+    if (!draft?.shareToken) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(shareLink(draft.shareToken));
+      setToast({ message: "Share link copied.", kind: "info" });
+    } catch {
+      setToast({ message: "Could not reach the clipboard.", kind: "error" });
+    }
+  }, []);
+
   const onPublished = useCallback(
     (result: PublishResult, plan: PublishPlan) => {
       setPublishOpen(false);
@@ -484,8 +575,6 @@ export default function App() {
     },
     [flush, queueSave],
   );
-
-  /* ------------------------------------------------------------- shortcuts */
 
   useEffect(() => {
     const onKey = (event: KeyboardEvent) => {
@@ -511,8 +600,6 @@ export default function App() {
     return () => document.removeEventListener("keydown", onKey);
   }, [exportAs, flush, newDraft, updateSettings]);
 
-  /* ---------------------------------------------------------------- render */
-
   const words = useMemo(() => (current ? countWords(docToPlainText(current.doc)) : 0), [current]);
 
   if (!ready || !current) {
@@ -533,7 +620,6 @@ export default function App() {
       )}
 
       <div className="main" ref={mainRegion}>
-        {/* The pop-up docks over this corner, so the button steps aside. */}
         {settings.focusMode && !menuOpen ? (
           <button
             ref={menuButton}
@@ -568,7 +654,7 @@ export default function App() {
                 <textarea
                   ref={description}
                   className="description-input"
-                  placeholder="A one-line description for the post card and SEO"
+                  placeholder="Description"
                   rows={1}
                   value={current.meta.description}
                   onChange={(event) => updateMeta({ description: event.target.value })}
@@ -634,14 +720,19 @@ export default function App() {
                   <button
                     type="button"
                     className={source === null ? "tool mode-toggle" : "tool mode-toggle is-active"}
-                    title={source === null ? "Edit the Markdown source" : "Back to the page view"}
+                    title={
+                      session
+                        ? "The Markdown source sits out while the draft is shared"
+                        : source === null
+                          ? "Edit the Markdown source"
+                          : "Back to the page view"
+                    }
                     aria-pressed={source !== null}
+                    disabled={Boolean(session)}
                     onClick={() => (source === null ? void editSource() : editRich())}
                   >
                     <span className="tool-text">MD</span>
                   </button>
-                  {/* On a phone the count gives way to the tools; the save
-                      state, which is only up for a moment, does not. */}
                   <span className={saveState === "saving" ? "status is-saving" : "status"}>
                     {saveState === "saving" ? "Saving…" : `${words} words`}
                   </span>
@@ -681,11 +772,17 @@ export default function App() {
           onSettingsChange: updateSettings,
         }}
         settings={{ settings, config, onChange: updateSettings }}
+        share={{
+          sharing: Boolean(current.shareToken),
+          link: current.shareToken ? shareLink(current.shareToken) : null,
+          busy: shareBusy,
+          error: shareError,
+          onEnable: (password) => void enableShare(password),
+          onDisable: (password) => void disableShare(password),
+          onCopyLink: () => void copyShareLink(),
+        }}
         onPublish={() =>
           void settle().then(() => {
-            // The menu is portalled and the dialog is not, so on a phone —
-            // where the menu is a full-height sheet — it would sit over the
-            // dialog it just opened, with Commit underneath it.
             setMenuOpen(false);
             setPublishOpen(true);
           })

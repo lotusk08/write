@@ -9,13 +9,10 @@ import { datePrefix, slugify } from "./text.ts";
 
 export interface PublishPlan {
   slug: string;
-  /** Repo-relative path of the Markdown file. */
   markdownPath: string;
   markdown: string;
   files: PublishFile[];
-  /** Editor src → published URL. */
   imageUrls: Map<string, string>;
-  /** Images referenced by the document but no longer in this browser. */
   skippedImages: string[];
 }
 
@@ -44,11 +41,6 @@ export function draftSlug(draft: Draft): string {
   return draft.slug || slugify(draft.meta.title) || "untitled";
 }
 
-/**
- * File names the post already points at. Editing a published post means most
- * of its images are already on the blog, and a new one must not be given a
- * name one of them is using.
- */
 function publishedNames(doc: JSONContent): Set<string> {
   const names = new Set<string>();
   for (const src of collectImageSrcs(doc).filter((candidate) => !isLocalSrc(candidate))) {
@@ -61,14 +53,6 @@ function publishedNames(doc: JSONContent): Set<string> {
   return names;
 }
 
-/**
- * Names every local image after the post slug, matching the blog's flat
- * `assets/img/post/<slug>.webp` convention. The cover keeps the bare slug and
- * inline images are numbered in document order — skipping any number the post
- * is already using, so editing a post never overwrites the images it came in
- * with. Images already on the blog are left alone entirely: they are not
- * re-encoded, re-uploaded or renamed.
- */
 async function planImages(draft: Draft, slug: string): Promise<PlannedImage[]> {
   const planned: PlannedImage[] = [];
   const cover = draft.meta.cover?.path;
@@ -108,10 +92,6 @@ export function markdownPathFor(draft: Draft, settings: Settings, slug: string):
   return `${dir}/${datePrefix(draft.meta.date)}-${slug}.md`;
 }
 
-/**
- * Renders the post exactly as it will look on the blog, without spending time
- * re-encoding images. Used for the download/copy actions.
- */
 export async function markdownForExport(draft: Draft, settings: Settings): Promise<string> {
   const slug = draftSlug(draft);
   const imagesDir = settings.imagesDir.replace(/^\/+|\/+$/g, "");
@@ -129,10 +109,6 @@ export async function markdownForExport(draft: Draft, settings: Settings): Promi
   });
 }
 
-/**
- * Turns a draft into the exact set of files to commit: one Markdown post plus
- * every locally-stored image it references.
- */
 export async function buildPublishPlan(draft: Draft, settings: Settings): Promise<PublishPlan> {
   const slug = draftSlug(draft);
   const imagesDir = settings.imagesDir.replace(/^\/+|\/+$/g, "");
@@ -140,8 +116,6 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
   const imageUrls = new Map<string, string>();
   const skippedImages: string[] = [];
 
-  // Uploaded as they came in. The blog's build is what turns them into the
-  // WebP the rest of its pipeline expects, and repoints the post at them.
   for (const image of await planImages(draft, slug)) {
     if (!image.stored) {
       skippedImages.push(image.src);

@@ -28,8 +28,6 @@ export function PublishDialog({
   const [message, setMessage] = useState(() => defaultCommitMessage(draft, Boolean(draft.publishedPath)));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  // Asked for once a session — the first publish after the app opens — or when
-  // the Worker has just said what we sent is wrong. Otherwise one button.
   const [password, setPassword] = useState(sessionPassword);
   const [rejected, setRejected] = useState(false);
   const asking = !sessionPassword() || rejected;
@@ -56,19 +54,11 @@ export function PublishDialog({
     };
   }, [draft, settings]);
 
-  /**
-   * A post's file name is built from its date and slug, so editing either of
-   * those on a post that came from the blog writes a second file rather than
-   * replacing the first.
-   */
   const renamedFrom =
     draft.publishedPath && plan && plan.markdownPath !== draft.publishedPath
       ? draft.publishedPath
       : null;
 
-  // Nothing to type and nothing to fix in this browser: either the deployment
-  // can publish or it says what it is missing, and Cloudflare Access has
-  // already decided whether this session is allowed to ask.
   const blocked = useMemo(
     () =>
       config === null
@@ -98,14 +88,10 @@ export function PublishDialog({
         },
         password,
       );
-      // It worked, so it is worth keeping — for this session. The next sitting
-      // asks again; that is the point of it.
       rememberPassword(password);
       onPublished(result, plan);
     } catch (cause) {
       if (cause instanceof PasswordRejected) {
-        // A held password that has stopped working is worse than none: it
-        // would fail the same way every time without ever asking.
         setRejected(true);
         rememberPassword("");
       }

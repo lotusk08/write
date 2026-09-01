@@ -7,7 +7,6 @@ interface TokenInputProps {
   onChange: (values: string[]) => void;
 }
 
-/** Comma- or Enter-separated values shown as removable chips. */
 export function TokenInput({ id, values, placeholder, onChange }: TokenInputProps) {
   const [draft, setDraft] = useState("");
 

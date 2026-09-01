@@ -6,10 +6,10 @@ import { PHONE_QUERY, useMediaQuery } from "../lib/viewport.ts";
 import { Icon } from "./Icons.tsx";
 import { ExportPanel, type ExportFormat } from "./panels/ExportPanel.tsx";
 import { PostPanel, type PostPanelProps } from "./panels/PostPanel.tsx";
+import { SharePanel, type SharePanelProps } from "./panels/SharePanel.tsx";
 
 export type { ExportFormat };
 
-/** The theme and focus toggles live in the head, so this is needed either tab. */
 export interface MenuSettings {
   settings: Settings;
   config: AppConfig | null;
@@ -18,33 +18,26 @@ export interface MenuSettings {
 
 interface EditorPopoverProps {
   open: boolean;
-  /** The menu button — excluded from the outside-click close. */
   anchorRef: RefObject<HTMLButtonElement | null>;
-  /** The writing surface the pop-up docks to the right of. */
   regionRef: RefObject<HTMLElement | null>;
   tab: MenuTab;
   onTab: (tab: MenuTab) => void;
   onClose: () => void;
   post: PostPanelProps;
   settings: MenuSettings;
+  share: SharePanelProps;
   onPublish: () => void;
-  /** Runs every ticked format, in the order they are listed. */
   onExport: (formats: ExportFormat[]) => void;
   exporting: boolean;
-  /** False while a modal is open, so Escape closes the modal only. */
   escapeCloses?: boolean;
 }
 
 const TABS: { id: MenuTab; label: string }[] = [
   { id: "post", label: "Post" },
   { id: "export", label: "Export" },
+  { id: "share", label: "Share" },
 ];
 
-/**
- * Front matter, the ways out of the editor, and the publish action, in a pop-up
- * docked to the right of the writing surface. Drafts are not here — they live
- * on the rail.
- */
 export function EditorPopover({
   open,
   anchorRef,
@@ -54,6 +47,7 @@ export function EditorPopover({
   onClose,
   post,
   settings,
+  share,
   onPublish,
   onExport,
   exporting,
@@ -61,16 +55,9 @@ export function EditorPopover({
 }: EditorPopoverProps) {
   const panel = useRef<HTMLDivElement>(null);
   const [frame, setFrame] = useState<DOMRect | null>(null);
-  // Ticks live as long as the menu does. They are a choice about this trip to
-  // the menu, not a preference worth keeping.
   const [chosen, setChosen] = useState<ExportFormat[]>([]);
-  // A phone has no room beside the writing surface, so the pop-up becomes a
-  // sheet across the foot of it instead of a panel docked to one corner.
   const sheet = useMediaQuery(PHONE_QUERY);
 
-  // Measured from the editor region, not the button: the pop-up hangs off the
-  // region's right edge, so it holds still while the document scrolls under it
-  // and only has to be re-measured when that region changes size.
   useLayoutEffect(() => {
     const region = regionRef.current;
     if (!open || !region) {
@@ -79,8 +66,6 @@ export function EditorPopover({
     }
     const measure = () => setFrame(region.getBoundingClientRect());
     measure();
-    // The observer catches the rail and focus mode; the window covers the
-    // rest, and the visual viewport the keyboard sliding the page around.
     const observer = new ResizeObserver(measure);
     observer.observe(region);
     window.addEventListener("resize", measure);
@@ -105,7 +90,6 @@ export function EditorPopover({
     };
     const onDown = (event: PointerEvent) => {
       const target = event.target as globalThis.Node;
-      // The anchor is excluded so its own click toggles rather than reopening.
       if (panel.current?.contains(target) || anchorRef.current?.contains(target)) {
         return;
       }
@@ -130,9 +114,6 @@ export function EditorPopover({
       : settings.settings.postsDir
   ).replace(/^\/+|\/+$/g, "");
 
-  // Inset from the writing surface: down its right-hand edge, or across its
-  // foot on a phone. The surface is pinned to the part of the window the
-  // keyboard leaves on screen, so both stay above it.
   const inset = sheet ? 10 : 16;
   const position = sheet
     ? {
@@ -194,6 +175,8 @@ export function EditorPopover({
       <div className="popover-body">
         {tab === "post" ? (
           <PostPanel {...post} />
+        ) : tab === "share" ? (
+          <SharePanel {...share} />
         ) : (
           <ExportPanel chosen={chosen} exporting={exporting} onChange={setChosen} />
         )}
@@ -202,17 +185,44 @@ export function EditorPopover({
       <footer className="popover-foot">
         {tab === "export" ? (
           <>
+            <div className="foot-row">
+              <button
+                type="button"
+                className="btn primary block"
+                disabled={exporting || chosen.length === 0}
+                onClick={() => onExport(chosen)}
+              >
+                <Icon name="download" />
+                {exporting ? "Exporting…" : "Export"}
+              </button>
+              <button
+                type="button"
+                className="btn icon"
+                title="Copy the Markdown to the clipboard — ⌘⇧C"
+                aria-label="Copy the Markdown to the clipboard"
+                disabled={exporting}
+                onClick={() => onExport(["copy"])}
+              >
+                <Icon name="copy" />
+              </button>
+            </div>
+            <p className="hint publish-target">
+              {chosen.length === 0 ? "Choose the format before download" : `${chosen.length} selected`}
+            </p>
+          </>
+        ) : tab === "share" ? (
+          <>
             <button
               type="button"
               className="btn primary block"
-              disabled={exporting || chosen.length === 0}
-              onClick={() => onExport(chosen)}
+              disabled={!share.sharing || !share.link}
+              onClick={share.onCopyLink}
             >
-              <Icon name="download" />
-              {exporting ? "Exporting…" : "Export"}
+              <Icon name="copy" />
+              Copy link
             </button>
             <p className="hint publish-target">
-              {chosen.length === 0 ? "Choose the format before download" : `${chosen.length} selected`}
+              {share.sharing ? "Live — everyone with the link edits this draft" : "Not shared"}
             </p>
           </>
         ) : (

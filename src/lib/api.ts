@@ -1,16 +1,5 @@
 import type { AppConfig, PublishRequest, PublishResult } from "../../shared/types.ts";
 
-/**
- * The blog is reached through this app's own Worker, which holds the one token
- * that can read and write it. No GitHub credential ever reaches this browser.
- *
- * What does reach it is a password, sent as a header on these calls. It is
- * typed once and remembered, so publishing does not ask again — the Worker is
- * the thing that has to be convinced, not this browser, and it will say so with
- * a 401 if the password stops being right.
- */
-
-/** A 401 from the Worker: the password is missing or no longer the one it has. */
 export class PasswordRejected extends Error {
   constructor(message: string) {
     super(message);
@@ -37,12 +26,6 @@ async function readJson<T>(response: Response, whenItFails: string): Promise<T> 
   return payload as T;
 }
 
-/**
- * Asks the Worker how this deployment is configured. A `problem` in the answer
- * is something to fix on the deployment, not in the browser, so it is shown as
- * it is rather than translated. Needs no password: it says what is missing, not
- * what is in the repository.
- */
 export async function fetchAppConfig(): Promise<AppConfig | null> {
   try {
     const response = await fetch("/api/config", { headers: { accept: "application/json" } });
@@ -61,7 +44,6 @@ export interface PostSource {
   markdown: string;
 }
 
-/** Reads a published post back out of the repository, for `?edit=`. */
 export async function fetchPostSource(path: string, password: string): Promise<PostSource> {
   const response = await fetch(`/api/source?path=${encodeURIComponent(path)}`, {
     headers: headers(password),
@@ -73,7 +55,43 @@ export async function fetchPostSource(path: string, password: string): Promise<P
   return source;
 }
 
-/** Commits a post and its images in one go. */
+export async function createShareRoom(seed: Uint8Array, password: string): Promise<string> {
+  const response = await fetch("/api/share", {
+    method: "POST",
+    headers: headers(password, { "content-type": "application/octet-stream" }),
+    body: seed as unknown as BodyInit,
+  });
+  const result = await readJson<{ token?: string }>(response, "Could not start sharing");
+  if (!result.token) {
+    throw new Error("Could not start sharing.");
+  }
+  return result.token;
+}
+
+export async function endShareRoom(token: string, password: string): Promise<void> {
+  const response = await fetch(`/api/share/${encodeURIComponent(token)}`, {
+    method: "DELETE",
+    headers: headers(password),
+  });
+  if (!response.ok && response.status !== 404) {
+    await readJson(response, "Could not stop sharing");
+  }
+}
+
+export async function shareRoomLive(token: string): Promise<boolean> {
+  try {
+    const response = await fetch(`/api/share/${encodeURIComponent(token)}`, {
+      headers: { accept: "application/json" },
+    });
+    if (!response.ok) {
+      return false;
+    }
+    return Boolean(((await response.json()) as { live?: boolean }).live);
+  } catch {
+    return false;
+  }
+}
+
 export async function publish(
   request: PublishRequest,
   password: string,

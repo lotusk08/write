@@ -1,4 +1,3 @@
-/** Turns a title into a URL/file-name-safe slug, keeping Vietnamese readable. */
 export function slugify(input: string): string {
   return input
     .normalize("NFD")
@@ -16,7 +15,6 @@ function pad(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-/** Formats a date the way the blog's front matter does: `2026-08-22 10:00:00 +0700`. */
 export function formatPostDate(date: Date, offsetMinutes?: number): string {
   const offset = offsetMinutes ?? -date.getTimezoneOffset();
   const shifted = new Date(date.getTime() + offset * 60_000);
@@ -29,7 +27,6 @@ export function formatPostDate(date: Date, offsetMinutes?: number): string {
   );
 }
 
-/** `2026-08-22 10:00:00 +0700` → `2026-08-22`, the post file-name prefix. */
 export function datePrefix(postDate: string): string {
   const match = /^(\d{4}-\d{2}-\d{2})/.exec(postDate.trim());
   return match ? match[1] : new Date().toISOString().slice(0, 10);

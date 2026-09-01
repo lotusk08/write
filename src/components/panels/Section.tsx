@@ -1,6 +1,5 @@
 import type { ReactNode } from "react";
 
-/** A titled group inside the menu drawer. */
 export function Section({
   title,
   hint,

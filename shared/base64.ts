@@ -1,10 +1,6 @@
 const ALPHABET =
   "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
-/**
- * Base64-encodes raw bytes without relying on `btoa` (which is not binary-safe
- * for arbitrary bytes) so the same code runs in the browser and in workerd.
- */
 export function bytesToBase64(bytes: Uint8Array): string {
   let out = "";
   for (let i = 0; i < bytes.length; i += 3) {

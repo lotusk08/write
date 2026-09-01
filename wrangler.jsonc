@@ -11,6 +11,10 @@
   "observability": {
     "enabled": true
   },
+  "durable_objects": {
+    "bindings": [{ "name": "SHARE", "class_name": "ShareRoom" }]
+  },
+  "migrations": [{ "tag": "share-rooms", "new_sqlite_classes": ["ShareRoom"] }],
   // The blog's *Edit this post* button links here, so this name has to keep
   // answering. It is a custom domain on this Worker, not on a Pages project:
   // deploying anywhere else leaves the old app sitting on the domain.

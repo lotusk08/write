@@ -1,4 +1,3 @@
-/* --------------------------------------------------------------- tokens */
 :root {
   --font-ui: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-prose: var(--font-ui);
@@ -76,11 +75,6 @@ textarea {
   background: color-mix(in srgb, var(--accent) 20%, transparent);
 }
 
-/* ---------------------------------------------------------------- shell */
-
-/* Fixed, not merely full-height: `--app-top`/`--app-height` come from the
-   visual viewport (see `lib/viewport.ts`), and on a phone that is the window
-   minus the keyboard. Without them this is the window, as before. */
 .app {
   position: fixed;
   top: var(--app-top, 0);
@@ -100,7 +94,6 @@ textarea {
   flex-direction: column;
 }
 
-/* The one control that stays on the writing surface. */
 .menu-btn {
   position: absolute;
   z-index: 15;
@@ -126,7 +119,6 @@ textarea {
   color: var(--text);
 }
 
-/* -------------------------------------------------------------- pop-up */
 .popover {
   position: fixed;
   z-index: 40;
@@ -188,8 +180,37 @@ textarea {
   background: var(--panel);
 }
 
-/* A label on the left, what it controls on the right. The export row reads
-   this way, and the settings tab is a list of the same shape. */
+.foot-row {
+  display: flex;
+  gap: 8px;
+}
+
+.foot-row .btn.primary {
+  flex: 1;
+}
+
+.foot-row .btn.icon {
+  height: auto;
+  border: 1px solid var(--border);
+}
+
+.share-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.share-link {
+  display: flex;
+  gap: 8px;
+}
+
+.share-link .input {
+  min-width: 0;
+  flex: 1;
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
 .menu-row {
   display: flex;
   min-height: 26px;
@@ -206,7 +227,6 @@ textarea {
   flex-shrink: 0;
 }
 
-/* The right-hand side: a value, or a value and the button that clears it. */
 .menu-value {
   display: flex;
   min-width: 0;
@@ -228,7 +248,6 @@ textarea {
   justify-content: center;
 }
 
-/* ------------------------------------------------------- draft tab rail */
 .rail {
   position: relative;
   display: flex;
@@ -271,8 +290,6 @@ textarea {
     background 130ms ease, color 130ms ease;
 }
 
-/* The draft being edited sits on top of the deck. It is the only one that
-   spells out its title — and, being the open one, nothing to click. */
 .rail-tab.is-open {
   z-index: 900;
   padding-bottom: 6px;
@@ -282,8 +299,6 @@ textarea {
   cursor: default;
 }
 
-/* The rest are sheets in that deck: at rest each tucks under the one above it
-   so only its edge shows. */
 .rail-tab.is-layer {
   width: 30px;
   height: 26px;
@@ -292,26 +307,17 @@ textarea {
   margin-top: -16px;
 }
 
-/* The sheets above the open draft and the sheets below it are separate decks,
-   so each one fans on its own — and the open tab, sitting between them, fans
-   neither. The trigger is the deck rather than its sheets: the gaps that open
-   up between them would otherwise collapse the fan as the pointer crosses. */
 .rail-deck {
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
-/* Reaching for a deck fans it open, so every sheet is a full target rather
-   than a 10px sliver. Keyboard travel does it too — but `:focus-visible`, so
-   the deck restacks after a mouse click instead of staying open. */
 .rail-deck:hover .rail-tab.is-layer,
 .rail-deck:has(:focus-visible) .rail-tab.is-layer {
   margin-top: 3px;
 }
 
-/* The top sheet of a deck holds its place, so the fan opens downward from
-   where the deck already sits instead of nudging the whole rail. */
 .rail-deck .rail-tab:first-child,
 .rail-deck:hover .rail-tab:first-child,
 .rail-deck:has(:focus-visible) .rail-tab:first-child {
@@ -344,12 +350,9 @@ textarea {
   letter-spacing: 0.01em;
   text-overflow: ellipsis;
   white-space: nowrap;
-  /* Reads top-to-bottom, the way Obsidian stacks collapsed tabs. */
   writing-mode: vertical-rl;
 }
 
-/* Double-clicking the title swaps it for this, so the name is edited where it
-   is read — down the tab, same type, same place. */
 .rail-tab-field {
   width: 15px;
   padding: 2px 0;
@@ -360,8 +363,6 @@ textarea {
   text-overflow: clip;
 }
 
-/* Out of sight until the tab is reached for — but it keeps its place, so the
-   tab does not change length as it comes and goes. */
 .rail-tab-delete {
   display: flex;
   padding: 3px;
@@ -375,8 +376,6 @@ textarea {
   transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
 }
 
-/* Pointing at the tab, the hover a tap leaves behind on touch, or a keyboard
-   landing on the button itself. */
 .rail-tab.is-open:hover .rail-tab-delete,
 .rail-tab-delete:focus-visible {
   opacity: 1;
@@ -388,7 +387,6 @@ textarea {
   color: var(--danger);
 }
 
-/* --------------------------------------------------- editor frame dock */
 .card-dock {
   position: sticky;
   bottom: 0;
@@ -401,7 +399,6 @@ textarea {
   background: var(--panel);
 }
 
-/* Whatever sits on the left, the word count and the menu stay on the right. */
 .card-dock .source-note {
   min-width: 0;
   flex: 1;
@@ -423,7 +420,6 @@ textarea {
   white-space: nowrap;
 }
 
-/* ------------------------------------------------------------- controls */
 .btn {
   display: inline-flex;
   height: 32px;
@@ -543,7 +539,6 @@ textarea {
   grid-template-columns: 1fr 1fr;
 }
 
-/* -------------------------------------------------------------- toolbar */
 .toolbar {
   display: flex;
   min-width: 0;
@@ -551,13 +546,10 @@ textarea {
   align-items: center;
   gap: 2px;
   overflow-x: auto;
-  /* The row is its own scroller: swiping it should not drag the page back. */
   overscroll-behavior-x: contain;
   scrollbar-width: thin;
 }
 
-/* Too narrow for every tool, the row fades out on whichever side still has
-   some — the only edge a touch screen gets, having no scrollbar to draw. */
 .toolbar[data-more="end"] {
   mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
 }
@@ -609,7 +601,6 @@ textarea {
   color: var(--accent);
 }
 
-/* A tool with nothing to act on: still there, so the row keeps its shape. */
 .tool:disabled {
   background: none;
   color: var(--border-strong);
@@ -640,12 +631,10 @@ textarea {
   box-shadow: var(--shadow-pop);
 }
 
-/* --------------------------------------------------------------- editor */
 .editor-scroll {
   min-height: 0;
   flex: 1;
   overflow-y: auto;
-  /* There is nothing behind this to scroll on to. */
   overscroll-behavior: contain;
 }
 
@@ -697,8 +686,6 @@ textarea {
   font-family: var(--font-prose);
   font-size: 15px;
   line-height: 1.55;
-  /* Its height is set from what is written in it, so it never scrolls inside
-     itself and never leaves an empty line under a one-line description. */
   overflow: hidden;
   resize: none;
 }
@@ -775,8 +762,6 @@ textarea {
   align-items: flex-start;
 }
 
-/* The box sits in a box one line tall, so it centres on the first line of its
-   label at any font size rather than by a hand-picked nudge. */
 .ProseMirror ul[data-type="taskList"] li > label {
   display: flex;
   height: 1lh;
@@ -787,8 +772,6 @@ textarea {
 .ProseMirror ul[data-type="taskList"] input {
   width: 15px;
   height: 15px;
-  /* Checkboxes ship with margins of their own, which would knock the box out
-     of line with the text again. */
   margin: 0;
   accent-color: var(--accent);
   cursor: pointer;
@@ -801,7 +784,6 @@ textarea {
   color: var(--muted);
 }
 
-/* Callouts, tinted with the blog's own note colours. */
 .ProseMirror blockquote[data-note] {
   padding: 0.6em 1em;
   border-left-width: 3px;
@@ -836,7 +818,6 @@ textarea {
   --note-bg: rgb(218 54 51 / 7%);
 }
 
-/* Not a callout: the blog centres an author attribution and drops the rule. */
 .ProseMirror blockquote[data-note="author"] {
   padding: 0.75em 2em;
   border: none;
@@ -846,10 +827,6 @@ textarea {
   text-align: center;
 }
 
-/* The site's rule, shown while writing: the quote's last paragraph is the
-   attribution — right-aligned, italic, with the dash put there by the
-   stylesheet. So where the name goes is visible before publishing, instead of
-   a convention to remember; type it as the last line and it dresses itself. */
 .ProseMirror blockquote[data-note="author"] p:last-child {
   padding-right: 1.5em;
   font-size: 0.9em;
@@ -862,7 +839,6 @@ textarea {
   content: "— ";
 }
 
-/* Until a second paragraph exists there is no attribution yet, only a quote. */
 .ProseMirror blockquote[data-note="author"] p:only-child {
   padding-right: 0;
   font-size: inherit;
@@ -875,7 +851,6 @@ textarea {
   content: none;
 }
 
-/* Inline code the blog renders as a path rather than as a code span. */
 .ProseMirror code.filepath {
   border: none;
   background: none;
@@ -883,7 +858,6 @@ textarea {
   font-weight: 600;
 }
 
-/* `{: .d-flex .c-center }` — the blog lays these out as a centred row. */
 .ProseMirror [data-block-ial*="c-center"] {
   display: flex;
   justify-content: center;
@@ -946,7 +920,6 @@ textarea {
   margin: 1.8em 0;
 }
 
-/* The post as plain Markdown, in the same column the page view uses. */
 .source-editor {
   display: block;
   width: 100%;
@@ -964,7 +937,6 @@ textarea {
   white-space: pre-wrap;
 }
 
-/* An embedded player, standing in for the Liquid include the blog uses. */
 .embed-block {
   display: flex;
   flex-direction: column;
@@ -1004,9 +976,6 @@ textarea {
   box-shadow: 0 0 0 3px var(--ring);
 }
 
-/* ------------------------------------------------------ rendered blocks */
-/* A mermaid diagram, a chart or an equation, drawn above the source that
-   makes it. Blocks with nothing to draw keep the plain code-block look. */
 .code-block[data-preview="on"] pre,
 .math-block pre {
   border-top-left-radius: 0;
@@ -1036,7 +1005,6 @@ textarea {
   height: auto;
 }
 
-/* Chart.js sizes its canvas from the box it is given, so it gets one. */
 .chart-frame {
   position: relative;
   height: 300px;
@@ -1050,7 +1018,6 @@ textarea {
   white-space: pre-wrap;
 }
 
-/* The equation is the point; its TeX is reference, so it sits quieter. */
 .math-block pre {
   font-size: 0.78em;
   opacity: 0.75;
@@ -1101,11 +1068,6 @@ textarea {
   pointer-events: none;
 }
 
-/* A placeholder is painted beside the caret rather than in front of it, so it
-   has to stay out of the flow. Taken out of it absolutely, it covers its own
-   line and nothing else, and is cut with an ellipsis where it would have
-   wrapped: as a zero-height float, the hint on a blank line in the middle of a
-   post used to paint three lines of itself over the paragraph below it. */
 .ProseMirror .is-empty {
   position: relative;
 }
@@ -1121,8 +1083,6 @@ textarea {
   white-space: nowrap;
 }
 
-/* An empty post is the one place with nothing underneath to cover, so that
-   hint keeps the float, and the room to run to as many lines as it needs. */
 .ProseMirror p.is-editor-empty:first-child::before {
   position: static;
   height: 0;
@@ -1131,7 +1091,6 @@ textarea {
   white-space: normal;
 }
 
-/* ---------------------------------------------------------- collapsible */
 .collapsible {
   position: relative;
   padding: 2px 0 2px 2px;
@@ -1186,18 +1145,11 @@ textarea {
   font-weight: 400;
 }
 
-/* --------------------------------------------------------------- images */
 .editor-image {
   margin: 1.4em 0;
   text-align: center;
 }
 
-/* Images written on adjacent lines are one row on the blog, so they sit in a
-   row here too rather than stacking. Rows run from two to four photos, so they
-   are matched on height and left to flow — no count needed, and it survives a
-   photo being added or taken out. The width beats the `.normal` class those
-   images usually carry, which the blog's own flex row overrides in the same
-   way. */
 .ProseMirror .editor-image[data-join],
 .ProseMirror .editor-image:has(+ .editor-image[data-join]) {
   display: inline-block;
@@ -1206,9 +1158,6 @@ textarea {
   vertical-align: top;
 }
 
-/* `.gap` in the blog's stylesheet is a quarter of a rem of margin, and it is
-   written onto each photo in a row. The same rule here, so the spacing in the
-   editor is the spacing the post will have rather than one invented for it. */
 .ProseMirror .editor-image.is-gapped {
   margin-right: 0.25rem;
 }
@@ -1220,16 +1169,6 @@ textarea {
   max-height: 210px;
 }
 
-/* The blog lays a run out with flex, which shrinks every photo until the whole
-   row fits one line. Here they are separate block nodes with no container to
-   flex, so each is given its share of the line instead — and the share depends
-   on how many there are, which `:has()` can count. Sized by height alone they
-   came out ~380px wide and stacked one per line, which is the thing this
-   fixes.
-
-   Runs stop at ROW_LIMIT (4), so there are three lengths. Each length lists
-   its members, longest last: a run of four also matches the rules for shorter
-   ones, and equal specificity means the last match wins. */
 .ProseMirror .editor-image:not([data-join]):has(+ .editor-image[data-join]),
 .ProseMirror .editor-image:not([data-join]) + .editor-image[data-join] {
   max-width: calc(50% - 8px);
@@ -1256,14 +1195,11 @@ textarea {
   border-radius: var(--radius-lg);
 }
 
-/* The site serves one image per colour scheme; the editor shows the one that
-   matches, so a pair does not read as a duplicate. */
 :root[data-theme="dark"] .ProseMirror .editor-image[data-scheme="light"],
 :root:not([data-theme="dark"]) .ProseMirror .editor-image[data-scheme="dark"] {
   display: none;
 }
 
-/* A line written under an image is its caption on the blog. */
 .ProseMirror p[data-join] {
   margin-top: -0.9em;
   color: var(--muted);
@@ -1271,9 +1207,40 @@ textarea {
   text-align: center;
 }
 
+.ProseMirror p[data-join] em {
+  font-style: normal;
+}
+
 .editor-image img {
   max-width: 100%;
   border-radius: var(--radius);
+}
+
+.collaboration-carets__caret {
+  position: relative;
+  margin-left: -1px;
+  margin-right: -1px;
+  border-left: 1px solid;
+  border-right: 1px solid;
+  pointer-events: none;
+  word-break: normal;
+}
+
+.collaboration-carets__label {
+  position: absolute;
+  top: -1.35em;
+  left: -1px;
+  padding: 1px 5px;
+  border-radius: var(--radius-sm) var(--radius-sm) var(--radius-sm) 0;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 600;
+  line-height: normal;
+  white-space: nowrap;
+  user-select: none;
+  pointer-events: none;
 }
 
 .editor-image.is-selected img {
@@ -1292,14 +1259,18 @@ textarea {
   font-size: 13px;
 }
 
+.editor-image-tools {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+  margin-top: 7px;
+}
+
 .editor-image-alt {
-  display: block;
   border-bottom: 1px dashed var(--border-strong);
   padding: 3px 7px;
   border: none;
   border-radius: var(--radius-sm);
-  margin-top: 7px;
-  margin-inline: auto;
   background: none;
   color: var(--faint);
   cursor: pointer;
@@ -1316,7 +1287,25 @@ textarea {
   color: var(--muted);
 }
 
-/* --------------------------------------------------------- panel pieces */
+.editor-image-alt-input {
+  min-width: 180px;
+  padding: 3px 7px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--panel);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  text-align: center;
+  outline: none;
+}
+
+.ProseMirror .editor-image:has(+ p[data-join]) .editor-image-caption,
+.ProseMirror .editor-image[data-join] .editor-image-caption,
+.ProseMirror .editor-image:has(+ .editor-image[data-join]) .editor-image-caption {
+  display: none;
+}
+
 .section + .section {
   padding-top: 18px;
   border-top: 1px solid var(--border);
@@ -1341,7 +1330,6 @@ textarea {
   font-size: 12px;
 }
 
-/* Chips for categories and tags. */
 .tokens {
   display: flex;
   min-height: 34px;
@@ -1402,7 +1390,6 @@ textarea {
   outline: none;
 }
 
-/* Cover image. */
 .cover-card {
   margin: 0;
   border: 1px solid var(--border);
@@ -1442,7 +1429,6 @@ textarea {
   color: var(--text);
 }
 
-/* Switch rows with a secondary line. */
 .switch-list {
   display: grid;
   gap: 12px;
@@ -1474,8 +1460,6 @@ textarea {
   line-height: 1.45;
 }
 
-/* Two named states, one of which is on. The knob slides between them, so the
-   choice reads as a position rather than a thing to go and find out. */
 .toggle {
   position: relative;
   display: flex;
@@ -1538,22 +1522,18 @@ textarea {
   background: color-mix(in srgb, var(--accent) 5%, var(--panel));
 }
 
-/* --------------------------------------------------------------- dialog */
 .scrim {
   position: fixed;
-  /* Above the menu, which is portalled and so paints later at equal depth. */
   z-index: 45;
   display: grid;
   padding: 24px;
   background: rgb(13 13 13 / 32%);
-  /* Inset from the keyboard as well, so the dialog centres on what is left. */
   inset: var(--app-top, 0) 0 var(--app-bottom, 0);
   place-items: center;
 }
 
 .dialog {
   width: min(580px, 100%);
-  /* Of the scrim, which stops at the keyboard — not of the whole window. */
   max-height: 100%;
   padding: 22px 24px;
   border: 1px solid var(--border);
@@ -1622,7 +1602,6 @@ textarea {
   color: var(--danger);
 }
 
-/* ----------------------------------------------------------------- menu */
 .menu {
   position: absolute;
   z-index: 30;
@@ -1651,9 +1630,6 @@ textarea {
   text-align: left;
 }
 
-/* Portalled for menus inside the scrolling toolbar, and placed by the
-   component: above its button, or under it when the keyboard has taken the
-   room above. Taller than the band that is left, it scrolls. */
 .menu.floating {
   position: fixed;
   right: auto;
@@ -1672,7 +1648,6 @@ textarea {
   font-size: 10.5px;
 }
 
-/* ---------------------------------------------------------------- toast */
 .toast {
   position: fixed;
   z-index: 50;
@@ -1719,9 +1694,6 @@ textarea {
   }
 }
 
-/* A phone, either way up: the card runs the height of the screen, so its dock
-   lands where a thumb is — at the foot of the window, or on top of the
-   keyboard — instead of halfway up it under a short post. */
 @media (width <= 640px), (pointer: coarse) and (height <= 560px) {
   .editor-page {
     display: flex;
@@ -1748,8 +1720,6 @@ textarea {
   }
 }
 
-/* Phone. Kept in step with `PHONE_QUERY` in `lib/viewport.ts`, which switches
-   the pop-up to a sheet at the same width. */
 @media (width <= 640px) {
   .rail {
     width: 34px;
@@ -1760,9 +1730,6 @@ textarea {
     font-size: 26px;
   }
 
-  /* Every pixel here is another tool in view, so the dock gives up its
-     padding, the gaps between 36px targets that do not need them, and the
-     word count — the one thing in the row that is not a control. */
   .card-dock {
     gap: 2px;
     padding: 4px;
@@ -1780,8 +1747,6 @@ textarea {
     margin: 0 3px;
   }
 
-  /* Two dozen tools do not fit on a phone, so the row scrolls — a group at a
-     time, rather than stopping halfway through an icon. */
   .toolbar {
     gap: 0;
     scroll-snap-type: x proximity;
@@ -1792,8 +1757,6 @@ textarea {
     scroll-snap-align: start;
   }
 
-  /* Across the foot of the writing surface, not down its side: the component
-     positions it, this is only the shape. */
   .popover.is-sheet {
     width: auto;
   }
@@ -1803,9 +1766,6 @@ textarea {
   }
 }
 
-/* Touch. Fingers, not pointers: bigger targets, no hover to fall back on, and
-   nothing under 16px to type into — iOS zooms the page in on anything smaller
-   and never zooms back out, which leaves the toolbar off the side of it. */
 @media (pointer: coarse) {
   .tool {
     width: 36px;
@@ -1841,14 +1801,10 @@ textarea {
     height: 38px;
   }
 
-  /* Sized across, not down: the field runs vertically, so this is the room
-     the larger type needs to sit in the tab without being clipped. */
   .rail-tab-field {
     width: 20px;
   }
 
-  /* The delete button is only ever a tap away here — there is no hover to
-     bring it out, and the tab it sits on belongs to the open draft alone. */
   .rail-tab-delete {
     opacity: 1;
     pointer-events: auto;

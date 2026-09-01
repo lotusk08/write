@@ -8,16 +8,11 @@ import { CENTER_ROW, withRowClasses } from "./blogFormat.ts";
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     localImage: {
-      /** Stores the files in IndexedDB and inserts them at the cursor. */
       insertLocalImages: (files: File[]) => ReturnType;
     };
   }
 }
 
-/**
- * How many photos picked together are taken as a row rather than a column.
- * The blog lays a row out with flex, so past four they are slivers.
- */
 const ROW_LIMIT = 4;
 
 function imageFilesFrom(list: FileList | DataTransferItemList | null | undefined): File[] {
@@ -34,7 +29,6 @@ function imageFilesFrom(list: FileList | DataTransferItemList | null | undefined
   return files;
 }
 
-/** Widths the blog's stylesheet defines, as fractions of the column. */
 const WIDTH_CLASSES: Record<string, string> = {
   "w-25": "25%",
   "w-50": "50%",
@@ -42,11 +36,6 @@ const WIDTH_CLASSES: Record<string, string> = {
   normal: "100%",
 };
 
-/**
- * Splits a Kramdown attribute list into its classes and its key/value pairs.
- * Quoted values are taken whole, so the base64 sitting inside `lqip="…"` can
- * never be mistaken for a class or a width of its own.
- */
 function parseIal(ial: string): { classes: string[]; attrs: Record<string, string> } {
   const classes: string[] = [];
   const attrs: Record<string, string> = {};
@@ -63,13 +52,6 @@ function parseIal(ial: string): { classes: string[]; attrs: Record<string, strin
   return { classes, attrs };
 }
 
-/**
- * Reads a Kramdown attribute list the way the blog's stylesheet does, so an
- * imported photo is the size and shape here that it is on the site. Width is a
- * class there; `w`/`h` are the natural dimensions the blog's build writes, and
- * are worth only an aspect ratio, which keeps the page from jumping as the
- * photos arrive.
- */
 function applyLayout(figure: HTMLElement, image: HTMLImageElement, ial: string): void {
   const { classes, attrs } = parseIal(ial);
   const fraction = classes.find((name) => name in WIDTH_CLASSES);
@@ -84,10 +66,8 @@ function applyLayout(figure: HTMLElement, image: HTMLImageElement, ial: string):
       ? "right"
       : "";
   figure.classList.toggle("is-shadowed", classes.includes("shadow"));
-  // `.gap` is the blog's own spacing for a photo in a row.
   figure.classList.toggle("is-gapped", classes.includes("gap"));
   figure.classList.toggle("is-rounded", classes.some((name) => name.startsWith("rounded")));
-  // The site serves one of these per theme; showing both would be a surprise.
   figure.dataset.scheme = classes.includes("light")
     ? "light"
     : classes.includes("dark")
@@ -95,21 +75,11 @@ function applyLayout(figure: HTMLElement, image: HTMLImageElement, ial: string):
       : "";
 }
 
-/**
- * Images live in IndexedDB, not in the document: the node stores a
- * `local:<id>` src that is resolved to an object URL for display and to a real
- * blog path at publish time. That keeps drafts small and survives reloads.
- */
 export const LocalImage = Image.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
       title: { default: null },
-      /**
-       * The Kramdown attribute list an imported image was published with —
-       * `{: lqip="…" w="…" }`, which the blog's build writes and its lazy
-       * loading reads. Carried through untouched so re-publishing keeps it.
-       */
       ial: {
         default: null,
         parseHTML: (element) => element.getAttribute("data-ial"),
@@ -121,15 +91,6 @@ export const LocalImage = Image.extend({
   addCommands() {
     return {
       ...this.parent?.(),
-      /**
-       * All of them in one insertion, in the order they were picked. One at a
-       * time raced: each file was stored asynchronously and inserted wherever
-       * the cursor had ended up, which was on the image inserted just before —
-       * so the second photo replaced the first, and three arrived as one.
-       *
-       * Picked together, a handful of photos is a row: that is what the blog's
-       * flex gallery is for, and the row tool breaks it up in a tap.
-       */
       insertLocalImages:
         (files: File[]) =>
         ({ editor }) => {
@@ -149,11 +110,7 @@ export const LocalImage = Image.extend({
                     alt: "",
                     title: null,
                     joinPrevious: row && index > 0,
-                    // The spacing between photos in a row is the site's, and
-                    // it reads it off these classes.
                     ial: row ? withRowClasses(null) : null,
-                    // Kramdown reads the list under the last line as the whole
-                    // paragraph's, and a row is one paragraph.
                     blockIal: row && index === stored.length - 1 ? CENTER_ROW : null,
                   },
                 })),
@@ -174,20 +131,26 @@ export const LocalImage = Image.extend({
       img.alt = String(node.attrs.alt ?? "");
       img.draggable = false;
 
+      const tools = document.createElement("div");
+      tools.className = "editor-image-tools";
+      tools.contentEditable = "false";
+
+      const alt = document.createElement("button");
+      alt.type = "button";
+      alt.className = "editor-image-alt";
+
       const caption = document.createElement("button");
       caption.type = "button";
-      caption.className = "editor-image-alt";
-      caption.contentEditable = "false";
+      caption.className = "editor-image-alt editor-image-caption";
+      caption.textContent = "Add caption";
 
       const paint = (attrs: Record<string, unknown>) => {
         const src = String(attrs.src ?? "");
-        // The blog lays images out from the attribute list they carry, so the
-        // editor reads the same one rather than guessing.
         applyLayout(figure, img, String(attrs.ial ?? ""));
         figure.toggleAttribute("data-join", Boolean(attrs.joinPrevious));
         img.alt = String(attrs.alt ?? "");
-        caption.textContent = attrs.alt ? String(attrs.alt) : "Add alt text";
-        caption.classList.toggle("is-empty", !attrs.alt);
+        alt.textContent = attrs.alt ? String(attrs.alt) : "Add alt text";
+        alt.classList.toggle("is-empty", !attrs.alt);
         if (isLocalSrc(src)) {
           void resolveLocalSrc(src).then((url) => {
             img.src = url ?? "";
@@ -195,9 +158,6 @@ export const LocalImage = Image.extend({
           });
         } else {
           const published = displaySrc(src);
-          // The blog's build converts every photo it is given and serves the
-          // WebP, so a post still pointing at the JPEG it was published with
-          // finds nothing at that address. It is the same picture.
           img.onerror = () => {
             const converted = published.replace(/\.(jpe?g|png|tiff?|bmp)$/i, ".webp");
             img.onerror = null;
@@ -210,6 +170,54 @@ export const LocalImage = Image.extend({
       };
       paint(node.attrs);
 
+      alt.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        const pos = getPos();
+        if (typeof pos !== "number") {
+          return;
+        }
+        const current = editor.state.doc.nodeAt(pos);
+        if (!current) {
+          return;
+        }
+        const field = document.createElement("input");
+        field.className = "editor-image-alt-input";
+        field.placeholder = "Alt text (describes the image)";
+        field.value = String(current.attrs.alt ?? "");
+        const finish = (commit: boolean) => {
+          if (!field.isConnected) {
+            return;
+          }
+          if (commit) {
+            const at = getPos();
+            const target = typeof at === "number" ? editor.state.doc.nodeAt(at) : null;
+            if (typeof at === "number" && target) {
+              editor.view.dispatch(
+                editor.state.tr.setNodeMarkup(at, undefined, {
+                  ...target.attrs,
+                  alt: field.value.trim(),
+                }),
+              );
+            }
+          }
+          field.replaceWith(alt);
+        };
+        field.addEventListener("keydown", (press) => {
+          press.stopPropagation();
+          if (press.key === "Enter") {
+            press.preventDefault();
+            finish(true);
+          } else if (press.key === "Escape") {
+            press.preventDefault();
+            finish(false);
+          }
+        });
+        field.addEventListener("blur", () => finish(true));
+        alt.replaceWith(field);
+        field.focus();
+        field.select();
+      });
+
       caption.addEventListener("mousedown", (event) => {
         event.preventDefault();
         const pos = getPos();
@@ -217,16 +225,28 @@ export const LocalImage = Image.extend({
           return;
         }
         const current = editor.state.doc.nodeAt(pos);
-        const next = window.prompt("Alt text (describes the image)", String(current?.attrs.alt ?? ""));
-        if (next === null || !current) {
+        if (!current) {
           return;
         }
-        editor.view.dispatch(
-          editor.state.tr.setNodeMarkup(pos, undefined, { ...current.attrs, alt: next }),
-        );
+        const after = pos + current.nodeSize;
+        const sibling = editor.state.doc.resolve(after).nodeAfter;
+        if (sibling?.type.name === "paragraph" && sibling.attrs.joinPrevious) {
+          editor.chain().focus(after + sibling.nodeSize - 1).run();
+          return;
+        }
+        editor
+          .chain()
+          .insertContentAt(after, {
+            type: "paragraph",
+            attrs: { joinPrevious: true, sameLine: true },
+          })
+          .focus(after + 1)
+          .setMark("italic")
+          .run();
       });
 
-      figure.append(img, caption);
+      tools.append(alt, caption);
+      figure.append(img, tools);
 
       return {
         dom: figure,
@@ -239,7 +259,7 @@ export const LocalImage = Image.extend({
         },
         selectNode: () => figure.classList.add("is-selected"),
         deselectNode: () => figure.classList.remove("is-selected"),
-        stopEvent: (event) => event.target === caption,
+        stopEvent: (event) => tools.contains(event.target as Node),
         ignoreMutation: () => true,
       };
     };

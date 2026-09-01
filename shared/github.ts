@@ -51,7 +51,6 @@ async function gh<T>(
   return (await res.json()) as T;
 }
 
-/** Branch names can contain slashes, which must stay unescaped in ref paths. */
 function encodeRef(branch: string): string {
   return branch.split("/").map(encodeURIComponent).join("/");
 }
@@ -61,7 +60,6 @@ export async function getDefaultBranch(token: string, repo: string): Promise<str
   return info.default_branch;
 }
 
-/** Lists the file names directly inside `dir` on `branch`. Missing dir → `[]`. */
 export async function listDirectory(
   token: string,
   repo: string,
@@ -82,7 +80,6 @@ export async function listDirectory(
   }
 }
 
-/** The login a token authenticates as, or null when GitHub rejects it. */
 export async function tokenLogin(token: string): Promise<string | null> {
   try {
     const user = await gh<{ login: string }>(token, "/user");
@@ -92,7 +89,6 @@ export async function tokenLogin(token: string): Promise<string | null> {
   }
 }
 
-/** False when the branch is missing; throws if the repo cannot be reached. */
 export async function branchExists(token: string, repo: string, branch: string): Promise<boolean> {
   try {
     await gh(token, `/repos/${repo}/branches/${encodeRef(branch)}`);
@@ -132,9 +128,7 @@ export async function readTextFile(
 
 export interface CommitOptions {
   token: string;
-  /** `owner/name` */
   repo: string;
-  /** Branch to commit onto. Created from `baseBranch` when it does not exist. */
   branch?: string;
   baseBranch?: string;
   message: string;
@@ -142,10 +136,6 @@ export interface CommitOptions {
   pullRequest?: { title: string; body?: string } | null;
 }
 
-/**
- * Writes every file in a single commit using the Git data API, so a post and
- * its images land atomically instead of as one commit per file.
- */
 export async function commitFiles(options: CommitOptions): Promise<PublishResult> {
   const { token, repo, message, files } = options;
   if (files.length === 0) {
@@ -161,7 +151,6 @@ export async function commitFiles(options: CommitOptions): Promise<PublishResult
   );
   const baseCommitSha = baseRef.object.sha;
 
-  // Target branch may not exist yet (publishing via a PR branch).
   let headCommitSha = baseCommitSha;
   let branchExists = branch === baseBranch;
   if (!branchExists) {
