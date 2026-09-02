@@ -108,11 +108,11 @@ and compare the HTML. Use the options the site actually builds with —
 wrap, under the real one it is a `<br>`. Every line break in the corpus was
 being scored against the wrong answer.
 
-At the time of writing **57 of 63 posts render identically** once whitespace
-runs are collapsed, and 26 byte for byte — the others differ only in whitespace
+At the time of writing **68 of 74 posts render identically** once whitespace
+runs are collapsed, and 37 byte for byte — the others differ only in whitespace
 kramdown copies through from stray trailing spaces in the source. The 6 that
 really differ are older posts with unbalanced `*` and the like, which kramdown
-and this parser recover from differently. Treat a drop in 57 as a regression.
+and this parser recover from differently. Treat a drop in 68 as a regression.
 
 Things that took a bug to learn, and that a change here can quietly undo:
 
@@ -133,7 +133,11 @@ Things that took a bug to learn, and that a change here can quietly undo:
 - `w=` and `h=` in an attribute list are the image's natural dimensions, written
   by the blog's build. Display width is a class (`.w-50`, `.w-75`).
 - Code spans are literal: escaping them writes the backslashes into the code.
-  A link wraps its emphasis, not the other way round.
+  A link wraps its emphasis, not the other way round — and because the editor
+  stores marks per text node, `[a *b* c](url)` is three nodes sharing one link:
+  serialised one node at a time it came out as three adjacent links, so
+  `inline` in `markdown.ts` groups a run of text nodes carrying the same link
+  and writes the link once, around it.
 - Footnote references are syntax, not text to escape.
 - Enter writes a line break; Enter again on the line it just made starts a
   paragraph. A phone keyboard has no Shift+Enter, so that was the only way to

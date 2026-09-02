@@ -91,27 +91,62 @@ function withoutEdgeBreaks(
   return content;
 }
 
+function linkKey(marks: Mark[] | undefined): string | null {
+  const link = marks?.find((mark) => mark.type === "link");
+  return link ? JSON.stringify([link.attrs?.href ?? "", link.attrs?.title ?? ""]) : null;
+}
+
 function inline(nodes: JSONContent[] | undefined, options: SerializeOptions): string {
   if (!nodes?.length) {
     return "";
   }
-  return nodes
-    .map((node) => {
-      if (node.type === "text") {
-        const marks = node.marks as Mark[] | undefined;
-        const raw = node.text ?? "";
-        const code = marks?.some((mark) => mark.type === "code");
-        return applyMarks(code ? raw : escapeText(raw), marks);
+  const rendered: string[] = [];
+  let index = 0;
+  while (index < nodes.length) {
+    const node = nodes[index];
+    const key = node.type === "text" ? linkKey(node.marks as Mark[] | undefined) : null;
+    if (key) {
+      let end = index + 1;
+      while (
+        end < nodes.length &&
+        nodes[end].type === "text" &&
+        linkKey(nodes[end].marks as Mark[] | undefined) === key
+      ) {
+        end += 1;
       }
-      if (node.type === "hardBreak") {
-        return "\n";
+      if (end - index > 1) {
+        const link = (node.marks as Mark[]).find((mark) => mark.type === "link")!;
+        const href = String(link.attrs?.href ?? "");
+        const title = link.attrs?.title ? ` "${String(link.attrs.title)}"` : "";
+        const body = nodes
+          .slice(index, end)
+          .map((part) => {
+            const marks = (part.marks as Mark[]).filter((mark) => mark.type !== "link");
+            const raw = part.text ?? "";
+            const code = marks.some((mark) => mark.type === "code");
+            return applyMarks(code ? raw : escapeText(raw), marks);
+          })
+          .join("");
+        rendered.push(`[${body}](${href}${title})`);
+        index = end;
+        continue;
       }
-      if (node.type === "image") {
-        return image(node, options);
-      }
-      return inline(node.content, options);
-    })
-    .join("");
+    }
+    if (node.type === "text") {
+      const marks = node.marks as Mark[] | undefined;
+      const raw = node.text ?? "";
+      const code = marks?.some((mark) => mark.type === "code");
+      rendered.push(applyMarks(code ? raw : escapeText(raw), marks));
+    } else if (node.type === "hardBreak") {
+      rendered.push("\n");
+    } else if (node.type === "image") {
+      rendered.push(image(node, options));
+    } else {
+      rendered.push(inline(node.content, options));
+    }
+    index += 1;
+  }
+  return rendered.join("");
 }
 
 function image(node: JSONContent, options: SerializeOptions): string {
