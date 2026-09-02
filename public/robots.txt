@@ -1,4 +1,2 @@
-# A private writing tool. Nothing here is for an index — and a share link
-# that reaches a crawler should stay out of one.
 User-agent: *
 Disallow: /
