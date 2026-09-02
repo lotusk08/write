@@ -1,5 +1,6 @@
 import type { JSONContent } from "@tiptap/core";
 import type { PostMeta } from "../../shared/types.ts";
+import { CENTER_ROW } from "../editor/extensions/blogFormat.ts";
 import { embedLiquid } from "../editor/extensions/embed.ts";
 
 export interface SerializeOptions {
@@ -7,6 +8,19 @@ export interface SerializeOptions {
 }
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
+
+const REF_MARKS = new Set(["bold", "italic", "strike", "underline", "highlight"]);
+
+function marksOf(node: JSONContent): Mark[] {
+  const marks = (node.marks as Mark[] | undefined) ?? [];
+  if (node.type === "text") {
+    return marks;
+  }
+  if (node.type === "footnoteRef") {
+    return marks.filter((mark) => REF_MARKS.has(mark.type));
+  }
+  return [];
+}
 
 function escapeText(text: string): string {
   return text
@@ -97,6 +111,30 @@ function withoutEdgeBreaks(
   return content;
 }
 
+function captionContent(nodes: JSONContent[] | undefined): JSONContent[] | undefined {
+  if (!nodes?.length) {
+    return nodes;
+  }
+  let italic: Mark | null = null;
+  return nodes.map((node) => {
+    if (node.type === "text") {
+      const marks = marksOf(node);
+      italic = marks.some((mark) => mark.type === "code")
+        ? null
+        : (marks.find((mark) => mark.type === "italic") ?? null);
+      return node;
+    }
+    if (node.type !== "footnoteRef") {
+      italic = null;
+      return node;
+    }
+    if (!italic) {
+      return node;
+    }
+    return { ...node, marks: [...marksOf(node).filter((mark) => mark.type !== "italic"), italic] };
+  });
+}
+
 function sameMark(a: Mark, b: Mark): boolean {
   return a.type === b.type && JSON.stringify(a.attrs ?? {}) === JSON.stringify(b.attrs ?? {});
 }
@@ -120,7 +158,7 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions): st
   let index = 0;
   while (index < nodes.length) {
     const node = nodes[index];
-    const marks = node.type === "text" ? ((node.marks as Mark[] | undefined) ?? []) : [];
+    const marks = marksOf(node);
     let outer: Mark | null = null;
     let end = index + 1;
     for (const mark of marks) {
@@ -128,11 +166,7 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         continue;
       }
       let reach = index + 1;
-      while (
-        reach < nodes.length &&
-        nodes[reach].type === "text" &&
-        ((nodes[reach].marks as Mark[] | undefined) ?? []).some((other) => sameMark(other, mark))
-      ) {
+      while (reach < nodes.length && marksOf(nodes[reach]).some((other) => sameMark(other, mark))) {
         reach += 1;
       }
       if (reach > end) {
@@ -143,7 +177,7 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions): st
     if (outer) {
       const run = nodes.slice(index, end).map((part) => ({
         ...part,
-        marks: (part.marks as Mark[]).filter((mark) => !sameMark(mark, outer as Mark)),
+        marks: marksOf(part).filter((mark) => !sameMark(mark, outer as Mark)),
       }));
       rendered.push(wrap(inline(run, options), outer));
       index = end;
@@ -241,6 +275,40 @@ function collapsibleBlock(node: JSONContent, options: SerializeOptions): string 
   return `<details markdown="1"${open}>\n<summary>${summary}</summary>\n\n${body}\n\n</details>`;
 }
 
+const ENDS_WITH_IAL = /\n\{:[^}\n]*\}$/;
+
+function joinsRow(nodes: JSONContent[], index: number): boolean {
+  return (
+    nodes[index]?.type === "image" &&
+    Boolean(nodes[index].attrs?.joinPrevious) &&
+    nodes[index - 1]?.type === "image"
+  );
+}
+
+const GAP_CLASS = /\.gap(?![\w-])/;
+
+function blockIal(nodes: JSONContent[], index: number): string {
+  const own = nodes[index].attrs?.blockIal ? String(nodes[index].attrs.blockIal) : "";
+  if (!joinsRow(nodes, index) && !joinsRow(nodes, index + 1)) {
+    return own;
+  }
+  if (joinsRow(nodes, index + 1)) {
+    return own === CENTER_ROW ? "" : own;
+  }
+  if (own) {
+    return own;
+  }
+  let first = index;
+  while (joinsRow(nodes, first)) {
+    first -= 1;
+  }
+  const run = nodes.slice(first, index + 1);
+  const row =
+    run.some((image) => image.attrs?.blockIal === CENTER_ROW) ||
+    run.some((image) => GAP_CLASS.test(String(image.attrs?.ial ?? "")));
+  return row ? CENTER_ROW : "";
+}
+
 function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): string[] {
   if (!nodes?.length) {
     return [];
@@ -253,7 +321,9 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
       case "paragraph": {
         const after = Boolean(nodes[index + 1]?.attrs?.joinPrevious);
         const before = Boolean(node.attrs?.joinPrevious);
-        out.push(inline(withoutEdgeBreaks(node.content, before, after), options));
+        const content = withoutEdgeBreaks(node.content, before, after);
+        const caption = before && nodes[index - 1]?.type === "image";
+        out.push(inline(caption ? captionContent(content) : content, options));
         break;
       }
       case "heading": {
@@ -336,13 +406,14 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
     if (node.attrs?.joinPrevious && out.length === start + 1 && start > 0) {
       const piece = out.pop() ?? "";
       if (piece) {
-        out[start - 1] = node.attrs?.sameLine
-          ? `${out[start - 1]} ${piece}`
-          : nextLine(out[start - 1], piece);
+        out[start - 1] =
+          node.attrs?.sameLine && !ENDS_WITH_IAL.test(out[start - 1])
+            ? `${out[start - 1]} ${piece}`
+            : nextLine(out[start - 1], piece);
       }
     }
 
-    const ial = node.attrs?.blockIal ? String(node.attrs.blockIal) : "";
+    const ial = blockIal(nodes, index);
     if (ial && out.length) {
       out[out.length - 1] = nextLine(out[out.length - 1], ial);
     }

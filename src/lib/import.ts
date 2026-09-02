@@ -184,7 +184,11 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
       const footnote = FOOTNOTE_REF.exec(rest);
       if (footnote) {
         flush();
-        out.push({ type: "footnoteRef", attrs: { label: footnote[1] } });
+        out.push({
+          type: "footnoteRef",
+          attrs: { label: footnote[1] },
+          ...(marks.length ? { marks } : {}),
+        });
         i += footnote[0].length;
         continue;
       }
