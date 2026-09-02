@@ -34,16 +34,33 @@ function randomName(): string {
 
 export function participantName(): string {
   try {
-    const stored = sessionStorage.getItem(NAME_KEY);
+    const stored = localStorage.getItem(NAME_KEY);
     if (stored) {
       return stored;
     }
     const name = randomName();
-    sessionStorage.setItem(NAME_KEY, name);
+    localStorage.setItem(NAME_KEY, name);
     return name;
   } catch {
     return randomName();
   }
+}
+
+export function saveParticipantName(raw: string): void {
+  const name = raw.trim();
+  try {
+    if (name) {
+      localStorage.setItem(NAME_KEY, name);
+    } else {
+      localStorage.removeItem(NAME_KEY);
+    }
+  } catch {
+  }
+}
+
+export function applyParticipantName(session: ShareSession, raw: string): void {
+  const name = raw.trim() || participantName();
+  session.provider.awareness.setLocalStateField("user", { name, color: caretColor(name) });
 }
 
 function caretColor(name: string): string {

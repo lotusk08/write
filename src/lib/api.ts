@@ -55,10 +55,10 @@ export async function fetchPostSource(path: string, password: string): Promise<P
   return source;
 }
 
-export async function createShareRoom(seed: Uint8Array, password: string): Promise<string> {
+export async function createShareRoom(seed: Uint8Array): Promise<string> {
   const response = await fetch("/api/share", {
     method: "POST",
-    headers: headers(password, { "content-type": "application/octet-stream" }),
+    headers: { accept: "application/json", "content-type": "application/octet-stream" },
     body: seed as unknown as BodyInit,
   });
   const result = await readJson<{ token?: string }>(response, "Could not start sharing");
@@ -68,27 +68,29 @@ export async function createShareRoom(seed: Uint8Array, password: string): Promi
   return result.token;
 }
 
-export async function endShareRoom(token: string, password: string): Promise<void> {
+export async function endShareRoom(token: string): Promise<void> {
   const response = await fetch(`/api/share/${encodeURIComponent(token)}`, {
     method: "DELETE",
-    headers: headers(password),
+    headers: { accept: "application/json" },
   });
   if (!response.ok && response.status !== 404) {
     await readJson(response, "Could not stop sharing");
   }
 }
 
-export async function shareRoomLive(token: string): Promise<boolean> {
+export type ShareRoomState = "live" | "ended" | "unknown";
+
+export async function shareRoomState(token: string): Promise<ShareRoomState> {
   try {
     const response = await fetch(`/api/share/${encodeURIComponent(token)}`, {
       headers: { accept: "application/json" },
     });
     if (!response.ok) {
-      return false;
+      return "unknown";
     }
-    return Boolean(((await response.json()) as { live?: boolean }).live);
+    return ((await response.json()) as { live?: boolean }).live ? "live" : "ended";
   } catch {
-    return false;
+    return "unknown";
   }
 }
 

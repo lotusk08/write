@@ -1,22 +1,16 @@
-import { useState } from "react";
-import { sessionPassword } from "../../lib/password.ts";
-import { participantName } from "../../lib/share.ts";
-
 export interface SharePanelProps {
   sharing: boolean;
   link: string | null;
   busy: boolean;
   error: string | null;
-  onEnable: (password: string) => void;
-  onDisable: (password: string) => void;
+  name: string;
+  onName: (name: string) => void;
+  onEnable: () => void;
+  onDisable: () => void;
   onCopyLink: () => void;
 }
 
-export function SharePanel({ sharing, link, busy, error, onEnable, onDisable }: SharePanelProps) {
-  const [password, setPassword] = useState("");
-  const needsPassword = !sessionPassword();
-  const supplied = () => sessionPassword() || password;
-
+export function SharePanel({ sharing, link, busy, error, name, onName, onEnable, onDisable }: SharePanelProps) {
   return (
     <div className="share-panel">
       <ul className="switch-list">
@@ -25,8 +19,8 @@ export function SharePanel({ sharing, link, busy, error, onEnable, onDisable }: 
             <input
               type="checkbox"
               checked={sharing}
-              disabled={busy || (!sharing && needsPassword && !password)}
-              onChange={() => (sharing ? onDisable(supplied()) : onEnable(supplied()))}
+              disabled={busy}
+              onChange={() => (sharing ? onDisable() : onEnable())}
             />
             <span>
               Shared editing
@@ -36,19 +30,16 @@ export function SharePanel({ sharing, link, busy, error, onEnable, onDisable }: 
         </li>
       </ul>
 
-      {!sharing && needsPassword ? (
-        <div className="field">
-          <span className="field-label">Publish password</span>
-          <input
-            className="input"
-            type="password"
-            value={password}
-            autoComplete="current-password"
-            placeholder="Needed before sharing can turn on"
-            onChange={(event) => setPassword(event.target.value)}
-          />
-        </div>
-      ) : null}
+      <div className="field">
+        <span className="field-label">Your name</span>
+        <input
+          className="input"
+          value={name}
+          maxLength={40}
+          placeholder="How your caret is labelled to the others"
+          onChange={(event) => onName(event.target.value)}
+        />
+      </div>
 
       {sharing && link ? (
         <div className="share-link">
@@ -69,8 +60,8 @@ export function SharePanel({ sharing, link, busy, error, onEnable, onDisable }: 
 
       <p className="hint">
         {sharing
-          ? `Everyone edits the same live copy while their tab is open — you appear as “${participantName()}”. Turning the switch off ends the link for all of them.`
-          : "Turning this on sends the draft to your deployment and makes a link; the writing stays private until then."}
+          ? "Everyone edits the same live copy while their tab is open. Turning the switch off ends the link for all of them."
+          : "No password here — the link itself is the key, and the publish password guards only the blog. The writing stays private until the switch goes on."}
       </p>
     </div>
   );

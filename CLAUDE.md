@@ -177,19 +177,30 @@ on a phone — is what forgets it.
 
 ## Sharing a draft
 
-The Share tab holds one switch. Turning it on takes the publish password: the
-draft is copied into a `ShareRoom` Durable Object and the app hands back
-`?share=<token>`. The token is the whole credential for joining — the link
-opens the same live document for anyone holding it, password-free, the same
-trade `?edit=` makes. Turning the switch off (or deleting the draft while the
-password is in the session) deletes the room and closes every connection with
-code 4404, which each participant's app reads as the cue to drop the token and
-carry on with its local copy — autosave ran the whole time, so nothing typed
-together is lost. While a draft carries a `shareToken` the editor runs on Yjs
-(`src/lib/share.ts` client-side): its own undo is off, content comes from the
-room rather than `setContent`, and carets show who is where. A caret is named
-by a random two-word name drawn once per tab and kept in session storage — not
-the author setting, which defaults the same on every device and once filled a
+The Share tab holds one switch and a name — no password. The password guards
+the blog, and a share room holds no credential: the draft is copied into a
+`ShareRoom` Durable Object and the app hands back `?share=<token>`, and that
+token is the whole credential, for joining and for ending alike — the link
+opens the same live document for anyone holding it, the same trade `?edit=`
+makes. What an open create endpoint gives away is bounded instead of gated: a
+seed is capped at ~4 MB, and a room deletes itself after 14 idle days through
+a Durable Object alarm (open sockets and fresh edits push the expiry out, and
+the alarm re-arms itself), so neither an abandoned link nor a stranger
+POSTing rooms at `/api/share` grows storage forever. Turning the switch off
+(or deleting the draft — that always ends its room now) deletes the room and
+closes every connection with code 4404, which each participant's app reads as
+the cue to drop the token and carry on with its local copy — autosave ran the
+whole time, so nothing typed together is lost. A room that ended while every
+tab was closed never got to send 4404, so joining a stored token also asks
+the room whether it is still live and drops the token only on a definite
+"ended" — an unreachable network must not be read as one, or going through a
+tunnel would detach every phone from a live room. While a draft carries a
+`shareToken` the editor runs on Yjs (`src/lib/share.ts` client-side): its own
+undo is off, content comes from the room rather than `setContent`, and carets
+show who is where. The name above the switch is how a caret is labelled: kept
+per device, prefilled with a random two-word name so nobody has to invent
+one, and applied live through awareness when edited mid-session — not the
+author setting, which defaults the same on every device and once filled a
 room with carets all reading "steve". Turning the switch on keeps the seed
 update it sent to create the room and applies it to the local doc on join, so
 the sharer's own text stays on screen instead of blanking until the first sync

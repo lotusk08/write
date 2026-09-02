@@ -13,19 +13,21 @@ import {
   endShareRoom,
   fetchAppConfig,
   fetchPostSource,
-  shareRoomLive,
-  PasswordRejected,
+  shareRoomState,
 } from "./lib/api.ts";
 import { draftStore, type Draft } from "./lib/db.ts";
 import { createDraft, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
 import { markdownToDoc, parsePost, postPathFromLink, slugFromPath } from "./lib/import.ts";
 import { mindmapUrl } from "./lib/mindmap.ts";
-import { rememberPassword, sessionPassword } from "./lib/password.ts";
+import { sessionPassword } from "./lib/password.ts";
 import {
+  applyParticipantName,
   collabExtensions,
   joinShare,
   leaveShare,
+  participantName,
+  saveParticipantName,
   seedUpdate,
   shareLink,
   SHARE_TOKEN,
@@ -70,6 +72,7 @@ export default function App() {
   const [session, setSession] = useState<ShareSession | null>(null);
   const [shareTarget, setShareTarget] = useState<boolean | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [shareName, setShareName] = useState(participantName);
 
   const draftsRef = useRef<Draft[]>([]);
   const currentIdRef = useRef<string | null>(null);
@@ -158,7 +161,14 @@ export default function App() {
     }
     const joined = joinShare(shareToken, endedShare, seedRef.current?.update);
     setSession(joined);
+    let stale = false;
+    void shareRoomState(shareToken).then((state) => {
+      if (!stale && state === "ended") {
+        endedShare();
+      }
+    });
     return () => {
+      stale = true;
       leaveShare(joined);
       setSession(null);
     };
@@ -335,8 +345,13 @@ export default function App() {
         setCurrentId(existing.id);
         return;
       }
-      if (!(await shareRoomLive(token))) {
+      const state = await shareRoomState(token);
+      if (state === "ended") {
         setToast({ message: "That share has ended.", kind: "error" });
+        return;
+      }
+      if (state === "unknown") {
+        setToast({ message: "Could not reach the share — open the link again.", kind: "error" });
         return;
       }
       const draft: Draft = { ...createDraft(loadSettings()), shareToken: token };
@@ -386,8 +401,8 @@ export default function App() {
         return;
       }
       pendingRef.current = {};
-      if (draft.shareToken && sessionPassword()) {
-        void endShareRoom(draft.shareToken, sessionPassword()).catch(() => undefined);
+      if (draft.shareToken) {
+        void endShareRoom(draft.shareToken).catch(() => undefined);
       }
       await draftStore.remove(id);
       const remaining = draftsRef.current.filter((item) => item.id !== id);
@@ -500,63 +515,56 @@ export default function App() {
     [current, editor, flush, settings],
   );
 
-  const enableShare = useCallback(
-    async (password: string) => {
-      if (!password) {
-        setShareError("The publish password turns sharing on.");
-        return;
-      }
-      setShareTarget(true);
-      setShareError(null);
-      try {
-        await settle();
-        const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
-        if (!draft) {
-          return;
-        }
-        const update = seedUpdate(draft.doc);
-        const token = await createShareRoom(update, password);
-        seedRef.current = { token, update };
-        rememberPassword(password);
-        setSource(null);
-        queueSave({ shareToken: token });
-        await flush();
-      } catch (cause) {
-        if (cause instanceof PasswordRejected) {
-          rememberPassword("");
-        }
-        setShareError(cause instanceof Error ? cause.message : String(cause));
-      } finally {
-        setShareTarget(null);
-      }
-    },
-    [settle, flush, queueSave],
-  );
-
-  const disableShare = useCallback(
-    async (password: string) => {
+  const enableShare = useCallback(async () => {
+    setShareTarget(true);
+    setShareError(null);
+    try {
+      await settle();
       const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
-      const token = draft?.shareToken;
-      if (!token) {
+      if (!draft) {
         return;
       }
-      setShareTarget(false);
-      setShareError(null);
-      try {
-        await endShareRoom(token, password);
-        rememberPassword(password);
-        queueSave({ shareToken: undefined });
-        await flush();
-      } catch (cause) {
-        if (cause instanceof PasswordRejected) {
-          rememberPassword("");
-        }
-        setShareError(cause instanceof Error ? cause.message : String(cause));
-      } finally {
-        setShareTarget(null);
+      const update = seedUpdate(draft.doc);
+      const token = await createShareRoom(update);
+      seedRef.current = { token, update };
+      setSource(null);
+      queueSave({ shareToken: token });
+      await flush();
+    } catch (cause) {
+      setShareError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setShareTarget(null);
+    }
+  }, [settle, flush, queueSave]);
+
+  const disableShare = useCallback(async () => {
+    const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
+    const token = draft?.shareToken;
+    if (!token) {
+      return;
+    }
+    setShareTarget(false);
+    setShareError(null);
+    try {
+      await endShareRoom(token);
+      queueSave({ shareToken: undefined });
+      await flush();
+    } catch (cause) {
+      setShareError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setShareTarget(null);
+    }
+  }, [flush, queueSave]);
+
+  const renameShare = useCallback(
+    (name: string) => {
+      setShareName(name);
+      saveParticipantName(name);
+      if (session) {
+        applyParticipantName(session, name);
       }
     },
-    [flush, queueSave],
+    [session],
   );
 
   const copyShareLink = useCallback(async () => {
@@ -806,8 +814,10 @@ export default function App() {
           link: current.shareToken ? shareLink(current.shareToken) : null,
           busy: shareTarget !== null,
           error: shareError,
-          onEnable: (password) => void enableShare(password),
-          onDisable: (password) => void disableShare(password),
+          name: shareName,
+          onName: renameShare,
+          onEnable: () => void enableShare(),
+          onDisable: () => void disableShare(),
           onCopyLink: () => void copyShareLink(),
         }}
         onPublish={() =>

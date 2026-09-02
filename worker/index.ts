@@ -255,9 +255,9 @@ const SHARE_SEED_MAX_BYTES = 4 * 1024 * 1024;
 const SHARE_PATH = /^\/api\/share\/([0-9a-f]{32})$/;
 
 async function handleShareCreate(request: Request, env: Env): Promise<Response> {
-  const denied = authorize(request, env);
-  if (denied) {
-    return denied;
+  const declared = Number(request.headers.get("content-length") ?? "0");
+  if (declared > SHARE_SEED_MAX_BYTES) {
+    return json({ error: "Draft is too large to share (max ~4 MB)." }, 400);
   }
   const seed = await request.arrayBuffer();
   if (seed.byteLength > SHARE_SEED_MAX_BYTES) {
@@ -280,10 +280,6 @@ async function handleShareRoom(request: Request, env: Env, token: string): Promi
     return room.fetch(request);
   }
   if (request.method === "DELETE") {
-    const denied = authorize(request, env);
-    if (denied) {
-      return denied;
-    }
     return room.fetch("https://share/", { method: "DELETE" });
   }
   if (request.method === "GET") {
