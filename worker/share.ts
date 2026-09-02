@@ -9,6 +9,7 @@ const MESSAGE_AWARENESS = 1;
 const MESSAGE_QUERY_AWARENESS = 3;
 const SAVE_DELAY_MS = 900;
 const CLOSE_ENDED = 4404;
+const ROOM_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 
 export class ShareRoom {
   private state: DurableObjectState;
@@ -85,8 +86,37 @@ export class ShareRoom {
     }
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      void this.state.storage.put("doc", Y.encodeStateAsUpdate(this.doc));
+      void this.state.storage.put({ doc: Y.encodeStateAsUpdate(this.doc), touched: Date.now() });
     }, SAVE_DELAY_MS);
+  }
+
+  private async keepAlive(): Promise<void> {
+    await this.state.storage.put("touched", Date.now());
+    if ((await this.state.storage.getAlarm()) === null) {
+      await this.state.storage.setAlarm(Date.now() + ROOM_TTL_MS);
+    }
+  }
+
+  async alarm(): Promise<void> {
+    const touched = ((await this.state.storage.get("touched")) as number | undefined) ?? 0;
+    const now = Date.now();
+    if (this.sockets.size > 0) {
+      await this.state.storage.setAlarm(now + ROOM_TTL_MS);
+      return;
+    }
+    if (now < touched + ROOM_TTL_MS) {
+      await this.state.storage.setAlarm(touched + ROOM_TTL_MS);
+      return;
+    }
+    if (this.saveTimer !== null) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    await this.state.storage.deleteAll();
+    await this.state.storage.deleteAlarm();
+    this.doc.destroy();
+    this.loaded = false;
+    this.bind();
   }
 
   private accept(socket: WebSocket): void {
@@ -189,6 +219,7 @@ export class ShareRoom {
         return new Response("No such share.", { status: 404 });
       }
       await this.load();
+      await this.keepAlive();
       const pair = new WebSocketPair();
       this.accept(pair[1]);
       return new Response(null, { status: 101, webSocket: pair[0] });
@@ -200,8 +231,8 @@ export class ShareRoom {
       if (body.byteLength > 0) {
         Y.applyUpdate(this.doc, body);
       }
-      await this.state.storage.put("doc", Y.encodeStateAsUpdate(this.doc));
-      await this.state.storage.put("live", true);
+      await this.state.storage.put({ doc: Y.encodeStateAsUpdate(this.doc), live: true });
+      await this.keepAlive();
       return new Response(null, { status: 204 });
     }
 
@@ -219,6 +250,7 @@ export class ShareRoom {
         this.saveTimer = null;
       }
       await this.state.storage.deleteAll();
+      await this.state.storage.deleteAlarm();
       this.doc.destroy();
       this.loaded = false;
       this.bind();

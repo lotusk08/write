@@ -6,7 +6,8 @@
   "assets": {
     "directory": "./dist",
     "binding": "ASSETS",
-    "not_found_handling": "single-page-application"
+    "not_found_handling": "single-page-application",
+    "run_worker_first": true
   },
   "observability": {
     "enabled": true
@@ -15,23 +16,23 @@
     "bindings": [{ "name": "SHARE", "class_name": "ShareRoom" }]
   },
   "migrations": [{ "tag": "share-rooms", "new_sqlite_classes": ["ShareRoom"] }],
-  // The blog's *Edit this post* button links here, so this name has to keep
-  // answering. It is a custom domain on this Worker, not on a Pages project:
-  // deploying anywhere else leaves the old app sitting on the domain.
+  "unsafe": {
+    "bindings": [
+      {
+        "name": "SHARE_RATE",
+        "type": "ratelimit",
+        "namespace_id": "1001",
+        "simple": { "limit": 6, "period": 60 }
+      }
+    ]
+  },
   "routes": [{ "pattern": "write.stevehoang.com", "custom_domain": true }],
   "vars": {
     "BLOG_REPO": "lotusk08/stevehoang.com",
-    // The branch the posts live on — the site's `_posts` are on `blog`.
     "BLOG_BRANCH": "blog",
-    // Where the blog is served, so images already published can be previewed.
     "SITE_URL": "https://stevehoang.com",
     "POSTS_DIR": "_posts",
     "DRAFTS_DIR": "_drafts",
     "IMAGES_DIR": "assets/img/post"
   }
-  // Secrets (never in this file — `wrangler secret put NAME`):
-  //   GITHUB_TOKEN   – fine-grained PAT, Contents: read & write on the blog repo
-  //   WRITE_PASSWORD – the password the app sends before this will use it.
-  //                    Without it the Worker refuses to publish at all, rather
-  //                    than sitting on the internet holding a write token.
 }

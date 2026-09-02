@@ -211,6 +211,44 @@ textarea {
   font-size: 12px;
 }
 
+.peers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.peer {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--hover);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.peer-dot,
+.share-dot {
+  width: 8px;
+  height: 8px;
+  flex: none;
+  border-radius: 999px;
+}
+
+.tool.share-me {
+  width: auto;
+  gap: 6px;
+  padding: 0 8px;
+}
+
+.share-me-name {
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .menu-row {
   display: flex;
   min-height: 26px;

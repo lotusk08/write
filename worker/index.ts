@@ -13,6 +13,7 @@ export { ShareRoom } from "./share.ts";
 export interface Env {
   ASSETS: Fetcher;
   SHARE: DurableObjectNamespace;
+  SHARE_RATE?: RateLimit;
   GITHUB_TOKEN?: string;
   WRITE_PASSWORD?: string;
   BLOG_REPO?: string;
@@ -74,8 +75,21 @@ function json(body: unknown, status = 200): Response {
     headers: {
       "content-type": "application/json; charset=utf-8",
       "cache-control": "no-store",
+      "x-robots-tag": "noindex",
     },
   });
+}
+
+function crossSite(request: Request): boolean {
+  const origin = request.headers.get("origin");
+  if (!origin) {
+    return false;
+  }
+  try {
+    return new URL(origin).host !== new URL(request.url).host;
+  } catch {
+    return true;
+  }
 }
 
 function authorize(request: Request, env: Env): Response | null {
@@ -255,9 +269,22 @@ const SHARE_SEED_MAX_BYTES = 4 * 1024 * 1024;
 const SHARE_PATH = /^\/api\/share\/([0-9a-f]{32})$/;
 
 async function handleShareCreate(request: Request, env: Env): Promise<Response> {
-  const denied = authorize(request, env);
-  if (denied) {
-    return denied;
+  if (crossSite(request)) {
+    return json({ error: "Shares can only be managed from the app itself." }, 403);
+  }
+  if (env.SHARE_RATE) {
+    const ip = request.headers.get("cf-connecting-ip") ?? "";
+    const { success } = await env.SHARE_RATE.limit({ key: `share:${ip}` });
+    if (!success) {
+      return json(
+        { error: "Too many new shares from this connection — wait a minute and try again." },
+        429,
+      );
+    }
+  }
+  const declared = Number(request.headers.get("content-length") ?? "0");
+  if (declared > SHARE_SEED_MAX_BYTES) {
+    return json({ error: "Draft is too large to share (max ~4 MB)." }, 400);
   }
   const seed = await request.arrayBuffer();
   if (seed.byteLength > SHARE_SEED_MAX_BYTES) {
@@ -280,9 +307,8 @@ async function handleShareRoom(request: Request, env: Env, token: string): Promi
     return room.fetch(request);
   }
   if (request.method === "DELETE") {
-    const denied = authorize(request, env);
-    if (denied) {
-      return denied;
+    if (crossSite(request)) {
+      return json({ error: "Shares can only be managed from the app itself." }, 403);
     }
     return room.fetch("https://share/", { method: "DELETE" });
   }
@@ -322,6 +348,9 @@ export default {
       return json({ error: "Not found." }, 404);
     }
 
-    return env.ASSETS.fetch(request);
+    const asset = await env.ASSETS.fetch(request);
+    const page = new Response(asset.body, asset);
+    page.headers.set("x-robots-tag", "noindex");
+    return page;
   },
 } satisfies ExportedHandler<Env>;

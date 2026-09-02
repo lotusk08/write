@@ -191,17 +191,64 @@ on a phone — is what forgets it.
 
 ## Sharing a draft
 
-The Share tab holds one switch. Turning it on takes the publish password: the
-draft is copied into a `ShareRoom` Durable Object and the app hands back
-`?share=<token>`. The token is the whole credential for joining — the link
-opens the same live document for anyone holding it, password-free, the same
-trade `?edit=` makes. Turning the switch off (or deleting the draft while the
-password is in the session) deletes the room and closes every connection with
-code 4404, which each participant's app reads as the cue to drop the token and
-carry on with its local copy — autosave ran the whole time, so nothing typed
-together is lost. While a draft carries a `shareToken` the editor runs on Yjs
-(`src/lib/share.ts` client-side): its own undo is off, content comes from the
-room rather than `setContent`, and carets show who is where. Only the body is
+The Share tab holds one switch and a name — no password. The password guards
+the blog, and a share room holds no credential: the draft is copied into a
+`ShareRoom` Durable Object and the app hands back `?share=<token>`, and that
+token is the whole credential, for joining and for ending alike — the link
+opens the same live document for anyone holding it, the same trade `?edit=`
+makes. What an open create endpoint gives away is bounded instead of gated: a
+seed is capped at ~4 MB, and a room deletes itself after 14 idle days through
+a Durable Object alarm (open sockets and fresh edits push the expiry out, and
+the alarm re-arms itself), so neither an abandoned link nor a stranger
+POSTing rooms at `/api/share` grows storage forever. The name plays no part
+in any of this — nothing checks it, it exists so carets can be told apart;
+what stands between the endpoint and bots is the rest: share creation
+refuses cross-site calls (a page's script cannot forge its own `Origin`
+header, which stops other sites conscripting their visitors' browsers), a
+per-IP rate limit — six new rooms a minute, Cloudflare's `ratelimit`
+binding, checked before the body is read — keeps a bot from minting rooms
+by the thousand, and crawlers are told to stay out entirely
+(`public/robots.txt` disallows the whole app, every response carries
+`X-Robots-Tag: noindex`, so a share link posted somewhere public does not
+end up rendered into a search index). The limiter is best-effort and
+per-colo — a brake, not a wall; Bot Fight Mode in the Cloudflare dashboard
+sits in front of all of it if one is ever needed. Turning the switch off
+(or deleting the draft — that always ends its room now) deletes the room and
+closes every connection with code 4404, which each participant's app reads as
+the cue to drop the token and carry on with its local copy — autosave ran the
+whole time, so nothing typed together is lost. A room that ended while every
+tab was closed never got to send 4404, so joining a stored token also asks
+the room whether it is still live and drops the token only on a definite
+"ended" — an unreachable network must not be read as one, or going through a
+tunnel would detach every phone from a live room. While a draft carries a
+`shareToken` the editor runs on Yjs (`src/lib/share.ts` client-side): its own
+undo is off, content comes from the room rather than `setContent`, and carets
+show who is where. The name above the switch is how a caret is labelled: kept
+per device, prefilled with a random two-word name so nobody has to invent
+one, and applied live through awareness when edited mid-session — not the
+author setting, which defaults the same on every device and once filled a
+room with carets all reading "steve". Clearing the field keeps the last name
+rather than rerolling a random one mid-edit, and blur puts it back. Who is in
+the room is read out of awareness into the Share tab, and while a session
+runs the dock shows your own name and caret colour — tapping it opens the
+Share tab, because your own caret label is the one thing you never see.
+
+The switch does not mean the same thing on every device. The draft that
+turned sharing on carries `shareOwner`, and only there does switching off
+end the room; on a copy joined through the link it just leaves — the token
+dropped, the local copy kept, the room still live for the others — and
+deleting a draft follows the same rule, so a guest tidying their rail cannot
+take the room down with them.
+
+The last synced room state is stored on the draft (`shareSeed`, refreshed by
+every autosave while the session runs) and applied to the fresh Y.Doc on
+join, so the text is on screen before the first sync returns — including on
+a phone reopening a shared draft offline, which used to get an empty editor.
+That works only because those bytes carry the room's own struct IDs: an
+update rebuilt from the draft's JSON would mint new IDs and duplicate every
+node on merge, which is why the JSON copy must never be used to seed. The
+switch itself shows the state it is heading to while the request runs rather
+than snapping back until the token lands. Only the body is
 shared; title and front matter stay per-device. Trying it locally means
 `wrangler dev` — the room is a Durable Object, and Vite serves no `/api`. In
 wrangler's local runtime a binary WebSocket message arrives as a Blob, not the

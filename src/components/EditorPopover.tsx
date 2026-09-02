@@ -233,7 +233,13 @@ export function EditorPopover({
               Copy link
             </button>
             <p className="hint publish-target">
-              {share.sharing ? "Live — everyone with the link edits this draft" : "Not shared"}
+              {share.busy
+                ? share.sharing
+                  ? "Turning on…"
+                  : "Turning off…"
+                : share.sharing
+                  ? "Live — everyone with the link edits this draft"
+                  : "Not shared"}
             </p>
           </>
         ) : (

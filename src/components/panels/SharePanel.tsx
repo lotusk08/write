@@ -1,21 +1,31 @@
-import { useState } from "react";
-import { sessionPassword } from "../../lib/password.ts";
+import { participantName, type SharePeer } from "../../lib/share.ts";
 
 export interface SharePanelProps {
   sharing: boolean;
+  owner: boolean;
   link: string | null;
   busy: boolean;
   error: string | null;
-  onEnable: (password: string) => void;
-  onDisable: (password: string) => void;
+  name: string;
+  peers: SharePeer[];
+  onName: (name: string) => void;
+  onEnable: () => void;
+  onDisable: () => void;
   onCopyLink: () => void;
 }
 
-export function SharePanel({ sharing, link, busy, error, onEnable, onDisable }: SharePanelProps) {
-  const [password, setPassword] = useState("");
-  const needsPassword = !sessionPassword();
-  const supplied = () => sessionPassword() || password;
-
+export function SharePanel({
+  sharing,
+  owner,
+  link,
+  busy,
+  error,
+  name,
+  peers,
+  onName,
+  onEnable,
+  onDisable,
+}: SharePanelProps) {
   return (
     <div className="share-panel">
       <ul className="switch-list">
@@ -24,28 +34,49 @@ export function SharePanel({ sharing, link, busy, error, onEnable, onDisable }: 
             <input
               type="checkbox"
               checked={sharing}
-              disabled={busy || (!sharing && needsPassword && !password)}
-              onChange={() => (sharing ? onDisable(supplied()) : onEnable(supplied()))}
+              disabled={busy}
+              onChange={() => (sharing ? onDisable() : onEnable())}
             />
             <span>
               Shared editing
-              <em>Anyone with the link can open this draft and edit it live</em>
+              <em>
+                {owner
+                  ? "Anyone with the link can open this draft and edit it live"
+                  : "You joined this draft through its link — everyone edits the same live copy"}
+              </em>
             </span>
           </label>
         </li>
       </ul>
 
-      {!sharing && needsPassword ? (
+      <div className="field">
+        <span className="field-label">Your name</span>
+        <input
+          className="input"
+          value={name}
+          maxLength={40}
+          placeholder="How your caret is labelled to the others"
+          onChange={(event) => onName(event.target.value)}
+          onBlur={() => {
+            if (!name.trim()) {
+              onName(participantName());
+            }
+          }}
+        />
+      </div>
+
+      {sharing && peers.length > 0 ? (
         <div className="field">
-          <span className="field-label">Publish password</span>
-          <input
-            className="input"
-            type="password"
-            value={password}
-            autoComplete="current-password"
-            placeholder="Needed before sharing can turn on"
-            onChange={(event) => setPassword(event.target.value)}
-          />
+          <span className="field-label">Here now</span>
+          <div className="peers">
+            {peers.map((peer) => (
+              <span key={peer.key} className="peer">
+                <span className="peer-dot" style={{ background: peer.color }} />
+                {peer.name}
+                {peer.you ? " (you)" : ""}
+              </span>
+            ))}
+          </div>
         </div>
       ) : null}
 
@@ -68,8 +99,10 @@ export function SharePanel({ sharing, link, busy, error, onEnable, onDisable }: 
 
       <p className="hint">
         {sharing
-          ? "Everyone edits the same live copy while their tab is open. Turning the switch off ends the link for all of them."
-          : "Turning this on sends the draft to your deployment and makes a link; the writing stays private until then."}
+          ? owner
+            ? "Everyone edits the same live copy while their tab is open. Turning the switch off ends the link for all of them."
+            : "Everyone edits the same live copy while their tab is open. Turning the switch off just leaves — the share stays live for the others, and this copy stays yours."
+          : "No password here — the link itself is the key, and the publish password guards only the blog. The writing stays private until the switch goes on."}
       </p>
     </div>
   );

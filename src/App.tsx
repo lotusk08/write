@@ -7,28 +7,35 @@ import { EditorPopover, type ExportFormat } from "./components/EditorPopover.tsx
 import { Icon } from "./components/Icons.tsx";
 import { PublishDialog } from "./components/PublishDialog.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
-import { editorExtensions } from "./editor/extensions.ts";
+import { editorExtensions, emptyDoc } from "./editor/extensions.ts";
 import {
   createShareRoom,
   endShareRoom,
   fetchAppConfig,
   fetchPostSource,
-  shareRoomLive,
-  PasswordRejected,
+  shareRoomState,
 } from "./lib/api.ts";
 import { draftStore, type Draft } from "./lib/db.ts";
 import { createDraft, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
 import { markdownToDoc, parsePost, postPathFromLink, slugFromPath } from "./lib/import.ts";
 import { mindmapUrl } from "./lib/mindmap.ts";
-import { rememberPassword, sessionPassword } from "./lib/password.ts";
+import { sessionPassword } from "./lib/password.ts";
 import {
+  applyParticipantName,
   collabExtensions,
   joinShare,
   leaveShare,
+  participantColor,
+  participantName,
+  readPeers,
+  samePeers,
+  saveParticipantName,
   seedUpdate,
+  sessionSnapshot,
   shareLink,
   SHARE_TOKEN,
+  type SharePeer,
   type ShareSession,
 } from "./lib/share.ts";
 import { buildHtmlDocument } from "./lib/html.ts";
@@ -68,8 +75,10 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [source, setSource] = useState<string | null>(null);
   const [session, setSession] = useState<ShareSession | null>(null);
-  const [shareBusy, setShareBusy] = useState(false);
+  const [shareTarget, setShareTarget] = useState<boolean | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
+  const [shareName, setShareName] = useState(participantName);
+  const [peers, setPeers] = useState<SharePeer[]>([]);
 
   const draftsRef = useRef<Draft[]>([]);
   const currentIdRef = useRef<string | null>(null);
@@ -77,6 +86,7 @@ export default function App() {
   const timerRef = useRef<number | undefined>(undefined);
   const parseTimer = useRef<number | undefined>(undefined);
   const sourceRef = useRef<string | null>(null);
+  const sessionRef = useRef<ShareSession | null>(null);
   const menuButton = useRef<HTMLButtonElement>(null);
   const description = useRef<HTMLTextAreaElement>(null);
   const mainRegion = useRef<HTMLDivElement>(null);
@@ -84,6 +94,7 @@ export default function App() {
   draftsRef.current = drafts;
   currentIdRef.current = currentId;
   sourceRef.current = source;
+  sessionRef.current = session;
 
   const current = useMemo(
     () => drafts.find((draft) => draft.id === currentId) ?? null,
@@ -96,6 +107,9 @@ export default function App() {
     pendingRef.current = {};
     if (!id || Object.keys(patch).length === 0) {
       return;
+    }
+    if (patch.doc !== undefined && sessionRef.current && !("shareToken" in patch)) {
+      patch.shareSeed = sessionSnapshot(sessionRef.current);
     }
     const base = draftsRef.current.find((draft) => draft.id === id);
     if (!base) {
@@ -142,7 +156,12 @@ export default function App() {
     if (!id) {
       return;
     }
-    pendingRef.current = { ...pendingRef.current, shareToken: undefined };
+    pendingRef.current = {
+      ...pendingRef.current,
+      shareToken: undefined,
+      shareOwner: undefined,
+      shareSeed: undefined,
+    };
     void flush();
     setToast({ message: "Sharing ended.", kind: "info" });
   }, [flush]);
@@ -152,18 +171,48 @@ export default function App() {
       setSession(null);
       return;
     }
-    const joined = joinShare(shareToken, endedShare);
+    const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
+    const seed = draft?.shareToken === shareToken ? draft.shareSeed : undefined;
+    const joined = joinShare(shareToken, endedShare, seed);
     setSession(joined);
+    let stale = false;
+    void shareRoomState(shareToken).then((state) => {
+      if (!stale && state === "ended") {
+        endedShare();
+      }
+    });
     return () => {
+      stale = true;
       leaveShare(joined);
       setSession(null);
     };
   }, [shareToken, currentId, endedShare]);
 
+  useEffect(() => {
+    if (!session) {
+      setPeers([]);
+      return;
+    }
+    const awareness = session.provider.awareness;
+    const read = () =>
+      setPeers((previous) => {
+        const next = readPeers(session);
+        return samePeers(previous, next) ? previous : next;
+      });
+    read();
+    awareness.on("change", read);
+    return () => awareness.off("change", read);
+  }, [session]);
+
   const editor = useEditor(
     {
-      extensions: session ? collabExtensions(session, settings.author) : editorExtensions,
-      ...(session ? {} : { content: { type: "doc", content: [{ type: "paragraph" }] } }),
+      extensions: session ? collabExtensions(session) : editorExtensions,
+      ...(session
+        ? {}
+        : {
+            content:
+              draftsRef.current.find((draft) => draft.id === currentIdRef.current)?.doc ?? emptyDoc,
+          }),
       autofocus: false,
       onUpdate: ({ editor: instance }) => queueSave({ doc: instance.getJSON() }),
     },
@@ -326,14 +375,23 @@ export default function App() {
         setCurrentId(existing.id);
         return;
       }
-      if (!(await shareRoomLive(token))) {
+      const state = await shareRoomState(token);
+      if (state === "ended") {
         setToast({ message: "That share has ended.", kind: "error" });
+        return;
+      }
+      if (state === "unknown") {
+        setToast({ message: "Could not reach the share — open the link again.", kind: "error" });
         return;
       }
       const draft: Draft = { ...createDraft(loadSettings()), shareToken: token };
       await draftStore.put(draft);
       setDrafts((previous) => sortDrafts([draft, ...previous]));
       setCurrentId(draft.id);
+      setToast({
+        message: `Joined as “${participantName()}” — tap your name below to change it.`,
+        kind: "info",
+      });
     })();
   }, [ready]);
 
@@ -377,8 +435,8 @@ export default function App() {
         return;
       }
       pendingRef.current = {};
-      if (draft.shareToken && sessionPassword()) {
-        void endShareRoom(draft.shareToken, sessionPassword()).catch(() => undefined);
+      if (draft.shareToken && draft.shareOwner) {
+        void endShareRoom(draft.shareToken).catch(() => undefined);
       }
       await draftStore.remove(id);
       const remaining = draftsRef.current.filter((item) => item.id !== id);
@@ -491,61 +549,66 @@ export default function App() {
     [current, editor, flush, settings],
   );
 
-  const enableShare = useCallback(
-    async (password: string) => {
-      if (!password) {
-        setShareError("The publish password turns sharing on.");
-        return;
-      }
-      setShareBusy(true);
-      setShareError(null);
-      try {
-        await settle();
-        const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
-        if (!draft) {
-          return;
-        }
-        const token = await createShareRoom(seedUpdate(draft.doc), password);
-        rememberPassword(password);
-        setSource(null);
-        queueSave({ shareToken: token });
-        await flush();
-      } catch (cause) {
-        if (cause instanceof PasswordRejected) {
-          rememberPassword("");
-        }
-        setShareError(cause instanceof Error ? cause.message : String(cause));
-      } finally {
-        setShareBusy(false);
-      }
-    },
-    [settle, flush, queueSave],
-  );
-
-  const disableShare = useCallback(
-    async (password: string) => {
+  const enableShare = useCallback(async () => {
+    setShareTarget(true);
+    setShareError(null);
+    try {
+      await settle();
       const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
-      const token = draft?.shareToken;
-      if (!token) {
+      if (!draft) {
         return;
       }
-      setShareBusy(true);
-      setShareError(null);
-      try {
-        await endShareRoom(token, password);
-        rememberPassword(password);
-        queueSave({ shareToken: undefined });
-        await flush();
-      } catch (cause) {
-        if (cause instanceof PasswordRejected) {
-          rememberPassword("");
-        }
-        setShareError(cause instanceof Error ? cause.message : String(cause));
-      } finally {
-        setShareBusy(false);
+      const update = seedUpdate(draft.doc);
+      const token = await createShareRoom(update);
+      setSource(null);
+      queueSave({ shareToken: token, shareOwner: true, shareSeed: update });
+      await flush();
+    } catch (cause) {
+      setShareError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setShareTarget(null);
+    }
+  }, [settle, flush, queueSave]);
+
+  const disableShare = useCallback(async () => {
+    const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
+    const token = draft?.shareToken;
+    if (!token) {
+      return;
+    }
+    setShareTarget(false);
+    setShareError(null);
+    try {
+      await endShareRoom(token);
+      queueSave({ shareToken: undefined, shareOwner: undefined, shareSeed: undefined });
+      await flush();
+    } catch (cause) {
+      setShareError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setShareTarget(null);
+    }
+  }, [flush, queueSave]);
+
+  const leaveSharedDraft = useCallback(async () => {
+    setShareTarget(false);
+    setShareError(null);
+    try {
+      queueSave({ shareToken: undefined, shareOwner: undefined, shareSeed: undefined });
+      await flush();
+    } finally {
+      setShareTarget(null);
+    }
+  }, [flush, queueSave]);
+
+  const renameShare = useCallback(
+    (name: string) => {
+      setShareName(name);
+      saveParticipantName(name);
+      if (session) {
+        applyParticipantName(session, name);
       }
     },
-    [flush, queueSave],
+    [session],
   );
 
   const copyShareLink = useCallback(async () => {
@@ -751,6 +814,26 @@ export default function App() {
                   >
                     <span className="tool-text">MD</span>
                   </button>
+                  {session ? (
+                    <button
+                      type="button"
+                      className="tool share-me"
+                      title="Shared editing — tap to change your name"
+                      aria-label="Change your name in the shared draft"
+                      onClick={() => {
+                        updateSettings({ menuTab: "share" });
+                        setMenuOpen(true);
+                      }}
+                    >
+                      <span
+                        className="share-dot"
+                        style={{ background: participantColor(shareName.trim() || participantName()) }}
+                      />
+                      <span className="tool-text share-me-name">
+                        {shareName.trim() || participantName()}
+                      </span>
+                    </button>
+                  ) : null}
                   <span className={saveState === "saving" ? "status is-saving" : "status"}>
                     {saveState === "saving" ? "Saving…" : `${words} words`}
                   </span>
@@ -791,12 +874,16 @@ export default function App() {
         }}
         settings={{ settings, config, onChange: updateSettings }}
         share={{
-          sharing: Boolean(current.shareToken),
+          sharing: shareTarget ?? Boolean(current.shareToken),
+          owner: !current.shareToken || Boolean(current.shareOwner),
           link: current.shareToken ? shareLink(current.shareToken) : null,
-          busy: shareBusy,
+          busy: shareTarget !== null,
           error: shareError,
-          onEnable: (password) => void enableShare(password),
-          onDisable: (password) => void disableShare(password),
+          name: shareName,
+          peers,
+          onName: renameShare,
+          onEnable: () => void enableShare(),
+          onDisable: () => void (current.shareOwner ? disableShare() : leaveSharedDraft()),
           onCopyLink: () => void copyShareLink(),
         }}
         onPublish={() =>
