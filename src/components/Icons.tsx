@@ -1,6 +1,24 @@
 import type { ReactNode } from "react";
 
 const PATHS = {
+  superscript: (
+    <>
+      <path d="m4 8 8 11M12 8l-8 11" />
+      <path d="M15.5 6.5c0-1.6 4-1.7 4 .2 0 1.9-4 2.6-4 4.8h4.2" />
+    </>
+  ),
+  subscript: (
+    <>
+      <path d="m4 5 8 11M12 5l-8 11" />
+      <path d="M15.5 14.5c0-1.6 4-1.7 4 .2 0 1.9-4 2.6-4 4.8h4.2" />
+    </>
+  ),
+  footnote: (
+    <>
+      <path d="M4 12h8M4 17h13" />
+      <path d="M16 4.5c0-1.6 4-1.7 4 .2 0 1.9-4 2.6-4 4.8h4.2" />
+    </>
+  ),
   bold: (
     <>
       <path d="M7 5h6.5a3.5 3.5 0 0 1 0 7H7z" />

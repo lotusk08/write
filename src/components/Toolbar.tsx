@@ -80,6 +80,8 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
       imageRow: inImageRow(instance.state),
       canImageRow: canImageRow(instance.state),
       highlight: instance.isActive("highlight"),
+      superscript: instance.isActive("superscript"),
+      subscript: instance.isActive("subscript"),
       link: instance.isActive("link"),
       h2: instance.isActive("heading", { level: 2 }),
       h3: instance.isActive("heading", { level: 3 }),
@@ -144,6 +146,8 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
         <Tool icon="italic" title="Italic — ⌘I" active={state.italic} onClick={() => editor.chain().focus().toggleItalic().run()} />
         <Tool icon="strike" title="Strikethrough" active={state.strike} onClick={() => editor.chain().focus().toggleStrike().run()} />
         <Tool icon="highlight" title="Highlight" active={state.highlight} onClick={() => editor.chain().focus().toggleHighlight().run()} />
+        <Tool icon="superscript" title="Superscript — m²" active={state.superscript} onClick={() => editor.chain().focus().toggleSuperscript().run()} />
+        <Tool icon="subscript" title="Subscript — H₂O" active={state.subscript} onClick={() => editor.chain().focus().toggleSubscript().run()} />
         <Tool icon="code" title="Inline code" active={state.code} onClick={() => editor.chain().focus().toggleCode().run()} />
         <Tool
           icon="file"
@@ -159,6 +163,7 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
           }
         />
         <Tool icon="link" title="Link" active={state.link} onClick={setLink} />
+        <Tool icon="footnote" title="Footnote — marker here, note at the end" onClick={() => editor.chain().focus().insertFootnote().run()} />
       </div>
 
       <span className="tool-sep" />

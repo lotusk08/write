@@ -58,6 +58,7 @@ const BLOCKS = [
   "embed",
   "horizontalRule",
   "collapsible",
+  "footnoteDef",
 ];
 
 interface RowImage {

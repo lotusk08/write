@@ -67,6 +67,9 @@ export async function buildHtmlDocument(editorHtml: string, meta: PostMeta): Pro
   table { width: 100%; border-collapse: collapse; }
   th, td { padding: 0.4rem 0.6rem; border: 1px solid rgb(128 128 128 / 35%); }
   summary { cursor: pointer; font-weight: 600; }
+  sup[data-footnote-ref] { font-size: 0.75em; }
+  [data-footnote] { font-size: 0.9em; color: #666; }
+  [data-footnote]::before { content: "^" attr(data-footnote) " "; float: left; margin-right: 0.5em; }
 </style>
 </head>
 <body>

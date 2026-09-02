@@ -7,6 +7,7 @@ import { EditorPopover, type ExportFormat } from "./components/EditorPopover.tsx
 import { Icon } from "./components/Icons.tsx";
 import { PublishDialog } from "./components/PublishDialog.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
+import { TocAside, TocBar, useOutline } from "./components/Toc.tsx";
 import { editorExtensions, emptyDoc } from "./editor/extensions.ts";
 import {
   createShareRoom,
@@ -90,6 +91,7 @@ export default function App() {
   const menuButton = useRef<HTMLButtonElement>(null);
   const description = useRef<HTMLTextAreaElement>(null);
   const mainRegion = useRef<HTMLDivElement>(null);
+  const scrollRegion = useRef<HTMLDivElement>(null);
 
   draftsRef.current = drafts;
   currentIdRef.current = currentId;
@@ -683,6 +685,9 @@ export default function App() {
 
   const words = useMemo(() => (current ? countWords(docToPlainText(current.doc)) : 0), [current]);
 
+  const tocOn = Boolean(current?.meta.toc) && source === null && !settings.focusMode;
+  const outline = useOutline(editor, scrollRegion, tocOn);
+
   if (!ready || !current) {
     return <div className="empty">Loading…</div>;
   }
@@ -714,8 +719,9 @@ export default function App() {
           </button>
         ) : null}
 
-        <div className="editor-scroll">
-          <div className="editor-page">
+        {tocOn ? <TocBar outline={outline} title={current.meta.title} /> : null}
+        <div className="editor-scroll" ref={scrollRegion}>
+          <div className={tocOn ? "editor-page has-toc" : "editor-page"}>
             <div className="editor-card">
               <div
                 className="editor-body"
@@ -852,6 +858,7 @@ export default function App() {
                 </div>
               ) : null}
             </div>
+            {tocOn ? <TocAside outline={outline} /> : null}
           </div>
         </div>
       </div>

@@ -52,6 +52,12 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
       case "highlight":
         out = `<mark>${out}</mark>`;
         break;
+      case "superscript":
+        out = `<sup>${out}</sup>`;
+        break;
+      case "subscript":
+        out = `<sub>${out}</sub>`;
+        break;
       case "link": {
         const href = String(mark.attrs?.href ?? "");
         const title = mark.attrs?.title ? ` "${String(mark.attrs.title)}"` : "";
@@ -91,9 +97,19 @@ function withoutEdgeBreaks(
   return content;
 }
 
-function linkKey(marks: Mark[] | undefined): string | null {
-  const link = marks?.find((mark) => mark.type === "link");
-  return link ? JSON.stringify([link.attrs?.href ?? "", link.attrs?.title ?? ""]) : null;
+function sameMark(a: Mark, b: Mark): boolean {
+  return a.type === b.type && JSON.stringify(a.attrs ?? {}) === JSON.stringify(b.attrs ?? {});
+}
+
+function wrap(text: string, mark: Mark): string {
+  return applyMarks(text, [mark]);
+}
+
+function textNode(node: JSONContent): string {
+  const marks = node.marks as Mark[] | undefined;
+  const raw = node.text ?? "";
+  const code = marks?.some((mark) => mark.type === "code");
+  return applyMarks(code ? raw : escapeText(raw), marks);
 }
 
 function inline(nodes: JSONContent[] | undefined, options: SerializeOptions): string {
@@ -104,43 +120,43 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions): st
   let index = 0;
   while (index < nodes.length) {
     const node = nodes[index];
-    const key = node.type === "text" ? linkKey(node.marks as Mark[] | undefined) : null;
-    if (key) {
-      let end = index + 1;
-      while (
-        end < nodes.length &&
-        nodes[end].type === "text" &&
-        linkKey(nodes[end].marks as Mark[] | undefined) === key
-      ) {
-        end += 1;
-      }
-      if (end - index > 1) {
-        const link = (node.marks as Mark[]).find((mark) => mark.type === "link")!;
-        const href = String(link.attrs?.href ?? "");
-        const title = link.attrs?.title ? ` "${String(link.attrs.title)}"` : "";
-        const body = nodes
-          .slice(index, end)
-          .map((part) => {
-            const marks = (part.marks as Mark[]).filter((mark) => mark.type !== "link");
-            const raw = part.text ?? "";
-            const code = marks.some((mark) => mark.type === "code");
-            return applyMarks(code ? raw : escapeText(raw), marks);
-          })
-          .join("");
-        rendered.push(`[${body}](${href}${title})`);
-        index = end;
+    const marks = node.type === "text" ? ((node.marks as Mark[] | undefined) ?? []) : [];
+    let outer: Mark | null = null;
+    let end = index + 1;
+    for (const mark of marks) {
+      if (mark.type === "code") {
         continue;
       }
+      let reach = index + 1;
+      while (
+        reach < nodes.length &&
+        nodes[reach].type === "text" &&
+        ((nodes[reach].marks as Mark[] | undefined) ?? []).some((other) => sameMark(other, mark))
+      ) {
+        reach += 1;
+      }
+      if (reach > end) {
+        outer = mark;
+        end = reach;
+      }
+    }
+    if (outer) {
+      const run = nodes.slice(index, end).map((part) => ({
+        ...part,
+        marks: (part.marks as Mark[]).filter((mark) => !sameMark(mark, outer as Mark)),
+      }));
+      rendered.push(wrap(inline(run, options), outer));
+      index = end;
+      continue;
     }
     if (node.type === "text") {
-      const marks = node.marks as Mark[] | undefined;
-      const raw = node.text ?? "";
-      const code = marks?.some((mark) => mark.type === "code");
-      rendered.push(applyMarks(code ? raw : escapeText(raw), marks));
+      rendered.push(textNode(node));
     } else if (node.type === "hardBreak") {
       rendered.push("\n");
     } else if (node.type === "image") {
       rendered.push(image(node, options));
+    } else if (node.type === "footnoteRef") {
+      rendered.push(`[^${String(node.attrs?.label ?? "")}]`);
     } else {
       rendered.push(inline(node.content, options));
     }
@@ -300,6 +316,11 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
       case "collapsible":
         out.push(collapsibleBlock(node, options));
         break;
+      case "footnoteDef": {
+        const body = blocks(node.content, options).join("\n\n");
+        out.push(`[^${String(node.attrs?.label ?? "")}]: ${indentContinuation(body, "    ")}`);
+        break;
+      }
       case "listItem":
       case "taskItem":
       case "collapsibleContent":

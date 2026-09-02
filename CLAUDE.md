@@ -138,7 +138,12 @@ Things that took a bug to learn, and that a change here can quietly undo:
   serialised one node at a time it came out as three adjacent links, so
   `inline` in `markdown.ts` groups a run of text nodes carrying the same link
   and writes the link once, around it.
-- Footnote references are syntax, not text to escape.
+- Footnotes are nodes: `[^id]` is a `footnoteRef` and `[^id]: …` a
+  `footnoteDef` whose body is the text after the colon plus lines indented
+  four spaces. Kramdown does not lazily continue a definition onto an
+  unindented line — it starts a new paragraph — so the parser must not
+  either. A `[^id]` left as plain text still passes `escapeText` unescaped,
+  which is what keeps drafts written before the node existed publishing.
 - Enter writes a line break; Enter again on the line it just made starts a
   paragraph. A phone keyboard has no Shift+Enter, so that was the only way to
   say `<br>` and every line of a poem became its own paragraph — a `>` gap
@@ -271,6 +276,22 @@ shared; title and front matter stay per-device. Trying it locally means
 `wrangler dev` — the room is a Durable Object, and Vite serves no `/api`. In
 wrangler's local runtime a binary WebSocket message arrives as a Blob, not the
 ArrayBuffer production hands over, so the room reads both.
+
+## Contents column
+
+`src/components/Toc.tsx` follows the blog's tocbot layout: from 1200px a
+sticky column in the right margin — the card stays exactly where it sits
+without one — and below that a bar naming the current section that opens a
+popup list. It shows while the post's `toc` switch is on. Text is
+transparent until the list is hovered, so at rest it is a row of status
+lines, and the first heading is marked before any is scrolled past, as
+tocbot does; a list with nothing lit reads as broken. The tracker listens
+for scroll in the capture phase on `document`, because a phone was found
+scrolling something other than the container it first listened to. A jump
+is a fixed 320ms ease-out: Chrome's own smooth scroll inside an overflow
+container scales with distance and took a second and a half across a long
+post, where the blog's document scroll feels instant. The active entry is
+held during the jump so it does not flicker through every heading passed.
 
 ## Editing a published post
 

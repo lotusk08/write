@@ -135,6 +135,10 @@ function runs(nodes: JSONContent[] | undefined, images: Map<string, PreparedImag
       }
       continue;
     }
+    if (node.type === "footnoteRef") {
+      out.push(new TextRun({ text: String(node.attrs?.label ?? ""), superScript: true }));
+      continue;
+    }
     if (node.type !== "text") {
       out.push(...runs(node.content, images));
       continue;
@@ -148,6 +152,8 @@ function runs(nodes: JSONContent[] | undefined, images: Map<string, PreparedImag
       italics: marks.some((mark) => mark.type === "italic"),
       strike: marks.some((mark) => mark.type === "strike"),
       underline: marks.some((mark) => mark.type === "underline") ? {} : undefined,
+      superScript: marks.some((mark) => mark.type === "superscript") || undefined,
+      subScript: marks.some((mark) => mark.type === "subscript") || undefined,
       font: isCode ? "Consolas" : undefined,
       shading: marks.some((mark) => mark.type === "highlight")
         ? { type: ShadingType.CLEAR, fill: "FFF3A3" }
@@ -267,6 +273,22 @@ function blocks(nodes: JSONContent[] | undefined, context: BlockContext): (Parag
           }),
         );
         out.push(...blocks(body?.content, { ...context, indent: (context.indent ?? 0) + 1 }));
+        break;
+      }
+      case "footnoteDef": {
+        const [first, ...rest] = node.content ?? [];
+        out.push(
+          new Paragraph({
+            children: [
+              new TextRun({ text: String(node.attrs?.label ?? ""), superScript: true }),
+              new TextRun({ text: " " }),
+              ...runs(first?.content, context.images),
+            ],
+            indent,
+            spacing: { after: 160 },
+          }),
+        );
+        out.push(...blocks(rest, { ...context, indent: (context.indent ?? 0) + 1 }));
         break;
       }
       case "table": {

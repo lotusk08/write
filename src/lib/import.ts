@@ -122,7 +122,8 @@ function text(value: string, marks: Mark[]): JSONContent {
 
 const IMAGE = /^!\[([^\]]*)\]\(\s*([^)"]*?)(?:\s+"([^"]*)")?\s*\)/;
 const LINK = /^\[((?:[^[\]\\]|\\.)*)\]\(\s*([^)"]*?)(?:\s+"([^"]*)")?\s*\)/;
-const TAG = /^<(u|mark)>([\s\S]*?)<\/\1>/;
+const FOOTNOTE_REF = /^\[\^([^\]\s]+)\]/;
+const TAG = /^<(u|mark|sup|sub)>([\s\S]*?)<\/\1>/;
 
 export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
   const out: JSONContent[] = [];
@@ -180,6 +181,13 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
       }
     }
     if (char === "[") {
+      const footnote = FOOTNOTE_REF.exec(rest);
+      if (footnote) {
+        flush();
+        out.push({ type: "footnoteRef", attrs: { label: footnote[1] } });
+        i += footnote[0].length;
+        continue;
+      }
       const link = LINK.exec(rest);
       if (link) {
         flush();
@@ -196,7 +204,7 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
       const tag = TAG.exec(rest);
       if (tag) {
         flush();
-        const mark = tag[1] === "u" ? "underline" : "highlight";
+        const mark = { u: "underline", mark: "highlight", sup: "superscript", sub: "subscript" }[tag[1]] as string;
         out.push(...parseInline(tag[2], [...marks, { type: mark }]));
         i += tag[0].length;
         continue;
@@ -325,7 +333,7 @@ function paragraph(source: string): JSONContent {
 const FENCE = /^(\s*)(```+|~~~+)\s*([\w+-]*)\s*$/;
 const MATH = /^\s*\$\$\s*$/;
 const LIQUID = /^\{%[\s\S]*%\}$/;
-const FOOTNOTE_DEF = /^\[\^[^\]\s]+\]:/;
+const FOOTNOTE_DEF = /^\[\^([^\]\s]+)\]:[^\S\n]*/;
 const DESCRIPTION = /^:\s+\S/;
 const HTML_BLOCK = /^\s*<(\/?)([a-zA-Z][\w-]*)(\s[^>]*)?>/;
 const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
@@ -553,6 +561,30 @@ function parseBlocks(lines: string[]): JSONContent[] {
         i += 1;
       }
       out.push({ type: "table", content: rows });
+      continue;
+    }
+
+    const footnote = FOOTNOTE_DEF.exec(line);
+    if (footnote) {
+      const body: string[] = [line.slice(footnote[0].length)];
+      i += 1;
+      while (i < lines.length) {
+        const next = lines[i];
+        if (!next.trim()) {
+          if (/^ {4}\S/.test(lines[i + 1] ?? "")) {
+            body.push("");
+            i += 1;
+            continue;
+          }
+          break;
+        }
+        if (!/^ {4}/.test(next)) {
+          break;
+        }
+        body.push(next.slice(4));
+        i += 1;
+      }
+      out.push({ type: "footnoteDef", attrs: { label: footnote[1] }, content: blocksOrEmpty(body) });
       continue;
     }
 

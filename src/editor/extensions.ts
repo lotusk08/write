@@ -1,12 +1,15 @@
 import Highlight from "@tiptap/extension-highlight";
 import { TaskItem, TaskList } from "@tiptap/extension-list";
 import Placeholder from "@tiptap/extension-placeholder";
+import Subscript from "@tiptap/extension-subscript";
+import Superscript from "@tiptap/extension-superscript";
 import { TableKit } from "@tiptap/extension-table";
 import Typography from "@tiptap/extension-typography";
 import StarterKit from "@tiptap/starter-kit";
 import { BlockAttributes, FilepathCode } from "./extensions/blogFormat.ts";
 import { collapsibleExtensions } from "./extensions/collapsible.ts";
 import { Embed } from "./extensions/embed.ts";
+import { footnoteExtensions } from "./extensions/footnote.ts";
 import { EnterBreaks } from "./extensions/lineBreak.ts";
 import { MathBlock, PreviewCodeBlock, RawBlock } from "./extensions/preview.ts";
 import { NoteQuote } from "./extensions/noteQuote.ts";
@@ -33,9 +36,12 @@ export const buildEditorExtensions = (options: { collab?: boolean } = {}) => [
   TaskItem.configure({ nested: true }),
   TableKit.configure({ table: { resizable: true } }),
   Highlight,
+  Superscript.extend({ excludes: "subscript" }),
+  Subscript.extend({ excludes: "superscript" }),
   Typography.configure({ laquo: false, raquo: false }),
   LocalImage.configure({ inline: false, allowBase64: true }),
   ...collapsibleExtensions,
+  ...footnoteExtensions,
   Placeholder.configure({
     includeChildren: true,
     placeholder: ({ editor, node }) => {
