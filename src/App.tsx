@@ -7,7 +7,7 @@ import { EditorPopover, type ExportFormat } from "./components/EditorPopover.tsx
 import { Icon } from "./components/Icons.tsx";
 import { PublishDialog } from "./components/PublishDialog.tsx";
 import { Toolbar } from "./components/Toolbar.tsx";
-import { editorExtensions } from "./editor/extensions.ts";
+import { editorExtensions, emptyDoc } from "./editor/extensions.ts";
 import {
   createShareRoom,
   endShareRoom,
@@ -68,7 +68,7 @@ export default function App() {
   const [ready, setReady] = useState(false);
   const [source, setSource] = useState<string | null>(null);
   const [session, setSession] = useState<ShareSession | null>(null);
-  const [shareBusy, setShareBusy] = useState(false);
+  const [shareTarget, setShareTarget] = useState<boolean | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
 
   const draftsRef = useRef<Draft[]>([]);
@@ -77,6 +77,7 @@ export default function App() {
   const timerRef = useRef<number | undefined>(undefined);
   const parseTimer = useRef<number | undefined>(undefined);
   const sourceRef = useRef<string | null>(null);
+  const seedRef = useRef<{ token: string; update: Uint8Array } | null>(null);
   const menuButton = useRef<HTMLButtonElement>(null);
   const description = useRef<HTMLTextAreaElement>(null);
   const mainRegion = useRef<HTMLDivElement>(null);
@@ -148,11 +149,14 @@ export default function App() {
   }, [flush]);
 
   useEffect(() => {
+    if (seedRef.current && seedRef.current.token !== shareToken) {
+      seedRef.current = null;
+    }
     if (!shareToken) {
       setSession(null);
       return;
     }
-    const joined = joinShare(shareToken, endedShare);
+    const joined = joinShare(shareToken, endedShare, seedRef.current?.update);
     setSession(joined);
     return () => {
       leaveShare(joined);
@@ -162,8 +166,13 @@ export default function App() {
 
   const editor = useEditor(
     {
-      extensions: session ? collabExtensions(session, settings.author) : editorExtensions,
-      ...(session ? {} : { content: { type: "doc", content: [{ type: "paragraph" }] } }),
+      extensions: session ? collabExtensions(session) : editorExtensions,
+      ...(session
+        ? {}
+        : {
+            content:
+              draftsRef.current.find((draft) => draft.id === currentIdRef.current)?.doc ?? emptyDoc,
+          }),
       autofocus: false,
       onUpdate: ({ editor: instance }) => queueSave({ doc: instance.getJSON() }),
     },
@@ -497,7 +506,7 @@ export default function App() {
         setShareError("The publish password turns sharing on.");
         return;
       }
-      setShareBusy(true);
+      setShareTarget(true);
       setShareError(null);
       try {
         await settle();
@@ -505,7 +514,9 @@ export default function App() {
         if (!draft) {
           return;
         }
-        const token = await createShareRoom(seedUpdate(draft.doc), password);
+        const update = seedUpdate(draft.doc);
+        const token = await createShareRoom(update, password);
+        seedRef.current = { token, update };
         rememberPassword(password);
         setSource(null);
         queueSave({ shareToken: token });
@@ -516,7 +527,7 @@ export default function App() {
         }
         setShareError(cause instanceof Error ? cause.message : String(cause));
       } finally {
-        setShareBusy(false);
+        setShareTarget(null);
       }
     },
     [settle, flush, queueSave],
@@ -529,7 +540,7 @@ export default function App() {
       if (!token) {
         return;
       }
-      setShareBusy(true);
+      setShareTarget(false);
       setShareError(null);
       try {
         await endShareRoom(token, password);
@@ -542,7 +553,7 @@ export default function App() {
         }
         setShareError(cause instanceof Error ? cause.message : String(cause));
       } finally {
-        setShareBusy(false);
+        setShareTarget(null);
       }
     },
     [flush, queueSave],
@@ -791,9 +802,9 @@ export default function App() {
         }}
         settings={{ settings, config, onChange: updateSettings }}
         share={{
-          sharing: Boolean(current.shareToken),
+          sharing: shareTarget ?? Boolean(current.shareToken),
           link: current.shareToken ? shareLink(current.shareToken) : null,
-          busy: shareBusy,
+          busy: shareTarget !== null,
           error: shareError,
           onEnable: (password) => void enableShare(password),
           onDisable: (password) => void disableShare(password),

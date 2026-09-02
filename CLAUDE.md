@@ -187,7 +187,14 @@ code 4404, which each participant's app reads as the cue to drop the token and
 carry on with its local copy — autosave ran the whole time, so nothing typed
 together is lost. While a draft carries a `shareToken` the editor runs on Yjs
 (`src/lib/share.ts` client-side): its own undo is off, content comes from the
-room rather than `setContent`, and carets show who is where. Only the body is
+room rather than `setContent`, and carets show who is where. A caret is named
+by a random two-word name drawn once per tab and kept in session storage — not
+the author setting, which defaults the same on every device and once filled a
+room with carets all reading "steve". Turning the switch on keeps the seed
+update it sent to create the room and applies it to the local doc on join, so
+the sharer's own text stays on screen instead of blanking until the first sync
+returns; the switch itself shows the state it is heading to while the request
+runs rather than snapping back until the token lands. Only the body is
 shared; title and front matter stay per-device. Trying it locally means
 `wrangler dev` — the room is a Durable Object, and Vite serves no `/api`. In
 wrangler's local runtime a binary WebSocket message arrives as a Blob, not the

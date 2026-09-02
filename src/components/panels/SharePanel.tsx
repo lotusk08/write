@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { sessionPassword } from "../../lib/password.ts";
+import { participantName } from "../../lib/share.ts";
 
 export interface SharePanelProps {
   sharing: boolean;
@@ -68,7 +69,7 @@ export function SharePanel({ sharing, link, busy, error, onEnable, onDisable }: 
 
       <p className="hint">
         {sharing
-          ? "Everyone edits the same live copy while their tab is open. Turning the switch off ends the link for all of them."
+          ? `Everyone edits the same live copy while their tab is open — you appear as “${participantName()}”. Turning the switch off ends the link for all of them.`
           : "Turning this on sends the draft to your deployment and makes a link; the writing stays private until then."}
       </p>
     </div>
