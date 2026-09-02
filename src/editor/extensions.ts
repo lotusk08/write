@@ -49,7 +49,7 @@ export const buildEditorExtensions = (options: { collab?: boolean } = {}) => [
         return "Caption";
       }
       return editor.isEmpty
-        ? "Write. Markdown shortcuts work: # heading, - list, > quote, ``` code, >>> collapsible section."
+        ? "Write in Markdown"
         : "";
     },
   }),

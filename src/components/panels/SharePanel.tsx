@@ -102,7 +102,7 @@ export function SharePanel({
           ? owner
             ? "Everyone edits the same live copy while their tab is open. Turning the switch off ends the link for all of them."
             : "Everyone edits the same live copy while their tab is open. Turning the switch off just leaves — the share stays live for the others, and this copy stays yours."
-          : "No password here — the link itself is the key, and the publish password guards only the blog. The writing stays private until the switch goes on."}
+          : "The writing stays private until the switch goes on."}
       </p>
     </div>
   );
