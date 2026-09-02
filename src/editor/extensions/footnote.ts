@@ -39,8 +39,14 @@ export const FootnoteRef = Node.create({
         () =>
         ({ state, tr, dispatch }) => {
           const { schema, selection } = state;
-          if (!selection.$from.parent.isTextblock || selection.$from.parent.type.name === "footnoteDef") {
+          const { $from } = selection;
+          if (!$from.parent.isTextblock) {
             return false;
+          }
+          for (let depth = $from.depth; depth > 0; depth -= 1) {
+            if ($from.node(depth).type.name === "footnoteDef") {
+              return false;
+            }
           }
           const definition = schema.nodes.footnoteDef;
           const paragraph = schema.nodes.paragraph;
