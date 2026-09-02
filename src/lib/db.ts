@@ -12,6 +12,8 @@ export interface Draft {
   publishedPath?: string;
   publishedAt?: number;
   shareToken?: string;
+  shareOwner?: boolean;
+  shareSeed?: Uint8Array;
 }
 
 export interface StoredImage {

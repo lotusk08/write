@@ -26,11 +26,16 @@ import {
   collabExtensions,
   joinShare,
   leaveShare,
+  participantColor,
   participantName,
+  readPeers,
+  samePeers,
   saveParticipantName,
   seedUpdate,
+  sessionSnapshot,
   shareLink,
   SHARE_TOKEN,
+  type SharePeer,
   type ShareSession,
 } from "./lib/share.ts";
 import { buildHtmlDocument } from "./lib/html.ts";
@@ -73,6 +78,7 @@ export default function App() {
   const [shareTarget, setShareTarget] = useState<boolean | null>(null);
   const [shareError, setShareError] = useState<string | null>(null);
   const [shareName, setShareName] = useState(participantName);
+  const [peers, setPeers] = useState<SharePeer[]>([]);
 
   const draftsRef = useRef<Draft[]>([]);
   const currentIdRef = useRef<string | null>(null);
@@ -80,7 +86,7 @@ export default function App() {
   const timerRef = useRef<number | undefined>(undefined);
   const parseTimer = useRef<number | undefined>(undefined);
   const sourceRef = useRef<string | null>(null);
-  const seedRef = useRef<{ token: string; update: Uint8Array } | null>(null);
+  const sessionRef = useRef<ShareSession | null>(null);
   const menuButton = useRef<HTMLButtonElement>(null);
   const description = useRef<HTMLTextAreaElement>(null);
   const mainRegion = useRef<HTMLDivElement>(null);
@@ -88,6 +94,7 @@ export default function App() {
   draftsRef.current = drafts;
   currentIdRef.current = currentId;
   sourceRef.current = source;
+  sessionRef.current = session;
 
   const current = useMemo(
     () => drafts.find((draft) => draft.id === currentId) ?? null,
@@ -100,6 +107,9 @@ export default function App() {
     pendingRef.current = {};
     if (!id || Object.keys(patch).length === 0) {
       return;
+    }
+    if (patch.doc !== undefined && sessionRef.current && !("shareToken" in patch)) {
+      patch.shareSeed = sessionSnapshot(sessionRef.current);
     }
     const base = draftsRef.current.find((draft) => draft.id === id);
     if (!base) {
@@ -146,20 +156,24 @@ export default function App() {
     if (!id) {
       return;
     }
-    pendingRef.current = { ...pendingRef.current, shareToken: undefined };
+    pendingRef.current = {
+      ...pendingRef.current,
+      shareToken: undefined,
+      shareOwner: undefined,
+      shareSeed: undefined,
+    };
     void flush();
     setToast({ message: "Sharing ended.", kind: "info" });
   }, [flush]);
 
   useEffect(() => {
-    if (seedRef.current && seedRef.current.token !== shareToken) {
-      seedRef.current = null;
-    }
     if (!shareToken) {
       setSession(null);
       return;
     }
-    const joined = joinShare(shareToken, endedShare, seedRef.current?.update);
+    const draft = draftsRef.current.find((item) => item.id === currentIdRef.current);
+    const seed = draft?.shareToken === shareToken ? draft.shareSeed : undefined;
+    const joined = joinShare(shareToken, endedShare, seed);
     setSession(joined);
     let stale = false;
     void shareRoomState(shareToken).then((state) => {
@@ -173,6 +187,22 @@ export default function App() {
       setSession(null);
     };
   }, [shareToken, currentId, endedShare]);
+
+  useEffect(() => {
+    if (!session) {
+      setPeers([]);
+      return;
+    }
+    const awareness = session.provider.awareness;
+    const read = () =>
+      setPeers((previous) => {
+        const next = readPeers(session);
+        return samePeers(previous, next) ? previous : next;
+      });
+    read();
+    awareness.on("change", read);
+    return () => awareness.off("change", read);
+  }, [session]);
 
   const editor = useEditor(
     {
@@ -358,6 +388,10 @@ export default function App() {
       await draftStore.put(draft);
       setDrafts((previous) => sortDrafts([draft, ...previous]));
       setCurrentId(draft.id);
+      setToast({
+        message: `Joined as “${participantName()}” — tap your name below to change it.`,
+        kind: "info",
+      });
     })();
   }, [ready]);
 
@@ -401,7 +435,7 @@ export default function App() {
         return;
       }
       pendingRef.current = {};
-      if (draft.shareToken) {
+      if (draft.shareToken && draft.shareOwner) {
         void endShareRoom(draft.shareToken).catch(() => undefined);
       }
       await draftStore.remove(id);
@@ -526,9 +560,8 @@ export default function App() {
       }
       const update = seedUpdate(draft.doc);
       const token = await createShareRoom(update);
-      seedRef.current = { token, update };
       setSource(null);
-      queueSave({ shareToken: token });
+      queueSave({ shareToken: token, shareOwner: true, shareSeed: update });
       await flush();
     } catch (cause) {
       setShareError(cause instanceof Error ? cause.message : String(cause));
@@ -547,10 +580,21 @@ export default function App() {
     setShareError(null);
     try {
       await endShareRoom(token);
-      queueSave({ shareToken: undefined });
+      queueSave({ shareToken: undefined, shareOwner: undefined, shareSeed: undefined });
       await flush();
     } catch (cause) {
       setShareError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setShareTarget(null);
+    }
+  }, [flush, queueSave]);
+
+  const leaveSharedDraft = useCallback(async () => {
+    setShareTarget(false);
+    setShareError(null);
+    try {
+      queueSave({ shareToken: undefined, shareOwner: undefined, shareSeed: undefined });
+      await flush();
     } finally {
       setShareTarget(null);
     }
@@ -770,6 +814,26 @@ export default function App() {
                   >
                     <span className="tool-text">MD</span>
                   </button>
+                  {session ? (
+                    <button
+                      type="button"
+                      className="tool share-me"
+                      title="Shared editing — tap to change your name"
+                      aria-label="Change your name in the shared draft"
+                      onClick={() => {
+                        updateSettings({ menuTab: "share" });
+                        setMenuOpen(true);
+                      }}
+                    >
+                      <span
+                        className="share-dot"
+                        style={{ background: participantColor(shareName.trim() || participantName()) }}
+                      />
+                      <span className="tool-text share-me-name">
+                        {shareName.trim() || participantName()}
+                      </span>
+                    </button>
+                  ) : null}
                   <span className={saveState === "saving" ? "status is-saving" : "status"}>
                     {saveState === "saving" ? "Saving…" : `${words} words`}
                   </span>
@@ -811,13 +875,15 @@ export default function App() {
         settings={{ settings, config, onChange: updateSettings }}
         share={{
           sharing: shareTarget ?? Boolean(current.shareToken),
+          owner: !current.shareToken || Boolean(current.shareOwner),
           link: current.shareToken ? shareLink(current.shareToken) : null,
           busy: shareTarget !== null,
           error: shareError,
           name: shareName,
+          peers,
           onName: renameShare,
           onEnable: () => void enableShare(),
-          onDisable: () => void disableShare(),
+          onDisable: () => void (current.shareOwner ? disableShare() : leaveSharedDraft()),
           onCopyLink: () => void copyShareLink(),
         }}
         onPublish={() =>

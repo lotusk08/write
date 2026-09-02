@@ -201,11 +201,28 @@ show who is where. The name above the switch is how a caret is labelled: kept
 per device, prefilled with a random two-word name so nobody has to invent
 one, and applied live through awareness when edited mid-session — not the
 author setting, which defaults the same on every device and once filled a
-room with carets all reading "steve". Turning the switch on keeps the seed
-update it sent to create the room and applies it to the local doc on join, so
-the sharer's own text stays on screen instead of blanking until the first sync
-returns; the switch itself shows the state it is heading to while the request
-runs rather than snapping back until the token lands. Only the body is
+room with carets all reading "steve". Clearing the field keeps the last name
+rather than rerolling a random one mid-edit, and blur puts it back. Who is in
+the room is read out of awareness into the Share tab, and while a session
+runs the dock shows your own name and caret colour — tapping it opens the
+Share tab, because your own caret label is the one thing you never see.
+
+The switch does not mean the same thing on every device. The draft that
+turned sharing on carries `shareOwner`, and only there does switching off
+end the room; on a copy joined through the link it just leaves — the token
+dropped, the local copy kept, the room still live for the others — and
+deleting a draft follows the same rule, so a guest tidying their rail cannot
+take the room down with them.
+
+The last synced room state is stored on the draft (`shareSeed`, refreshed by
+every autosave while the session runs) and applied to the fresh Y.Doc on
+join, so the text is on screen before the first sync returns — including on
+a phone reopening a shared draft offline, which used to get an empty editor.
+That works only because those bytes carry the room's own struct IDs: an
+update rebuilt from the draft's JSON would mint new IDs and duplicate every
+node on merge, which is why the JSON copy must never be used to seed. The
+switch itself shows the state it is heading to while the request runs rather
+than snapping back until the token lands. Only the body is
 shared; title and front matter stay per-device. Trying it locally means
 `wrangler dev` — the room is a Durable Object, and Vite serves no `/api`. In
 wrangler's local runtime a binary WebSocket message arrives as a Blob, not the

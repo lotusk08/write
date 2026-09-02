@@ -48,27 +48,72 @@ export function participantName(): string {
 
 export function saveParticipantName(raw: string): void {
   const name = raw.trim();
+  if (!name) {
+    return;
+  }
   try {
-    if (name) {
-      localStorage.setItem(NAME_KEY, name);
-    } else {
-      localStorage.removeItem(NAME_KEY);
-    }
+    localStorage.setItem(NAME_KEY, name);
   } catch {
   }
 }
 
 export function applyParticipantName(session: ShareSession, raw: string): void {
   const name = raw.trim() || participantName();
-  session.provider.awareness.setLocalStateField("user", { name, color: caretColor(name) });
+  session.provider.awareness.setLocalStateField("user", { name, color: participantColor(name) });
 }
 
-function caretColor(name: string): string {
+export function participantColor(name: string): string {
   let hash = 0;
   for (const char of name) {
     hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
   }
   return CARET_COLORS[hash % CARET_COLORS.length];
+}
+
+export interface SharePeer {
+  key: number;
+  name: string;
+  color: string;
+  you: boolean;
+}
+
+export function readPeers(session: ShareSession): SharePeer[] {
+  const local = session.provider.awareness.clientID;
+  const peers: SharePeer[] = [];
+  for (const [id, state] of session.provider.awareness.getStates()) {
+    const user = (state as { user?: { name?: unknown; color?: unknown } }).user;
+    if (!user || typeof user.name !== "string") {
+      continue;
+    }
+    peers.push({
+      key: id,
+      name: user.name,
+      color: typeof user.color === "string" ? user.color : CARET_COLORS[0],
+      you: id === local,
+    });
+  }
+  return peers.sort((a, b) =>
+    a.you !== b.you ? (a.you ? -1 : 1) : a.name.localeCompare(b.name) || a.key - b.key,
+  );
+}
+
+export function samePeers(a: SharePeer[], b: SharePeer[]): boolean {
+  return (
+    a.length === b.length &&
+    a.every((peer, index) => {
+      const other = b[index];
+      return (
+        peer.key === other.key &&
+        peer.name === other.name &&
+        peer.color === other.color &&
+        peer.you === other.you
+      );
+    })
+  );
+}
+
+export function sessionSnapshot(session: ShareSession): Uint8Array {
+  return Y.encodeStateAsUpdate(session.doc);
 }
 
 export function shareLink(token: string): string {
@@ -111,7 +156,7 @@ export function collabExtensions(session: ShareSession) {
     Collaboration.configure({ document: session.doc }),
     CollaborationCaret.configure({
       provider: session.provider,
-      user: { name, color: caretColor(name) },
+      user: { name, color: participantColor(name) },
     }),
   ];
 }
