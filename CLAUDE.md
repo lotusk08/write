@@ -186,7 +186,19 @@ makes. What an open create endpoint gives away is bounded instead of gated: a
 seed is capped at ~4 MB, and a room deletes itself after 14 idle days through
 a Durable Object alarm (open sockets and fresh edits push the expiry out, and
 the alarm re-arms itself), so neither an abandoned link nor a stranger
-POSTing rooms at `/api/share` grows storage forever. Turning the switch off
+POSTing rooms at `/api/share` grows storage forever. The name plays no part
+in any of this — nothing checks it, it exists so carets can be told apart;
+what stands between the endpoint and bots is the rest: share creation
+refuses cross-site calls (a page's script cannot forge its own `Origin`
+header, which stops other sites conscripting their visitors' browsers), a
+per-IP rate limit — six new rooms a minute, Cloudflare's `ratelimit`
+binding, checked before the body is read — keeps a bot from minting rooms
+by the thousand, and crawlers are told to stay out entirely
+(`public/robots.txt` disallows the whole app, every response carries
+`X-Robots-Tag: noindex`, so a share link posted somewhere public does not
+end up rendered into a search index). The limiter is best-effort and
+per-colo — a brake, not a wall; Bot Fight Mode in the Cloudflare dashboard
+sits in front of all of it if one is ever needed. Turning the switch off
 (or deleting the draft — that always ends its room now) deletes the room and
 closes every connection with code 4404, which each participant's app reads as
 the cue to drop the token and carry on with its local copy — autosave ran the

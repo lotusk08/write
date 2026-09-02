@@ -15,6 +15,20 @@
     "bindings": [{ "name": "SHARE", "class_name": "ShareRoom" }]
   },
   "migrations": [{ "tag": "share-rooms", "new_sqlite_classes": ["ShareRoom"] }],
+  // Sharing takes no password, so its create endpoint is open to the internet.
+  // This is the brake on abuse: six new rooms a minute per IP, checked before
+  // the body is read. Best-effort and per-colo, which is the right size for a
+  // brake rather than a wall — a bot cannot mint rooms by the thousand.
+  "unsafe": {
+    "bindings": [
+      {
+        "name": "SHARE_RATE",
+        "type": "ratelimit",
+        "namespace_id": "1001",
+        "simple": { "limit": 6, "period": 60 }
+      }
+    ]
+  },
   // The blog's *Edit this post* button links here, so this name has to keep
   // answering. It is a custom domain on this Worker, not on a Pages project:
   // deploying anywhere else leaves the old app sitting on the domain.
