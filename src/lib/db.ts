@@ -1,5 +1,6 @@
 import type { JSONContent } from "@tiptap/core";
 import type { PostMeta } from "../../shared/types.ts";
+import { shrinkImage } from "./images.ts";
 
 export interface Draft {
   id: string;
@@ -105,11 +106,12 @@ export async function resolveLocalSrc(src: string): Promise<string | null> {
 }
 
 export async function storeImageFile(file: File | Blob, name?: string): Promise<StoredImage> {
+  const blob = await shrinkImage(file);
   const image: StoredImage = {
     id: crypto.randomUUID(),
     name: name || (file instanceof File ? file.name : "image.png"),
-    type: file.type || "image/png",
-    blob: file,
+    type: blob.type || "image/png",
+    blob,
     addedAt: Date.now(),
   };
   await imageStore.put(image);

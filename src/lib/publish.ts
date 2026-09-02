@@ -2,7 +2,7 @@ import type { JSONContent } from "@tiptap/core";
 import type { PublishFile } from "../../shared/types.ts";
 import type { Draft, StoredImage } from "./db.ts";
 import { imageStore, isLocalSrc, localId } from "./db.ts";
-import { blobToBase64, extensionFor } from "./images.ts";
+import { blobToBase64, extensionFor, shrinkImage } from "./images.ts";
 import { buildPostFile } from "./markdown.ts";
 import type { Settings } from "./settings.ts";
 import { datePrefix, slugify } from "./text.ts";
@@ -123,7 +123,7 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
     }
     const extension = extensionFor(image.stored.type, image.stored.name);
     const path = `${imagesDir}/${image.baseName}.${extension}`;
-    files.push({ path, contentBase64: await blobToBase64(image.stored.blob) });
+    files.push({ path, contentBase64: await blobToBase64(await shrinkImage(image.stored.blob)) });
     imageUrls.set(image.src, `/${path}`);
   }
 

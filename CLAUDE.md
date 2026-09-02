@@ -81,6 +81,16 @@ WebP and repoints the post that referenced them — because that is the one end
 with a real encoder: WebKit has none behind its canvas, so converting here
 never worked from an iPhone, which is where most of these photos come from.
 
+Size is the one thing handled before the push: an image wider than 1760px is
+redrawn to 1760 (`shrinkImage` in `src/lib/images.ts`) when it is stored, and
+again at publish for drafts that still hold originals. 1760 is `MAX_WIDTH` in
+the blog's `convert-images.js` — the width the build would cut it to anyway,
+so nothing a reader would see is lost, and a post of phone photos stays inside
+the Worker's 20 MB cap. JPEG stays JPEG and PNG stays PNG, which is what keeps
+alpha; other formats, and anything that fails to re-encode or comes back
+bigger, pass through whole. Downscaling works on an iPhone — it was only a
+WebP encoder WebKit lacked, and this writes JPEG and PNG.
+
 Nothing is written back to the repository afterwards, so a published post keeps
 pointing at the file it was published with while the site serves the WebP made
 from it. The image node tries the WebP when the original 404s, which is what a
