@@ -16,15 +16,23 @@ const RENDERED = new Set(["mermaid", "chart"]);
 
 const REDRAW_MS = 400;
 
+let previews = 0;
+
 function isDark(): boolean {
   return document.documentElement.dataset.theme === "dark";
 }
 
 function previewView(
-  paint: (source: string, node: ProseMirrorNode, target: HTMLElement) => Promise<Teardown> | null,
+  paint: (
+    source: string,
+    node: ProseMirrorNode,
+    target: HTMLElement,
+    key: string,
+  ) => Promise<Teardown> | null,
   className: string,
 ) {
   return ({ node }: { node: ProseMirrorNode }): NodeView => {
+    const serial = ++previews;
     const dom = document.createElement("div");
     dom.className = className;
 
@@ -43,7 +51,7 @@ function previewView(
 
     const draw = (current: ProseMirrorNode) => {
       const mine = ++generation;
-      const started = paint(current.textContent, current, preview);
+      const started = paint(current.textContent, current, preview, `${serial}-${mine}`);
       if (!started) {
         teardown?.();
         teardown = null;
@@ -92,25 +100,17 @@ function previewView(
 
 export const PreviewCodeBlock = CodeBlock.extend({
   addNodeView() {
-    return previewView((source, node, target) => {
+    return previewView((source, node, target, key) => {
       const language = String(node.attrs.language ?? "");
       if (!RENDERED.has(language) || !source.trim()) {
         return null;
       }
       return language === "mermaid"
-        ? renderMermaid(source, target, isDark(), `mermaid-${Math.abs(hash(source))}`)
+        ? renderMermaid(source, target, isDark(), `mermaid-${key}`)
         : renderChart(source, target, isDark());
     }, "code-block");
   },
 });
-
-function hash(value: string): number {
-  let out = 0;
-  for (let i = 0; i < value.length; i++) {
-    out = (out * 31 + value.charCodeAt(i)) | 0;
-  }
-  return out;
-}
 
 export const RawBlock = Node.create({
   name: "rawBlock",

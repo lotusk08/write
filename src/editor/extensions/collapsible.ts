@@ -1,6 +1,7 @@
 import { InputRule, Node, mergeAttributes } from "@tiptap/core";
 import type { NodeView } from "@tiptap/pm/view";
 import { TextSelection } from "@tiptap/pm/state";
+import { Transform } from "@tiptap/pm/transform";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -190,12 +191,24 @@ export const Collapsible = Node.create({
             contentType.createChecked(null, schema.nodes.paragraph.createChecked()),
           ]);
 
+          const from = $from.before($from.depth);
+          const to = $from.after($from.depth);
+          const probe = new Transform(state.doc).replaceRangeWith(from, to, node);
+          let landed = -1;
+          probe.doc.descendants((child, pos) => {
+            if (child === node) {
+              landed = pos;
+            }
+            return landed === -1;
+          });
+          if (landed === -1) {
+            return false;
+          }
           if (!dispatch) {
             return true;
           }
-          const from = $from.before($from.depth);
-          tr.replaceRangeWith(from, $from.after($from.depth), node);
-          tr.setSelection(TextSelection.near(tr.doc.resolve(from + 2 + text.length)));
+          tr.replaceRangeWith(from, to, node);
+          tr.setSelection(TextSelection.near(tr.doc.resolve(landed + 2 + text.length)));
           dispatch(tr.scrollIntoView());
           return true;
         },
@@ -252,7 +265,10 @@ export const Collapsible = Node.create({
     return [
       new InputRule({
         find: /^(>>>|:::)\s$/,
-        handler: ({ range, chain }) => {
+        handler: ({ range, chain, can }) => {
+          if (!can().setCollapsible()) {
+            return null;
+          }
           chain().deleteRange(range).setCollapsible().run();
         },
       }),

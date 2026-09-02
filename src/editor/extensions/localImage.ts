@@ -1,7 +1,9 @@
 import Image from "@tiptap/extension-image";
-import { Plugin, PluginKey } from "@tiptap/pm/state";
+import { Plugin, PluginKey, type EditorState, type Transaction } from "@tiptap/pm/state";
+import { ReplaceAroundStep, ReplaceStep } from "@tiptap/pm/transform";
 import type { NodeView } from "@tiptap/pm/view";
-import { LOCAL_PREFIX, isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
+import { ySyncPluginKey } from "@tiptap/y-tiptap";
+import { LOCAL_PREFIX, imageStore, isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
 import { displaySrc } from "../../lib/site.ts";
 import { CENTER_ROW, withRowClasses } from "./blogFormat.ts";
 
@@ -14,6 +16,21 @@ declare module "@tiptap/core" {
 }
 
 const ROW_LIMIT = 4;
+
+const epochKey = new PluginKey<number>("localImageEpoch");
+
+function swapsDocument(tr: Transaction, previous: EditorState): boolean {
+  if (tr.getMeta(ySyncPluginKey)) {
+    return false;
+  }
+  const size = previous.doc.content.size;
+  return tr.steps.some(
+    (step) =>
+      (step instanceof ReplaceStep || step instanceof ReplaceAroundStep) &&
+      step.from === 0 &&
+      step.to === size,
+  );
+}
 
 function imageFilesFrom(list: FileList | DataTransferItemList | null | undefined): File[] {
   if (!list) {
@@ -97,26 +114,39 @@ export const LocalImage = Image.extend({
           if (!files.length) {
             return false;
           }
-          void Promise.all(files.map((file) => storeImageFile(file))).then((stored) => {
-            const row = stored.length > 1 && stored.length <= ROW_LIMIT;
-            editor
-              .chain()
-              .focus()
-              .insertContent(
-                stored.map((image, index) => ({
-                  type: this.name,
-                  attrs: {
-                    src: `${LOCAL_PREFIX}${image.id}`,
-                    alt: "",
-                    title: null,
-                    joinPrevious: row && index > 0,
-                    ial: row ? withRowClasses(null) : null,
-                    blockIal: row && index === stored.length - 1 ? CENTER_ROW : null,
-                  },
-                })),
-              )
-              .run();
-          });
+          const epoch = epochKey.getState(editor.state) ?? 0;
+          void Promise.all(files.map((file) => storeImageFile(file)))
+            .then((stored) => {
+              if (editor.isDestroyed || (epochKey.getState(editor.state) ?? 0) !== epoch) {
+                void Promise.all(stored.map((image) => imageStore.remove(image.id)));
+                return;
+              }
+              const row = stored.length > 1 && stored.length <= ROW_LIMIT;
+              editor
+                .chain()
+                .focus()
+                .insertContent(
+                  stored.map((image, index) => ({
+                    type: this.name,
+                    attrs: {
+                      src: `${LOCAL_PREFIX}${image.id}`,
+                      alt: "",
+                      title: null,
+                      joinPrevious: row && index > 0,
+                      ial: row ? withRowClasses(null) : null,
+                      blockIal: row && index === stored.length - 1 ? CENTER_ROW : null,
+                    },
+                  })),
+                )
+                .run();
+            })
+            .catch((error: unknown) => {
+              window.alert(
+                `Could not store the image${files.length === 1 ? "" : "s"}: ${
+                  error instanceof Error ? error.message : String(error)
+                }`,
+              );
+            });
           return true;
         },
     };
@@ -144,19 +174,28 @@ export const LocalImage = Image.extend({
       caption.className = "editor-image-alt editor-image-caption";
       caption.textContent = "Add caption";
 
+      let generation = 0;
       const paint = (attrs: Record<string, unknown>) => {
+        const mine = ++generation;
         const src = String(attrs.src ?? "");
         applyLayout(figure, img, String(attrs.ial ?? ""));
         figure.toggleAttribute("data-join", Boolean(attrs.joinPrevious));
         img.alt = String(attrs.alt ?? "");
         alt.textContent = attrs.alt ? String(attrs.alt) : "Add alt text";
         alt.classList.toggle("is-empty", !attrs.alt);
+        img.onerror = null;
         if (isLocalSrc(src)) {
-          void resolveLocalSrc(src).then((url) => {
-            img.src = url ?? "";
-            figure.classList.toggle("is-missing", !url);
-          });
+          void resolveLocalSrc(src)
+            .catch(() => null)
+            .then((url) => {
+              if (mine !== generation) {
+                return;
+              }
+              img.src = url ?? "";
+              figure.classList.toggle("is-missing", !url);
+            });
         } else {
+          figure.classList.remove("is-missing");
           const published = displaySrc(src);
           img.onerror = () => {
             const converted = published.replace(/\.(jpe?g|png|tiff?|bmp)$/i, ".webp");
@@ -269,6 +308,13 @@ export const LocalImage = Image.extend({
     const editor = this.editor;
     return [
       ...(this.parent?.() ?? []),
+      new Plugin<number>({
+        key: epochKey,
+        state: {
+          init: () => 0,
+          apply: (tr, epoch, previous) => (swapsDocument(tr, previous) ? epoch + 1 : epoch),
+        },
+      }),
       new Plugin({
         key: new PluginKey("localImageDropPaste"),
         props: {

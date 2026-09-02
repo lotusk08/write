@@ -177,6 +177,24 @@ Things that took a bug to learn, and that a change here can quietly undo:
 - The five switches are coerced with `Boolean()` before interpolation. A draft
   saved before one of them existed writes `undefined` otherwise, which YAML
   reads back as a string — and a string is true.
+- `BLOCKS` in `blogFormat.ts` must list every node type `parseBlocks` can push:
+  an attribute list under a block is attached to whatever block came last, with
+  no type filter. `horizontalRule` and `collapsible` were missing, so
+  `{: .divider }` under a rule and `{: .collapse }` under a `<details>` were
+  stripped the first time the post passed through the editor and deleted from
+  the repository on re-publish.
+- A command may run inside `can()`, which hands it the live transaction with
+  `dispatch` off — whatever it does to `tr` there is dispatched anyway.
+  `setCollapsible` probes the fit on a throwaway `Transform` and touches `tr`
+  only when it will dispatch; doing the replace first and returning early on
+  `!dispatch` inserted the section twice from the `>>>` input rule.
+- Storing an image is async (the 1760px redraw takes a moment on a phone), and
+  the insert that follows lands in whatever the editor holds by then. The
+  local-image plugin counts document swaps — a step replacing the whole doc,
+  which is what `setContent` does on a draft switch, but not y-tiptap's remote
+  updates, which replace the whole doc on every keystroke and carry
+  `ySyncPluginKey` meta — and an insert that started before a swap is dropped,
+  its blobs removed, rather than landing in the other draft.
 
 In an `.author` quote the site styles the last paragraph as the attribution —
 right-aligned, italic, the dash added by CSS — and the editor now shows the

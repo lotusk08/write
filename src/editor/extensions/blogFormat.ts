@@ -56,6 +56,8 @@ const BLOCKS = [
   "mathBlock",
   "rawBlock",
   "embed",
+  "horizontalRule",
+  "collapsible",
 ];
 
 interface RowImage {
@@ -77,7 +79,12 @@ function imageRun(state: EditorState): RowImage[] {
     return [];
   }
   if (touched.length > 1) {
-    return touched;
+    const $first = state.doc.resolve(touched[0].pos);
+    const contiguous = touched.every(({ pos }, offset) => {
+      const $pos = state.doc.resolve(pos);
+      return $pos.parent === $first.parent && $pos.index() === $first.index() + offset;
+    });
+    return contiguous ? touched : [];
   }
 
   const $image = state.doc.resolve(touched[0].pos);

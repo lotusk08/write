@@ -1,5 +1,6 @@
 import { Node, mergeAttributes } from "@tiptap/core";
 import type { NodeView } from "@tiptap/pm/view";
+import { displaySrc } from "../../lib/site.ts";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -44,7 +45,7 @@ export function embedFromUrl(value: string): { platform: string; id: string } | 
   return /^[\w-]{6,}$/.test(url) ? { platform: "youtube", id: url } : null;
 }
 
-function externalUrl(platform: string, id: string): string {
+function externalUrl(platform: string, id: string): string | null {
   switch (platform) {
     case "x":
       return `https://x.com/i/status/${id}`;
@@ -55,7 +56,10 @@ function externalUrl(platform: string, id: string): string {
     case "twitch":
       return `https://www.twitch.tv/videos/${id}`;
     default:
-      return id;
+      if (/^https?:\/\//i.test(id)) {
+        return id;
+      }
+      return id.startsWith("/") && !id.startsWith("//") ? displaySrc(id) : null;
   }
 }
 
@@ -68,9 +72,21 @@ export const Embed = Node.create({
 
   addAttributes() {
     return {
-      platform: { default: "youtube" },
-      id: { default: "" },
-      quote: { default: "'" },
+      platform: {
+        default: "youtube",
+        parseHTML: (element) => element.getAttribute("data-platform") ?? "youtube",
+        renderHTML: (attributes) => ({ "data-platform": attributes.platform as string }),
+      },
+      id: {
+        default: "",
+        parseHTML: (element) => element.getAttribute("data-id") ?? "",
+        renderHTML: (attributes) => ({ "data-id": attributes.id as string }),
+      },
+      quote: {
+        default: "'",
+        parseHTML: (element) => element.getAttribute("data-quote") ?? "'",
+        renderHTML: (attributes) => ({ "data-quote": attributes.quote as string }),
+      },
     };
   },
 
@@ -112,9 +128,12 @@ export const Embed = Node.create({
       } else {
         const card = document.createElement("a");
         card.className = "embed-card";
-        card.href = externalUrl(platform, id);
-        card.target = "_blank";
-        card.rel = "noreferrer noopener";
+        const href = externalUrl(platform, id);
+        if (href) {
+          card.href = href;
+          card.target = "_blank";
+          card.rel = "noreferrer noopener";
+        }
         card.textContent = `${platform} · ${id}`;
         dom.append(card);
       }
