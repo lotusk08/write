@@ -123,9 +123,17 @@ site ships, so there is nothing to configure to match it) and compare the HTML.
 The corpus that matters is the published one, which is on the `blog` branch.
 
 At the time of writing **66 of 75 posts render identically** once whitespace
-runs are collapsed, all 66 byte for byte. The 9 that differ are older posts with
-unbalanced `*`, reference-style links and inline HTML, which markdown-it and
-this parser recover from differently. Treat a drop in 66 as a regression.
+runs are collapsed, all 66 byte for byte. Treat a drop in 66 as a regression.
+The 9 that differ, and why, because each is a decision rather than a bug to go
+and fix: two carry trailing spaces the parser trims, which is whitespace in the
+HTML and nothing else; three carry an attribute list that never attached in the
+source — a `>Quote` with no space, a `{: .note-warning}` with no gap before the
+brace — and does attach once the parser writes those the way it writes them all,
+so the callout the author asked for finally appears; one puts an attribute list
+on the list below it rather than the quote above; one is a list whose items are
+indented a space, which the two read differently; one ends a text line with an
+image, which comes back as a line break; and one has a blockquote that renders
+empty as written and comes back carrying its text.
 
 Things that took a bug to learn, and that a change here can quietly undo:
 
