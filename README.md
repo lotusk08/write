@@ -26,9 +26,9 @@ browser.
 
 - **Collapsible sections.** Type `>>> ` (or `::: `) at the start of a line, or
   press `⌘⇧D`. Each section folds with the caret in the margin, and the toolbar
-  has *Collapse all* / *Expand all*. They export as
-  `<details markdown="1">…</details>`, which Jekyll renders as a real disclosure
-  widget.
+  has *Collapse all* / *Expand all*. They export as `<details>…</details>`,
+  which the blog renders as a real disclosure widget with its body still read
+  as Markdown.
 - **Drafts.** Everything is stored locally in IndexedDB and autosaves ~600 ms
   after you stop typing. Images are kept as blobs so drafts stay small and
   survive reloads. The open draft renames in place on a double-click and carries
@@ -42,24 +42,26 @@ browser.
   `{: .note-info }` and friends, plus its centred `{: .author }` attribution.
   Body headings start at H2, since the title lives in front matter.
 - **The blog's own formats.** `{: .filepath}` code, centred image rows
-  (`{: .d-flex .c-center }`) and `{% include embed/… %}` players are first-class
-  here — paste a YouTube, X, Spotify, Bilibili or Twitch link and the right
-  include is written for you. Any other attribute list a post carries is kept
-  exactly as written, so editing a post does not rewrite lines you did not touch.
+  (`{: .d-flex .c-center }`) and `<EmbedYoutube id="…" />` players are
+  first-class here — paste a YouTube, X, Spotify, Bilibili or Twitch link and
+  the right component is written for you. Any other attribute list a post
+  carries is kept exactly as written, so editing a post does not rewrite lines
+  you did not touch.
 - **Seeing what the blog will render.** Mermaid diagrams, Chart.js charts and
   `$$ … $$` maths are drawn live above their source; embedded videos play in
   place. The libraries load only when a post actually uses them.
 - **Markdown when you want it.** The **MD** button in the dock swaps the page
   view for the raw Markdown — exactly what gets published — and back.
 - **Editing published posts.** The blog's *Edit this post* button opens the post
-  here (`?edit=_posts/…`). Its images are left alone — not re-encoded, renamed
+  here (`?edit=src/posts/…`). Its images are left alone — not re-encoded, renamed
   or re-uploaded — and re-publishing commits back to the file it came from.
 - **Export.** Markdown (with front matter), Word `.docx` (images embedded), a
   self-contained HTML file, or Markdown straight to the clipboard.
-- **Publish.** Commits `_posts/YYYY-MM-DD-slug.md` — or `_drafts/…` — plus every
-  image, in one commit. Images are re-encoded to WebP and renamed to the blog's
-  flat convention (`assets/img/post/<slug>.webp`, `<slug>-1.webp`, …), and the
-  Markdown is rewritten to point at those paths. Optionally opens a pull request
+- **Publish.** Commits `src/posts/YYYY-MM-DD-slug.md` — or `src/drafts/…` — plus
+  every image, in one commit. Images are renamed to the blog's flat convention
+  (`public/assets/img/post/<slug>.jpg`, `<slug>-1.jpg`, …), the Markdown is
+  rewritten to point at the address they are served from, and the site's own
+  build converts them to WebP. Optionally opens a pull request
   on a `post/<slug>` branch instead of committing to `main`.
 
 Drafts sit as vertical tabs along the left edge, Obsidian-style: the draft you
@@ -126,7 +128,7 @@ It is the only thing the browser is ever trusted with, and only for a sitting:
 the first publish after the app opens asks for it, and it is held in session
 storage until the tab closes — or the app goes away on a phone — then asked for
 again. Nothing stores it. It guards sending, not reading — a post under
-`_posts` opens without it, because it is on the blog anyway; a draft does not. Until it is set the Worker refuses to
+`src/posts` opens without it, because it is on the blog anyway; a draft does not. Until it is set the Worker refuses to
 publish at all — an endpoint holding a write token with nothing in front of it
 is worse than a broken one, so it fails closed and says so.
 

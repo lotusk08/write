@@ -32,9 +32,9 @@ function githubToken(env: Env): string {
 
 function dirs(env: Env) {
   return {
-    postsDir: env.POSTS_DIR || "_posts",
-    draftsDir: env.DRAFTS_DIR || "_drafts",
-    imagesDir: env.IMAGES_DIR || "assets/img/post",
+    postsDir: env.POSTS_DIR || "src/posts",
+    draftsDir: env.DRAFTS_DIR || "src/drafts",
+    imagesDir: env.IMAGES_DIR || "public/assets/img/post",
   };
 }
 

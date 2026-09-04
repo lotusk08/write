@@ -84,6 +84,13 @@ function metaWithCover(draft: Draft, imageUrls: Map<string, string>) {
   return { ...draft.meta, cover: resolved ? { ...cover, path: resolved } : null };
 }
 
+// The blog serves `public/` at the site root, so where an image is committed
+// and the address a post points at it by are no longer the same string.
+function imagePaths(settings: Settings): { dir: string; url: string } {
+  const dir = settings.imagesDir.replace(/^\/+|\/+$/g, "");
+  return { dir, url: dir.replace(/^public\//, "") };
+}
+
 export function markdownPathFor(draft: Draft, settings: Settings, slug: string): string {
   const dir = (settings.publishTarget === "drafts" ? settings.draftsDir : settings.postsDir).replace(
     /^\/+|\/+$/g,
@@ -94,13 +101,13 @@ export function markdownPathFor(draft: Draft, settings: Settings, slug: string):
 
 export async function markdownForExport(draft: Draft, settings: Settings): Promise<string> {
   const slug = draftSlug(draft);
-  const imagesDir = settings.imagesDir.replace(/^\/+|\/+$/g, "");
+  const images = imagePaths(settings);
   const imageUrls = new Map<string, string>();
 
   for (const image of await planImages(draft, slug)) {
     if (image.stored) {
       const extension = extensionFor(image.stored.type, image.stored.name);
-      imageUrls.set(image.src, `/${imagesDir}/${image.baseName}.${extension}`);
+      imageUrls.set(image.src, `/${images.url}/${image.baseName}.${extension}`);
     }
   }
 
@@ -111,7 +118,7 @@ export async function markdownForExport(draft: Draft, settings: Settings): Promi
 
 export async function buildPublishPlan(draft: Draft, settings: Settings): Promise<PublishPlan> {
   const slug = draftSlug(draft);
-  const imagesDir = settings.imagesDir.replace(/^\/+|\/+$/g, "");
+  const images = imagePaths(settings);
   const files: PublishFile[] = [];
   const imageUrls = new Map<string, string>();
   const skippedImages: string[] = [];
@@ -122,9 +129,12 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
       continue;
     }
     const extension = extensionFor(image.stored.type, image.stored.name);
-    const path = `${imagesDir}/${image.baseName}.${extension}`;
-    files.push({ path, contentBase64: await blobToBase64(await shrinkImage(image.stored.blob)) });
-    imageUrls.set(image.src, `/${path}`);
+    const file = `${image.baseName}.${extension}`;
+    files.push({
+      path: `${images.dir}/${file}`,
+      contentBase64: await blobToBase64(await shrinkImage(image.stored.blob)),
+    });
+    imageUrls.set(image.src, `/${images.url}/${file}`);
   }
 
   const markdown = buildPostFile(metaWithCover(draft, imageUrls), draft.doc, {

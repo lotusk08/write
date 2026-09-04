@@ -12,11 +12,31 @@ declare module "@tiptap/core" {
 
 export const PLATFORMS = ["youtube", "x", "bilibili", "spotify", "twitch", "audio", "video"] as const;
 
-export const EMBED_LIQUID =
-  /^\{%\s*include\s+embed\/([a-z]+)\.html\s+id=(["'])([^"']+)\2\s*%\}$/;
+// The blog draws each embed with a Vue component of its own; a file player
+// takes the file as `src`, a platform takes the id it publishes under.
+const FILE_PLATFORMS = new Set(["audio", "video"]);
 
-export function embedLiquid(platform: string, id: string, quote = "'"): string {
-  return `{% include embed/${platform}.html id=${quote}${id}${quote} %}`;
+function componentName(platform: string): string {
+  return `Embed${platform.charAt(0).toUpperCase()}${platform.slice(1)}`;
+}
+
+export const EMBED_TAG = /^<Embed([A-Z][A-Za-z]*)\s+(?:id|src)=(["'])([^"']+)\2\s*\/>$/;
+
+// What the posts said while the blog was Jekyll. Still read, never written:
+// nothing renders Liquid any more, so opening such a post and publishing it
+// again is what moves it over.
+export const EMBED_LIQUID =
+  /^\{%\s*include\s+embed\/([a-z]+)\.html\s+(?:id|src)=(["'])([^"']+)\2\s*%\}$/;
+
+export function embedTag(platform: string, id: string): string {
+  const attribute = FILE_PLATFORMS.has(platform) ? "src" : "id";
+  const value = id.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+  return `<${componentName(platform)} ${attribute}="${value}" />`;
+}
+
+export function embedPlatform(component: string): string | null {
+  const platform = component.toLowerCase();
+  return (PLATFORMS as readonly string[]).includes(platform) ? platform : null;
 }
 
 export function embedFromUrl(value: string): { platform: string; id: string } | null {
@@ -82,11 +102,6 @@ export const Embed = Node.create({
         parseHTML: (element) => element.getAttribute("data-id") ?? "",
         renderHTML: (attributes) => ({ "data-id": attributes.id as string }),
       },
-      quote: {
-        default: "'",
-        parseHTML: (element) => element.getAttribute("data-quote") ?? "'",
-        renderHTML: (attributes) => ({ "data-quote": attributes.quote as string }),
-      },
     };
   },
 
@@ -140,7 +155,7 @@ export const Embed = Node.create({
 
       const caption = document.createElement("span");
       caption.className = "embed-note";
-      caption.textContent = embedLiquid(platform, id, String(node.attrs.quote ?? "'"));
+      caption.textContent = embedTag(platform, id);
       dom.append(caption);
 
       return { dom, ignoreMutation: () => true };

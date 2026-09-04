@@ -1,6 +1,6 @@
 import type { JSONContent } from "@tiptap/core";
 import type { PostMeta } from "../../shared/types.ts";
-import { EMBED_LIQUID } from "../editor/extensions/embed.ts";
+import { EMBED_LIQUID, EMBED_TAG, embedPlatform } from "../editor/extensions/embed.ts";
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
 
@@ -91,10 +91,12 @@ export function parseFrontMatter(yaml: string): Partial<PostMeta> {
         break;
       case "pin":
       case "toc":
+        meta[key] = boolean(value);
+        break;
       case "math":
       case "mermaid":
       case "chart":
-        meta[key] = boolean(value);
+      case "render_with_liquid":
         break;
       case "image":
         if (value) {
@@ -339,7 +341,7 @@ const MATH = /^\s*\$\$\s*$/;
 const LIQUID = /^\{%[\s\S]*%\}$/;
 const FOOTNOTE_DEF = /^\[\^([^\]\s]+)\]:[^\S\n]*/;
 const DESCRIPTION = /^:\s+\S/;
-const HTML_BLOCK = /^\s*<(\/?)([a-zA-Z][\w-]*)(\s[^>]*)?>/;
+const HTML_BLOCK = /^\s*<(?:\/?[a-zA-Z][\w-]*(?:\s[^>]*)?>|!--)/;
 const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const BULLET = /^(\s*)([-*+])\s+(.*)$/;
@@ -448,18 +450,19 @@ function parseBlocks(lines: string[]): JSONContent[] {
       continue;
     }
 
-    if (LIQUID.test(line.trim())) {
-      const embed = EMBED_LIQUID.exec(line.trim());
+    if (LIQUID.test(line.trim()) || EMBED_TAG.test(line.trim())) {
+      const trimmed = line.trim();
+      const tag = EMBED_TAG.exec(trimmed) ?? EMBED_LIQUID.exec(trimmed);
+      const platform = tag ? embedPlatform(tag[1]) : null;
       const joins = out.length > 0 && Boolean(lines[i - 1]?.trim());
       const attrs = joins ? { joinPrevious: true } : {};
       out.push(
-        embed
-          ? { type: "embed", attrs: { platform: embed[1], quote: embed[2], id: embed[3], ...attrs } }
-          :
-            {
+        platform && tag
+          ? { type: "embed", attrs: { platform, id: tag[3], ...attrs } }
+          : {
               type: "rawBlock",
               attrs,
-              content: [{ type: "text", text: line.trim() }],
+              content: [{ type: "text", text: trimmed }],
             },
       );
       i += 1;

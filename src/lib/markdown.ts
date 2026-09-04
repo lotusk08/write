@@ -1,7 +1,7 @@
 import type { JSONContent } from "@tiptap/core";
 import type { PostMeta } from "../../shared/types.ts";
 import { CENTER_ROW } from "../editor/extensions/blogFormat.ts";
-import { embedLiquid } from "../editor/extensions/embed.ts";
+import { embedTag } from "../editor/extensions/embed.ts";
 
 export interface SerializeOptions {
   resolveImage?: (src: string) => string;
@@ -272,7 +272,7 @@ function collapsibleBlock(node: JSONContent, options: SerializeOptions): string 
   const summary = inline(summaryNode?.content, options).trim() || "Details";
   const body = blocks(contentNode?.content, options).join("\n\n");
   const open = node.attrs?.open ? " open" : "";
-  return `<details markdown="1"${open}>\n<summary>${summary}</summary>\n\n${body}\n\n</details>`;
+  return `<details${open}>\n<summary>${summary}</summary>\n\n${body}\n\n</details>`;
 }
 
 const ENDS_WITH_IAL = /\n\{:[^}\n]*\}$/;
@@ -358,13 +358,7 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         break;
       }
       case "embed":
-        out.push(
-          embedLiquid(
-            String(node.attrs?.platform ?? "youtube"),
-            String(node.attrs?.id ?? ""),
-            String(node.attrs?.quote ?? "'"),
-          ),
-        );
+        out.push(embedTag(String(node.attrs?.platform ?? "youtube"), String(node.attrs?.id ?? "")));
         break;
       case "rawBlock":
         out.push((node.content ?? []).map((child) => child.text ?? "").join(""));
@@ -480,13 +474,7 @@ export function buildFrontMatter(meta: PostMeta): string {
   lines.push(`author: ${yamlString(meta.author)}`, `date: ${yamlString(meta.date)}`);
   lines.push(...yamlList("categories", meta.categories));
   lines.push(...yamlList("tags", meta.tags));
-  lines.push(
-    `pin: ${Boolean(meta.pin)}`,
-    `toc: ${Boolean(meta.toc)}`,
-    `math: ${Boolean(meta.math)}`,
-    `mermaid: ${Boolean(meta.mermaid)}`,
-    `chart: ${Boolean(meta.chart)}`,
-  );
+  lines.push(`pin: ${Boolean(meta.pin)}`, `toc: ${Boolean(meta.toc)}`);
   if (meta.cover?.path) {
     lines.push("image:", `  path: ${yamlString(meta.cover.path)}`);
     if (meta.cover.alt.trim()) {

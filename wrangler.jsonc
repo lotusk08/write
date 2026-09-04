@@ -31,8 +31,8 @@
     "BLOG_REPO": "lotusk08/stevehoang.com",
     "BLOG_BRANCH": "blog",
     "SITE_URL": "https://stevehoang.com",
-    "POSTS_DIR": "_posts",
-    "DRAFTS_DIR": "_drafts",
-    "IMAGES_DIR": "assets/img/post"
+    "POSTS_DIR": "src/posts",
+    "DRAFTS_DIR": "src/drafts",
+    "IMAGES_DIR": "public/assets/img/post"
   }
 }

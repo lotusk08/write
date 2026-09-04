@@ -21,12 +21,9 @@ const TARGETS: { id: Settings["publishTarget"]; label: string }[] = [
   { id: "drafts", label: "Draft" },
 ];
 
-const OPTIONS: { key: "toc" | "pin" | "math" | "mermaid" | "chart"; label: string; hint: string }[] = [
+const OPTIONS: { key: "toc" | "pin"; label: string; hint: string }[] = [
   { key: "toc", label: "Table of contents", hint: "Sidebar outline on the post page" },
   { key: "pin", label: "Pin to home", hint: "Keeps the post at the top of the index" },
-  { key: "math", label: "Math", hint: "Loads KaTeX for this post" },
-  { key: "mermaid", label: "Diagrams", hint: "Loads Mermaid for this post" },
-  { key: "chart", label: "Charts", hint: "Loads Chart.js for this post" },
 ];
 
 export function PostPanel({

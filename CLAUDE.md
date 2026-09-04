@@ -1,9 +1,18 @@
 # write
 
 A Tiptap-based writing app for [stevehoang.com](https://stevehoang.com): drafts
-live in the browser and posts are published to the Jekyll blog repository.
-Published posts can be read back out of the repository and edited here, so the
-app has to be able to write a post it did not create without changing it.
+live in the browser and posts are published to the blog repository. Published
+posts can be read back out of the repository and edited here, so the app has to
+be able to write a post it did not create without changing it.
+
+The blog is a Vue/Vite site built with `vite-ssg`, not Jekyll. Posts live in
+`src/posts`, drafts in `src/drafts`, and images in `public/assets/img/post` —
+which is served at `/assets/img/post`, so where an image is committed and the
+address a post points at it by are two different strings. Markdown is rendered
+by markdown-it with the blog's own plugins (`scripts/markdown/`), which keep
+kramdown's attribute lists, footnotes and `hard_wrap`. Liquid is gone: a
+`{% include embed/… %}` renders as its own literal text now, and an embed is a
+Vue component (`<EmbedYoutube id="…" />`) instead.
 
 The blog is reached through this app's own Worker, which holds two secrets: one
 fine-grained GitHub token (Contents: read and write) and a `WRITE_PASSWORD`. No
@@ -13,9 +22,9 @@ and remembered, so publishing is one button rather than a password prompt per
 post.
 
 Reading and writing are not the same privilege, so they are not asked for the
-same way. A published post opens without the password: `_posts` is on the blog
-already, and the *Edit this post* link should land you in the editor rather than
-at a prompt. Drafts do not — they are the writing nobody has seen — and neither
+same way. A published post opens without the password: `src/posts` is on the
+blog already, and the *Edit this post* link should land you in the editor rather
+than at a prompt. Drafts do not — they are the writing nobody has seen — and neither
 does publishing. So the password appears in one place, the publish dialog.
 
 The Worker fails closed: with no `WRITE_PASSWORD` set it refuses to publish at
@@ -47,8 +56,8 @@ its own npm lockfile.
 
 - `src/` — the editor. `src/editor/extensions/` holds the custom Tiptap nodes:
   collapsible sections, blog callouts (`{: .note-* }`, `{: .author }`),
-  IndexedDB-backed images, `{% include embed/… %}` players, mermaid/chart/TeX
-  previews, and the attribute lists the blog lays posts out with.
+  IndexedDB-backed images, `<Embed… />` players, mermaid/chart/TeX previews,
+  and the attribute lists the blog lays posts out with.
 - `src/lib/` holds storage, export and publishing logic. `markdown.ts` writes a
   post; `import.ts` reads one back and is the inverse of it. `viewport.ts`
   measures the part of the window a phone keyboard leaves on screen; the shell
@@ -71,9 +80,16 @@ fixed point of that pass: block sequences, js-yaml's plain-scalar quoting rules,
 and no empty keys (a bare `description:` would come back as the string `null`).
 Change it only alongside a round-trip check against those exact options.
 
-Body output follows the blog too: headings start at H2, images go under
-`assets/img/post`, and blockquotes can carry the site's `{: .note-* }` callout
-classes.
+Body output follows the blog too: headings start at H2, images are committed
+under `public/assets/img/post` and written as `/assets/img/post/…`, and
+blockquotes can carry the site's `{: .note-* }` callout classes.
+
+An embed is one of the blog's components — `<EmbedYoutube id="…" />`, and
+`src=` rather than `id=` for `EmbedVideo` and `EmbedAudio`. A Liquid include is
+still read, so a post written before the move opens here and is converted the
+next time it is published; nothing writes one again. A component carrying more
+than the one prop the editor models (`compact`, `types`, `title` …) is kept as
+a raw block instead, which is written back exactly as it was found.
 
 Images are published in the format they arrived in, named from it. The blog's
 build converts them — `convert-images.js` runs ahead of the LQIP pass, writes
@@ -101,23 +117,25 @@ photo published as a JPEG does once the site has been built.
 `import.ts` parses a post into the editor's schema and `markdown.ts` writes it
 back. Editing a published post must not change what the blog renders, so the two
 are checked against the real corpus rather than by eye: parse every post in
-`../stevehoang.com/_posts`, re-serialise it, render both versions with kramdown
-and compare the HTML. Use the options the site actually builds with —
-`input: GFM` and **`hard_wrap: true`** (`_config.yml`). This note used to say
-`hard_wrap: false`, which is a different renderer: under it a lone newline is a
-wrap, under the real one it is a `<br>`. Every line break in the corpus was
-being scored against the wrong answer.
+`../stevehoang.com/src/posts`, re-serialise it, render both versions with the
+blog's own markdown-it pipeline (`scripts/markdown/index.js` — the renderer the
+site ships, so there is nothing to configure to match it) and compare the HTML.
+The corpus that matters is the published one, which is on the `blog` branch.
 
-At the time of writing **68 of 74 posts render identically** once whitespace
-runs are collapsed, and 37 byte for byte — the others differ only in whitespace
-kramdown copies through from stray trailing spaces in the source. The 6 that
-really differ are older posts with unbalanced `*` and the like, which kramdown
-and this parser recover from differently. Treat a drop in 68 as a regression.
+At the time of writing **66 of 75 posts render identically** once whitespace
+runs are collapsed, all 66 byte for byte. The 9 that differ are older posts with
+unbalanced `*`, reference-style links and inline HTML, which markdown-it and
+this parser recover from differently. Treat a drop in 66 as a regression.
 
 Things that took a bug to learn, and that a change here can quietly undo:
 
 - A blockquote runs to the next blank line: headings, lists and fences written
   under it without a `>` belong to it.
+- `<details>` is written without kramdown's `markdown="1"`, which markdown-it
+  has no use for: an HTML block ends at the blank line after the `<summary>`,
+  so the body is read as Markdown either way. It is read back as raw blocks
+  rather than a collapsible node, which is why a section a post already carries
+  is written out exactly as it was found, `markdown="1"` and all.
 - A list marker indented four spaces or more is not a list — it continues the
   block above. Tabs indent by columns, not by one character.
 - An image and the line under it are one paragraph, and the blog styles that
@@ -150,11 +168,11 @@ Things that took a bug to learn, and that a change here can quietly undo:
   between each one, and an attribution several gaps below the quote it belonged
   to. `lineBreak.ts`, and only where a paragraph flows: a list item, a table
   cell and a section summary keep their own Enter.
-- Every newline inside a paragraph is a `<br>`: the site sets `hard_wrap: true`.
-  Reading one as a wrap and joining the lines with a space took a break out of
-  every post opened here, and writing a break as two trailing spaces left the
-  spaces sitting in front of the `<br />` kramdown made of them. A bare newline
-  each way is the break and the whole of it.
+- Every newline inside a paragraph is a `<br>`: the site sets `breaks: true`,
+  as kramdown's `hard_wrap` did. Reading one as a wrap and joining the lines
+  with a space took a break out of every post opened here, and writing a break
+  as two trailing spaces left the spaces sitting in front of the `<br />` made
+  of them. A bare newline each way is the break and the whole of it.
 - A caption written beside its image and one written under it are the same
   paragraph but not the same rendering — the second has a `<br>` before it. Which
   side it was on rides on the block as `sameLine`, and like every block
@@ -179,9 +197,13 @@ Things that took a bug to learn, and that a change here can quietly undo:
 - A bare `null` in front matter is YAML's null, not the word: reading it as
   text put "null" in the description of every post that had none, and writing
   it back quoted made it permanent. Quoted `"null"` is still text.
-- The five switches are coerced with `Boolean()` before interpolation. A draft
+- `pin` and `toc` are coerced with `Boolean()` before interpolation. A draft
   saved before one of them existed writes `undefined` otherwise, which YAML
   reads back as a string — and a string is true.
+- `math`, `mermaid`, `chart` and `render_with_liquid` are read and dropped, not
+  kept as unknown keys: the site loads MathJax for every post and turns a
+  `mermaid` or `chart` fence into its component wherever it finds one, and there
+  is no Liquid left to switch off. Anything genuinely unknown is still kept.
 - `BLOCKS` in `blogFormat.ts` must list every node type `parseBlocks` can push:
   an attribute list under a block is attached to whatever block came last, with
   no type filter. `horizontalRule` and `collapsible` were missing, so
@@ -296,7 +318,7 @@ held during the jump so it does not flicker through every heading passed.
 ## Editing a published post
 
 `?edit=<repo path>` — what the blog's own edit button links to — reads the post
-through `/api/source`, which asks no password for anything under `_posts`, and
+through `/api/source`, which asks no password for anything under `src/posts`, and
 opens it as a draft whose `publishedPath` is that file, so re-publishing lands on the same path rather than making a copy. Images
 already on the blog are left alone: not re-encoded, re-uploaded or renamed, and
 a newly added image is numbered past every name the post already uses.

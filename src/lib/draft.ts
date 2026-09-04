@@ -14,9 +14,6 @@ export function newPostMeta(settings: Settings, title = ""): PostMeta {
     tags: [],
     pin: false,
     toc: true,
-    math: false,
-    mermaid: false,
-    chart: false,
     cover: null,
   };
 }

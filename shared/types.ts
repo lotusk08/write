@@ -18,9 +18,6 @@ export interface PostMeta {
   tags: string[];
   pin: boolean;
   toc: boolean;
-  math: boolean;
-  mermaid: boolean;
-  chart: boolean;
   cover: { path: string; alt: string; lqip?: string } | null;
   extra?: string[];
 }
