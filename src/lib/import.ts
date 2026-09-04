@@ -6,8 +6,12 @@ type Mark = { type: string; attrs?: Record<string, unknown> };
 
 const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---[^\S\n]*(?:\r?\n|$)/;
 
+// Trailing spaces on the last line are kept. markdown-it trims a paragraph of
+// its own, so writing them back changes nothing there — but where an attribute
+// list is lifted off the end of one, the space under it is left showing, and
+// dropping it here is the one place that would not come back the same.
 function trimAscii(value: string): string {
-  return value.replace(/^[ \t\n]+|[ \t\n]+$/g, "");
+  return value.replace(/^[ \t\n]+/, "").replace(/\n[ \t\n]*$/, "");
 }
 
 function scalar(raw: string): string {
@@ -122,10 +126,86 @@ function text(value: string, marks: Mark[]): JSONContent {
   return marks.length ? { type: "text", text: value, marks } : { type: "text", text: value };
 }
 
-const IMAGE = /^!\[([^\]]*)\]\(\s*([^)"]*?)(?:\s+"([^"]*)")?\s*\)/;
-const LINK = /^\[((?:[^[\]\\]|\\.)*)\]\(\s*([^)"]*?)(?:\s+"([^"]*)")?\s*\)/;
+const IMAGE = /^!\[([^\]]*)\]\(/;
+const LINK = /^\[((?:[^[\]\\]|\\.)*)\]\(/;
 const FOOTNOTE_REF = /^\[\^([^\]\s]+)\]/;
 const TAG = /^<(u|mark|sup|sub)>([\s\S]*?)<\/\1>/;
+
+// Where the address opened at `from` closes. Parentheses inside it balance, as
+// markdown-it balances them: a link whose URL carries a pair of its own is not
+// cut at the first one, which used to drop everything past it into the text.
+function addressEnd(source: string, from: number): number {
+  let depth = 0;
+  for (let i = from; i < source.length; i++) {
+    const char = source[i];
+    if (char === "\\") {
+      i += 1;
+    } else if (char === "\n") {
+      return -1;
+    } else if (char === "(") {
+      depth += 1;
+    } else if (char === ")") {
+      if (!depth) {
+        return i;
+      }
+      depth -= 1;
+    }
+  }
+  return -1;
+}
+
+interface Target {
+  href: string;
+  title?: string;
+  end: number;
+}
+
+function linkTarget(rest: string, from: number): Target | null {
+  const close = addressEnd(rest, from);
+  if (close === -1) {
+    return null;
+  }
+  let inner = rest.slice(from, close);
+  const quoted = /\s+"([^"]*)"\s*$/.exec(inner);
+  const title = quoted?.[1];
+  if (quoted) {
+    inner = inner.slice(0, quoted.index);
+  }
+  return { href: inner.trim(), ...(title ? { title } : {}), end: close + 1 };
+}
+
+// Where the emphasis opened at the head of `rest` closes. A code span and a
+// link's address are stepped over whole: the asterisks inside a URL are part of
+// it, and reading one as the closing mark loses the link the next time round.
+function emphasisEnd(rest: string, opening: string): number {
+  // The mark has to close on something: the earliest it can is one character in.
+  let i = opening.length + 1;
+  while (i < rest.length) {
+    if (rest[i] === "\\") {
+      i += 2;
+      continue;
+    }
+    if (rest[i] === "`") {
+      const code = /^(`+)[\s\S]*?\1(?!`)/.exec(rest.slice(i));
+      if (code) {
+        i += code[0].length;
+        continue;
+      }
+    }
+    if (rest[i] === "]" && rest[i + 1] === "(") {
+      const close = addressEnd(rest, i + 2);
+      if (close !== -1) {
+        i = close + 1;
+        continue;
+      }
+    }
+    if (rest.startsWith(opening, i) && /\S/.test(rest[i - 1] ?? "")) {
+      return i;
+    }
+    i += 1;
+  }
+  return -1;
+}
 
 export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
   const out: JSONContent[] = [];
@@ -172,13 +252,14 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
     }
     if (char === "!") {
       const image = IMAGE.exec(rest);
-      if (image) {
+      const target = image ? linkTarget(rest, image[0].length) : null;
+      if (image && target) {
         flush();
         out.push({
           type: "image",
-          attrs: { src: image[2], alt: image[1], title: image[3] ?? null },
+          attrs: { src: target.href, alt: image[1], title: target.title ?? null },
         });
-        i += image[0].length;
+        i += target.end;
         continue;
       }
     }
@@ -195,14 +276,15 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
         continue;
       }
       const link = LINK.exec(rest);
-      if (link) {
+      const target = link ? linkTarget(rest, link[0].length) : null;
+      if (link && target) {
         flush();
-        const attrs: Record<string, unknown> = { href: link[2] };
-        if (link[3]) {
-          attrs.title = link[3];
+        const attrs: Record<string, unknown> = { href: target.href };
+        if (target.title) {
+          attrs.title = target.title;
         }
         out.push(...parseInline(link[1], [...marks, { type: "link", attrs }]));
-        i += link[0].length;
+        i += target.end;
         continue;
       }
     }
@@ -217,25 +299,26 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
       }
     }
     if (char === "*" || char === "_" || char === "~") {
-      const emphasis =
-        /^(\*\*\*|___)(?=\S)([\s\S]*?\S)\1/.exec(rest) ??
-        /^(\*\*|__)(?=\S)([\s\S]*?\S)\1/.exec(rest) ??
-        /^(~~)(?=\S)([\s\S]*?\S)\1/.exec(rest) ??
-        /^(\*|_)(?=\S)([\s\S]*?\S)\1/.exec(rest);
-      const underscore = emphasis?.[1].startsWith("_");
+      const opening =
+        /^(\*\*\*|___)(?=\S)/.exec(rest)?.[1] ??
+        /^(\*\*|__)(?=\S)/.exec(rest)?.[1] ??
+        /^(~~)(?=\S)/.exec(rest)?.[1] ??
+        /^(\*|_)(?=\S)/.exec(rest)?.[1];
+      const close = opening ? emphasisEnd(rest, opening) : -1;
+      const underscore = opening?.startsWith("_");
       const boundary = !underscore || !/\w/.test(source[i - 1] ?? "");
-      if (emphasis && boundary) {
+      if (opening && close > 0 && boundary) {
         const added =
-          emphasis[1] === "~~"
+          opening === "~~"
             ? [{ type: "strike" }]
-            : emphasis[1].length === 3
+            : opening.length === 3
               ? [{ type: "bold" }, { type: "italic" }]
-              : emphasis[1].length === 2
+              : opening.length === 2
                 ? [{ type: "bold" }]
                 : [{ type: "italic" }];
         flush();
-        out.push(...parseInline(emphasis[2], [...marks, ...added]));
-        i += emphasis[0].length;
+        out.push(...parseInline(rest.slice(opening.length, close), [...marks, ...added]));
+        i += close + opening.length;
         continue;
       }
     }
@@ -255,19 +338,6 @@ function trimRun(nodes: JSONContent[]): JSONContent[] {
   }
   while (out[out.length - 1]?.type === "hardBreak") {
     out.pop();
-  }
-  for (const [index, edge] of [[0, /^[ \t]+/] as const, [-1, /[ \t]+$/] as const]) {
-    const at = index === 0 ? 0 : out.length - 1;
-    const node = out[at];
-    if (node?.type !== "text") {
-      continue;
-    }
-    const text = (node.text ?? "").replace(edge, "");
-    if (text) {
-      out[at] = { ...node, text };
-    } else {
-      out.splice(at, 1);
-    }
   }
   return out;
 }
@@ -305,7 +375,7 @@ function blocksFromInline(nodes: JSONContent[]): JSONContent[] {
     const attributes = next?.type === "text" && !next.marks?.length ? IAL.exec(next.text ?? "") : null;
     if (attributes && next) {
       node.attrs = { ...node.attrs, ial: attributes[0] };
-      const rest = (next.text ?? "").slice(attributes[0].length).replace(/^[ \t]+/, "");
+      const rest = (next.text ?? "").slice(attributes[0].length);
       if (rest) {
         nodes[i + 1] = { ...next, text: rest };
       } else {
@@ -350,6 +420,19 @@ const LIST_START = /^ {0,3}(?:[-*+]|\d+[.)])\s+/;
 const NOTE = /^\{:\s*\.(?:note-)?(tip|info|important|warning|danger|author)\s*\}\s*$/;
 const BLOCK_IAL = /^\{:[^}\n]*\}\s*$/;
 const TABLE_DIVIDER = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
+
+// An attribute list closes the block above it only when nothing carries the
+// paragraph on: with a line of text under it, markdown-it reads it as one more
+// line of that paragraph, and the classes in it are never applied.
+function ialClosesBlock(lines: string[], index: number): boolean {
+  const next = lines[index + 1];
+  return next === undefined || !next.trim() || isBlockStart(next);
+}
+
+function startsBlock(lines: string[], index: number): boolean {
+  const line = lines[index];
+  return BLOCK_IAL.test(line) ? ialClosesBlock(lines, index) : isBlockStart(line);
+}
 
 function isBlockStart(line: string): boolean {
   return (
@@ -422,7 +505,9 @@ function parseBlocks(lines: string[]): JSONContent[] {
       continue;
     }
 
-    if (BLOCK_IAL.test(line.trim())) {
+    // Indented, it is not an attribute list at all: markdown-it matches one
+    // only at the head of its line, and reads the rest as text.
+    if (BLOCK_IAL.test(line)) {
       const value = line.trim();
       if (out.length && lines[i - 1]?.trim()) {
         out[out.length - 1].attrs = { ...out[out.length - 1].attrs, blockIal: value };
@@ -540,9 +625,13 @@ function parseBlocks(lines: string[]): JSONContent[] {
         quoted.push(lines[i].trimStart().replace(/^>\s?/, ""));
         i += 1;
       }
-      while (i < lines.length && lines[i].trim() && !BLOCK_IAL.test(lines[i].trim())) {
-        quoted.push(lines[i]);
-        i += 1;
+      // markdown-it carries an open paragraph past the `>`, but only while the
+      // quote's last line held one, and only as far as the next block.
+      if (quoted[quoted.length - 1]?.trim()) {
+        while (i < lines.length && !startsBlock(lines, i)) {
+          quoted.push(lines[i]);
+          i += 1;
+        }
       }
       let note: string | null = null;
       const attribute = i < lines.length ? NOTE.exec(lines[i].trim()) : null;
@@ -624,7 +713,7 @@ function parseBlocks(lines: string[]): JSONContent[] {
 
     const buffer: string[] = [line];
     i += 1;
-    while (i < lines.length && !isBlockStart(lines[i])) {
+    while (i < lines.length && !startsBlock(lines, i)) {
       buffer.push(lines[i]);
       i += 1;
     }
@@ -665,6 +754,10 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
   let startAt = 1;
   let tasks = false;
   let i = start;
+  // Where the last item's own text began. A marker indented that far belongs
+  // to the item — it is a list inside it — and anything less deep is the next
+  // item of this one, however it happens to be indented.
+  let content = indent + 1;
 
   while (i < lines.length) {
     const bullet = BULLET.exec(lines[i]);
@@ -673,7 +766,7 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
     if (!match || match[1].length < indent) {
       break;
     }
-    if (match[1].length > indent) {
+    if (match[1].length >= content) {
       break;
     }
     if (items.length === 0) {
@@ -684,6 +777,7 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
     }
 
     const marker = match[0].length - match[3].length;
+    content = marker;
     const body: string[] = [];
     const task = TASK.exec(match[3]);
     if (items.length === 0 && task) {

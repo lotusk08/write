@@ -278,8 +278,12 @@ export const LocalImage = Image.extend({
           .insertContentAt(after, {
             type: "paragraph",
             attrs: { joinPrevious: true, sameLine: true },
+            // The space that will sit between the image and the caption: what
+            // separates two blocks written on one line is theirs to carry, so
+            // that a caption put beside an image comes out beside it.
+            content: [{ type: "text", text: " " }],
           })
-          .focus(after + 1)
+          .focus(after + 2)
           .setMark("italic")
           .run();
       });

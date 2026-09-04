@@ -231,6 +231,9 @@ function listBlock(node: JSONContent, options: SerializeOptions, ordered: boolea
         if (position === 0) {
           return rendered;
         }
+        if (child.attrs?.joinPrevious && child.attrs?.sameLine) {
+          return text + rendered;
+        }
         const hugs = LIST_TYPES.has(child.type ?? "") || Boolean(child.attrs?.joinPrevious);
         return `${text}${hugs ? "\n" : "\n\n"}${rendered}`;
       }, "");
@@ -402,7 +405,7 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
       if (piece) {
         out[start - 1] =
           node.attrs?.sameLine && !ENDS_WITH_IAL.test(out[start - 1])
-            ? `${out[start - 1]} ${piece}`
+            ? out[start - 1] + piece
             : nextLine(out[start - 1], piece);
       }
     }

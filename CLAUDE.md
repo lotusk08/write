@@ -124,23 +124,37 @@ blog's own markdown-it pipeline (`scripts/markdown/index.js` — the renderer th
 site ships, so there is nothing to configure to match it) and compare the HTML.
 The corpus that matters is the published one, which is on the `blog` branch.
 
-At the time of writing **66 of 75 posts render identically** once whitespace
-runs are collapsed, all 66 byte for byte. Treat a drop in 66 as a regression.
-The 9 that differ, and why, because each is a decision rather than a bug to go
-and fix: two carry trailing spaces the parser trims, which is whitespace in the
-HTML and nothing else; three carry an attribute list that never attached in the
-source — a `>Quote` with no space, a `{: .note-warning}` with no gap before the
-brace — and does attach once the parser writes those the way it writes them all,
-so the callout the author asked for finally appears; one puts an attribute list
-on the list below it rather than the quote above; one is a list whose items are
-indented a space, which the two read differently; one ends a text line with an
-image, which comes back as a line break; and one has a blockquote that renders
-empty as written and comes back carrying its text.
+**All 75 render byte for byte**, and each settles after one pass — write a post
+back twice and the second is the first. Treat either as a regression. The nine
+that used to differ were each a place where this parser had been written
+against kramdown, which the site no longer runs, and they are worth knowing
+because markdown-it draws every one of these lines differently:
+
+- A blockquote is carried on past the `>` only while its last line held an open
+  paragraph, and only as far as the next block. An empty `>` line closes the
+  paragraph, so what follows is no longer part of the quote; a list, heading,
+  fence or rule under it ends the quote outright, where kramdown swallowed
+  them.
+- An attribute list is one only at the head of its line and only at the end of
+  its paragraph. Indented a space it is text; with another line of the
+  paragraph under it, it is text there too — and the classes in it never reach
+  the blog, so writing them somewhere they would apply changes the post.
+- A list marker indented less than the item above it starts the next item of
+  that list, however little it is indented; only one indented as far as that
+  item's own text opens a list inside it.
+- What separates two blocks written on one line is theirs to carry: the space
+  between an image and the caption beside it is kept in the caption, so a
+  photo with text hard against it comes back hard against it. The caption tool
+  writes that space itself.
+- Trailing spaces on the last line of a block are kept. markdown-it trims a
+  paragraph of its own, so they change nothing there — but lifting an
+  attribute list off the end of one leaves the space under it showing.
+- Emphasis closes on the first delimiter that is not inside a code span or a
+  link's address, and an address balances its own parentheses. A URL carrying
+  `**` or `()` used to cut the link in half on the second pass through.
 
 Things that took a bug to learn, and that a change here can quietly undo:
 
-- A blockquote runs to the next blank line: headings, lists and fences written
-  under it without a `>` belong to it.
 - `<details>` is written without kramdown's `markdown="1"`, which markdown-it
   has no use for: an HTML block ends at the blank line after the `<summary>`,
   so the body is read as Markdown either way. It is read back as raw blocks
