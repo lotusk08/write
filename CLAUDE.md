@@ -107,10 +107,12 @@ alpha; other formats, and anything that fails to re-encode or comes back
 bigger, pass through whole. Downscaling works on an iPhone — it was only a
 WebP encoder WebKit lacked, and this writes JPEG and PNG.
 
-Nothing is written back to the repository afterwards, so a published post keeps
-pointing at the file it was published with while the site serves the WebP made
-from it. The image node tries the WebP when the original 404s, which is what a
-photo published as a JPEG does once the site has been built.
+The repository does not stay as it was pushed: the assets workflow runs that
+build on `blog`, and `convert-images.js` writes the WebP, deletes the file it
+was made from and repoints the post, which the run commits back. The draft
+here is never told, so it goes on pointing at a JPEG that is no longer there.
+The image node tries the WebP when the original 404s, which is what a photo
+published as a JPEG does once the site has been built.
 
 ## Round-tripping published posts
 
