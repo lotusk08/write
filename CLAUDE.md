@@ -125,10 +125,11 @@ site ships, so there is nothing to configure to match it) and compare the HTML.
 The corpus that matters is the published one, which is on the `blog` branch.
 
 **All 75 render byte for byte**, and each settles after one pass — write a post
-back twice and the second is the first. Treat either as a regression. The nine
-that used to differ were each a place where this parser had been written
-against kramdown, which the site no longer runs, and they are worth knowing
-because markdown-it draws every one of these lines differently:
+back twice and the second is the first. So does every draft and page beside
+them, 87 files in all. Treat any of that as a regression. The ones that used to
+differ were each a place where this parser had been written against kramdown,
+which the site no longer runs, and they are worth knowing because markdown-it
+draws every one of these lines differently:
 
 - A blockquote is carried on past the `>` only while its last line held an open
   paragraph, and only as far as the next block. An empty `>` line closes the
@@ -152,6 +153,17 @@ because markdown-it draws every one of these lines differently:
 - Emphasis closes on the first delimiter that is not inside a code span or a
   link's address, and an address balances its own parentheses. A URL carrying
   `**` or `()` used to cut the link in half on the second pass through.
+- A fence closes on a run of backticks at least as long as the one that opened
+  it, and a block is written with one longer than anything inside it, so a
+  ```` ```` ```` block can hold a ``` ``` ``` one. A code span is fenced the
+  same way.
+- A backslash escapes ASCII punctuation and nothing else, both ways. `\ne` is a
+  backslash the reader is meant to see, and writing it `\\ne` puts a line break
+  in the middle of an equation.
+- `<https://…>` is a link whose text is its own address, and it is written back
+  that way — recognised on the way out by the href matching the text, so no
+  attribute has to ride along, and left unescaped, because the underscores in a
+  URL are part of it.
 
 Things that took a bug to learn, and that a change here can quietly undo:
 

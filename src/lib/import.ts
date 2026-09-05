@@ -130,6 +130,10 @@ const IMAGE = /^!\[([^\]]*)\]\(/;
 const LINK = /^\[((?:[^[\]\\]|\\.)*)\]\(/;
 const FOOTNOTE_REF = /^\[\^([^\]\s]+)\]/;
 const TAG = /^<(u|mark|sup|sub)>([\s\S]*?)<\/\1>/;
+// `<https://…>`: a link whose text is its own address, which is how markdown
+// says one without writing it twice.
+const AUTOLINK = /^<([a-zA-Z][\w+.-]{1,31}:[^\s<>]*)>/;
+const ESCAPABLE = /[!-/:-@[-`{-~]/;
 
 // Where the address opened at `from` closes. Parentheses inside it balance, as
 // markdown-it balances them: a link whose URL carries a pair of its own is not
@@ -223,7 +227,9 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
     const rest = source.slice(i);
     const char = source[i];
 
-    if (char === "\\" && i + 1 < source.length) {
+    // A backslash escapes ASCII punctuation and nothing else, so the one in
+    // `\eqref` is a backslash the reader is meant to see.
+    if (char === "\\" && ESCAPABLE.test(source[i + 1] ?? "")) {
       buffer += source[i + 1];
       i += 2;
       continue;
@@ -289,6 +295,13 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
       }
     }
     if (char === "<") {
+      const autolink = AUTOLINK.exec(rest);
+      if (autolink) {
+        flush();
+        out.push(text(autolink[1], [...marks, { type: "link", attrs: { href: autolink[1] } }]));
+        i += autolink[0].length;
+        continue;
+      }
       const tag = TAG.exec(rest);
       if (tag) {
         flush();
@@ -568,7 +581,10 @@ function parseBlocks(lines: string[]): JSONContent[] {
     if (fence) {
       const code: string[] = [];
       i += 1;
-      while (i < lines.length && !new RegExp(`^\\s*${fence[2][0]}{3,}\\s*$`).test(lines[i])) {
+      // A fence closes on a run at least as long as the one that opened it, so
+      // a ```` block can hold a ``` one.
+      const closes = new RegExp(`^\\s*${fence[2][0]}{${fence[2].length},}\\s*$`);
+      while (i < lines.length && !closes.test(lines[i])) {
         code.push(lines[i]);
         i += 1;
       }

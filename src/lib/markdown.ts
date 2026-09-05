@@ -22,10 +22,17 @@ function marksOf(node: JSONContent): Mark[] {
   return [];
 }
 
+// A backslash is escaped only where leaving it bare would make it one: before
+// ASCII punctuation. The `\ne` in a line of maths is a command, and writing it
+// `\\ne` puts a line break in the equation.
 function escapeText(text: string): string {
   return text
     .split(/(\[\^[^\]\s]+\])/)
-    .map((part, index) => (index % 2 ? part : part.replace(/([\\`*_[\]<>])/g, "\\$1")))
+    .map((part, index) =>
+      index % 2
+        ? part
+        : part.replace(/\\(?=[!-/:-@[-`{-~])/g, "\\\\").replace(/([`*_[\]<>])/g, "\\$1"),
+    )
     .join("");
 }
 
@@ -35,7 +42,10 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
   }
   const code = marks.find((mark) => mark.type === "code");
   if (code) {
-    const fence = text.includes("`") ? "``" : "`";
+    // The fence has to outrun the longest run of backticks the code holds,
+    // or the span closes inside its own content.
+    const longest = Math.max(0, ...[...text.matchAll(/`+/g)].map((run) => run[0].length));
+    const fence = "`".repeat(longest + 1);
     const padding = text.startsWith("`") || text.endsWith("`") ? " " : "";
     const filepath = code.attrs?.filepath ? "{: .filepath}" : "";
     const span = `${fence}${padding}${text}${padding}${fence}${filepath}`;
@@ -143,10 +153,18 @@ function wrap(text: string, mark: Mark): string {
   return applyMarks(text, [mark]);
 }
 
+const AUTOLINK = /^[a-zA-Z][\w+.-]{1,31}:[^\s<>]*$/;
+
 function textNode(node: JSONContent): string {
   const marks = node.marks as Mark[] | undefined;
   const raw = node.text ?? "";
   const code = marks?.some((mark) => mark.type === "code");
+  // A link that says its own address is written the short way, unescaped: the
+  // underscores in a URL are part of it.
+  const link = marks?.length === 1 && marks[0].type === "link" ? marks[0] : null;
+  if (link && !link.attrs?.title && link.attrs?.href === raw && AUTOLINK.test(raw)) {
+    return `<${raw}>`;
+  }
   return applyMarks(code ? raw : escapeText(raw), marks);
 }
 
@@ -357,7 +375,9 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
       case "codeBlock": {
         const language = String(node.attrs?.language ?? "");
         const code = (node.content ?? []).map((child) => child.text ?? "").join("");
-        out.push(`\`\`\`${language}\n${code}\n\`\`\``);
+        const inner = Math.max(2, ...[...code.matchAll(/^[ \t]*(`{3,})/gm)].map((run) => run[1].length));
+        const fence = "`".repeat(inner + 1);
+        out.push(`${fence}${language}\n${code}\n${fence}`);
         break;
       }
       case "embed":
