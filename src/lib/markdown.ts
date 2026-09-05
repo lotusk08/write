@@ -31,7 +31,13 @@ function escapeText(text: string): string {
     .map((part, index) =>
       index % 2
         ? part
-        : part.replace(/\\(?=[!-/:-@[-`{-~])/g, "\\\\").replace(/([`*_[\]<>])/g, "\\$1"),
+        : part
+            .replace(/\\(?=[!-/:-@[-`{-~])/g, "\\\\")
+            .replace(/([`*_[\]])/g, "\\$1")
+            // Only a `<` that could open a tag or an address needs holding
+            // back. The site turns `<<` and `>>` into guillemets, and escaping
+            // either of them wrote the angle brackets into the post instead.
+            .replace(/<(?=[a-zA-Z/!?])/g, "\\<"),
     )
     .join("");
 }
@@ -309,6 +315,9 @@ function joinsRow(nodes: JSONContent[], index: number): boolean {
 const GAP_CLASS = /\.gap(?![\w-])/;
 
 function blockIal(nodes: JSONContent[], index: number): string {
+  if (nodes[index].attrs?.ialAbove) {
+    return "";
+  }
   const own = nodes[index].attrs?.blockIal ? String(nodes[index].attrs.blockIal) : "";
   if (!joinsRow(nodes, index) && !joinsRow(nodes, index + 1)) {
     return own;
@@ -324,6 +333,10 @@ function blockIal(nodes: JSONContent[], index: number): string {
     first -= 1;
   }
   const run = nodes.slice(first, index + 1);
+  // Already written above the run, where the post put it.
+  if (run.some((image) => image.attrs?.ialAbove)) {
+    return "";
+  }
   const row =
     run.some((image) => image.attrs?.blockIal === CENTER_ROW) ||
     run.some((image) => GAP_CLASS.test(String(image.attrs?.ial ?? "")));
@@ -344,7 +357,9 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         const before = Boolean(node.attrs?.joinPrevious);
         const content = withoutEdgeBreaks(node.content, before, after);
         const caption = before && nodes[index - 1]?.type === "image";
-        out.push(inline(caption ? captionContent(content) : content, options));
+        // A `>` is only a quote where a line begins, which is the one place
+        // a paragraph has to hold it back.
+        out.push(inline(caption ? captionContent(content) : content, options).replace(/^>/gm, "\\>"));
         break;
       }
       case "heading": {
@@ -418,6 +433,10 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
           out.push(...blocks(node.content, options));
         }
         break;
+    }
+
+    if (node.attrs?.ialAbove && node.attrs?.blockIal && out.length > start) {
+      out[start] = `${String(node.attrs.blockIal)}\n${out[start]}`;
     }
 
     if (node.attrs?.joinPrevious && out.length === start + 1 && start > 0) {

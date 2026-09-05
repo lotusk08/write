@@ -131,15 +131,16 @@ differ were each a place where this parser had been written against kramdown,
 which the site no longer runs, and they are worth knowing because markdown-it
 draws every one of these lines differently:
 
-- A blockquote is carried on past the `>` only while its last line held an open
-  paragraph, and only as far as the next block. An empty `>` line closes the
-  paragraph, so what follows is no longer part of the quote; a list, heading,
-  fence or rule under it ends the quote outright, where kramdown swallowed
-  them.
-- An attribute list is one only at the head of its line and only at the end of
-  its paragraph. Indented a space it is text; with another line of the
-  paragraph under it, it is text there too — and the classes in it never reach
-  the blog, so writing them somewhere they would apply changes the post.
+- A quote runs on into every line that follows it, marker or no marker, as far
+  as the next blank one. markdown-it carries only an open paragraph that way,
+  so the site marks the rest of them itself before parsing — which is
+  kramdown's rule, and this parser's.
+- An attribute list closes the block it names whatever follows it, and may be
+  written under three spaces of indent. Which side of the block it was written
+  on is a fact about the post, not a formatting choice: one above leaves a
+  paragraph of its own in the HTML where one below does not, so `ialAbove`
+  rides on the block and it is written back where it was found. A row's
+  `{: .d-flex .c-center }` is a row's whichever side it sits.
 - A list marker indented less than the item above it starts the next item of
   that list, however little it is indented; only one indented as far as that
   item's own text opens a list inside it.
@@ -164,6 +165,11 @@ draws every one of these lines differently:
   that way — recognised on the way out by the href matching the text, so no
   attribute has to ride along, and left unescaped, because the underscores in a
   URL are part of it.
+- Only a `<` that could open a tag or an address is held back, and a `>` only
+  where a line begins, which is the one place it would be a quote. The site
+  runs markdown-it's typographer, narrowed to what kramdown wrote: escaping
+  either bracket put `<<` and `>>` into the post instead of the guillemets
+  they stand for.
 
 Things that took a bug to learn, and that a change here can quietly undo:
 

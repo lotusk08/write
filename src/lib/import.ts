@@ -431,21 +431,10 @@ const BULLET = /^(\s*)([-*+])\s+(.*)$/;
 const ORDERED = /^(\s*)(\d+)[.)]\s+(.*)$/;
 const LIST_START = /^ {0,3}(?:[-*+]|\d+[.)])\s+/;
 const NOTE = /^\{:\s*\.(?:note-)?(tip|info|important|warning|danger|author)\s*\}\s*$/;
-const BLOCK_IAL = /^\{:[^}\n]*\}\s*$/;
+// An attribute list closes the block it names, whatever follows it, and it may
+// be written under three spaces of indent — both as kramdown read one.
+const BLOCK_IAL = /^ {0,3}\{:[^}\n]*\}\s*$/;
 const TABLE_DIVIDER = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
-
-// An attribute list closes the block above it only when nothing carries the
-// paragraph on: with a line of text under it, markdown-it reads it as one more
-// line of that paragraph, and the classes in it are never applied.
-function ialClosesBlock(lines: string[], index: number): boolean {
-  const next = lines[index + 1];
-  return next === undefined || !next.trim() || isBlockStart(next);
-}
-
-function startsBlock(lines: string[], index: number): boolean {
-  const line = lines[index];
-  return BLOCK_IAL.test(line) ? ialClosesBlock(lines, index) : isBlockStart(line);
-}
 
 function isBlockStart(line: string): boolean {
   return (
@@ -504,7 +493,10 @@ function parseBlocks(lines: string[]): JSONContent[] {
 
   const settle = () => {
     if (pending !== null && out.length > pendingAt) {
-      out[pendingAt].attrs = { ...out[pendingAt].attrs, blockIal: pending };
+      // Written above its block rather than under it. Both name the same
+      // block, but only the one above leaves a line of its own in the HTML,
+      // so which side it was on has to ride along.
+      out[pendingAt].attrs = { ...out[pendingAt].attrs, blockIal: pending, ialAbove: true };
       pending = null;
     }
   };
@@ -518,8 +510,6 @@ function parseBlocks(lines: string[]): JSONContent[] {
       continue;
     }
 
-    // Indented, it is not an attribute list at all: markdown-it matches one
-    // only at the head of its line, and reads the rest as text.
     if (BLOCK_IAL.test(line)) {
       const value = line.trim();
       if (out.length && lines[i - 1]?.trim()) {
@@ -641,13 +631,11 @@ function parseBlocks(lines: string[]): JSONContent[] {
         quoted.push(lines[i].trimStart().replace(/^>\s?/, ""));
         i += 1;
       }
-      // markdown-it carries an open paragraph past the `>`, but only while the
-      // quote's last line held one, and only as far as the next block.
-      if (quoted[quoted.length - 1]?.trim()) {
-        while (i < lines.length && !startsBlock(lines, i)) {
-          quoted.push(lines[i]);
-          i += 1;
-        }
+      // A quote runs on into every line that follows it, marker or no marker,
+      // as far as the next blank one or the attribute list that closes it.
+      while (i < lines.length && lines[i].trim() && !BLOCK_IAL.test(lines[i])) {
+        quoted.push(lines[i]);
+        i += 1;
       }
       let note: string | null = null;
       const attribute = i < lines.length ? NOTE.exec(lines[i].trim()) : null;
@@ -729,7 +717,7 @@ function parseBlocks(lines: string[]): JSONContent[] {
 
     const buffer: string[] = [line];
     i += 1;
-    while (i < lines.length && !startsBlock(lines, i)) {
+    while (i < lines.length && !isBlockStart(lines[i])) {
       buffer.push(lines[i]);
       i += 1;
     }
@@ -742,7 +730,7 @@ function parseBlocks(lines: string[]): JSONContent[] {
 
 function rowAttributes(blocks: JSONContent[]): JSONContent[] {
   for (let i = 0; i < blocks.length; i++) {
-    if (blocks[i].type !== "image" || !blocks[i].attrs?.blockIal) {
+    if (blocks[i].type !== "image" || !blocks[i].attrs?.blockIal || blocks[i].attrs?.ialAbove) {
       continue;
     }
     let last = i;

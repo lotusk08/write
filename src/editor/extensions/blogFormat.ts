@@ -141,6 +141,12 @@ export const BlockAttributes = Extension.create({
             renderHTML: (attributes) =>
               attributes.blockIal ? { "data-block-ial": attributes.blockIal as string } : {},
           },
+          ialAbove: {
+            default: false,
+            keepOnSplit: false,
+            parseHTML: (element) => element.hasAttribute("data-ial-above"),
+            renderHTML: (attributes) => (attributes.ialAbove ? { "data-ial-above": "" } : {}),
+          },
           joinPrevious: {
             default: false,
             keepOnSplit: false,
