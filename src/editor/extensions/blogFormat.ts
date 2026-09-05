@@ -53,7 +53,6 @@ const BLOCKS = [
   "orderedList",
   "taskList",
   "table",
-  "mathBlock",
   "rawBlock",
   "embed",
   "horizontalRule",

@@ -1240,8 +1240,7 @@ textarea {
   box-shadow: 0 0 0 3px var(--ring);
 }
 
-.code-block[data-preview="on"] pre,
-.math-block pre {
+.code-block[data-preview="on"] pre {
   border-top-left-radius: 0;
   border-top-right-radius: 0;
   border-top-color: transparent;
@@ -1252,8 +1251,7 @@ textarea {
   display: none;
 }
 
-.code-block[data-preview="on"] .block-preview,
-.math-block[data-preview="on"] .block-preview {
+.code-block[data-preview="on"] .block-preview {
   display: block;
   padding: 16px;
   border: 1px solid var(--border);
@@ -1280,15 +1278,6 @@ textarea {
   font-size: 0.82em;
   text-align: left;
   white-space: pre-wrap;
-}
-
-.math-block pre {
-  font-size: 0.78em;
-  opacity: 0.75;
-}
-
-.math-block[data-preview="off"] pre {
-  opacity: 1;
 }
 
 .ProseMirror a {

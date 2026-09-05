@@ -401,11 +401,6 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
       case "rawBlock":
         out.push((node.content ?? []).map((child) => child.text ?? "").join(""));
         break;
-      case "mathBlock": {
-        const tex = (node.content ?? []).map((child) => child.text ?? "").join("").trim();
-        out.push(`$$\n${tex}\n$$`);
-        break;
-      }
       case "horizontalRule":
         out.push("---");
         break;

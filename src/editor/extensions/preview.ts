@@ -1,16 +1,8 @@
-import { Node, mergeAttributes, textblockTypeInputRule } from "@tiptap/core";
+import { Node, mergeAttributes } from "@tiptap/core";
 import CodeBlock from "@tiptap/extension-code-block";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { NodeView } from "@tiptap/pm/view";
-import { renderChart, renderMath, renderMermaid, type Teardown } from "../render.ts";
-
-declare module "@tiptap/core" {
-  interface Commands<ReturnType> {
-    mathBlock: {
-      setMathBlock: () => ReturnType;
-    };
-  }
-}
+import { renderChart, renderMermaid, type Teardown } from "../render.ts";
 
 const RENDERED = new Set(["mermaid", "chart"]);
 
@@ -126,48 +118,5 @@ export const RawBlock = Node.create({
 
   renderHTML({ HTMLAttributes }) {
     return ["div", mergeAttributes(HTMLAttributes, { "data-raw": "", class: "raw-block" }), 0];
-  },
-});
-
-export const MathBlock = Node.create({
-  name: "mathBlock",
-  group: "block",
-  content: "text*",
-  marks: "",
-  code: true,
-  defining: true,
-
-  parseHTML() {
-    return [{ tag: "div[data-math]", preserveWhitespace: "full" }];
-  },
-
-  renderHTML({ HTMLAttributes }) {
-    return ["div", mergeAttributes(HTMLAttributes, { "data-math": "" }), 0];
-  },
-
-  addCommands() {
-    return {
-      setMathBlock:
-        () =>
-        ({ commands }) =>
-          commands.setNode(this.name),
-    };
-  },
-
-  addInputRules() {
-    return [textblockTypeInputRule({ find: /^\$\$\s$/, type: this.type })];
-  },
-
-  addKeyboardShortcuts() {
-    return {
-      "Mod-Alt-m": () => this.editor.commands.setMathBlock(),
-    };
-  },
-
-  addNodeView() {
-    return previewView(
-      (source, _node, target) => (source.trim() ? renderMath(source, target) : null),
-      "math-block",
-    );
   },
 });

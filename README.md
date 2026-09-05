@@ -48,8 +48,8 @@ browser.
   Spotify, Bilibili or Twitch link and the right component is written for
   you. Any other attribute list a post carries is kept exactly as written, so
   editing a post does not rewrite lines you did not touch.
-- **Seeing what the blog will render.** Mermaid diagrams, Chart.js charts and
-  `$$ … $$` maths are drawn live above their source; embedded videos play in
+- **Seeing what the blog will render.** Mermaid diagrams and Chart.js charts are
+  drawn live above their source; embedded videos play in
   place. The libraries load only when a post actually uses them.
 - **Markdown when you want it.** The **MD** button in the dock swaps the page
   view for the raw Markdown — exactly what gets published — and back.

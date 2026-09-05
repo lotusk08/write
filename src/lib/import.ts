@@ -544,18 +544,17 @@ function parseBlocks(lines: string[]): JSONContent[] {
     }
 
     if (MATH.test(line)) {
-      const tex: string[] = [];
+      const verbatim: string[] = [line];
       i += 1;
       while (i < lines.length && !MATH.test(lines[i])) {
-        tex.push(lines[i]);
+        verbatim.push(lines[i]);
         i += 1;
       }
+      if (i < lines.length) {
+        verbatim.push(lines[i]);
+      }
       i += 1;
-      const source = tex.join("\n").trim();
-      out.push({
-        type: "mathBlock",
-        ...(source ? { content: [{ type: "text", text: source }] } : {}),
-      });
+      out.push({ type: "rawBlock", content: [{ type: "text", text: verbatim.join("\n") }] });
       continue;
     }
 

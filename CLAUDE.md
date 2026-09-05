@@ -56,7 +56,7 @@ its own npm lockfile.
 
 - `src/` — the editor. `src/editor/extensions/` holds the custom Tiptap nodes:
   collapsible sections, blog callouts (`{: .note-* }`, `{: .author }`),
-  IndexedDB-backed images, `<Embed… />` players, mermaid/chart/TeX previews,
+  IndexedDB-backed images, `<Embed… />` players, mermaid/chart previews,
   and the attribute lists the blog lays posts out with.
 - `src/lib/` holds storage, export and publishing logic. `markdown.ts` writes a
   post; `import.ts` reads one back and is the inverse of it. `viewport.ts`
@@ -256,7 +256,7 @@ Things that took a bug to learn, and that a change here can quietly undo:
   saved before one of them existed writes `undefined` otherwise, which YAML
   reads back as a string — and a string is true.
 - `math`, `mermaid`, `chart` and `render_with_liquid` are read and dropped, not
-  kept as unknown keys: the site loads MathJax for every post and turns a
+  kept as unknown keys: the site renders no maths at all now, turns a
   `mermaid` or `chart` fence into its component wherever it finds one, and there
   is no Liquid left to switch off. Anything genuinely unknown is still kept.
 - `BLOCKS` in `blogFormat.ts` must list every node type `parseBlocks` can push:

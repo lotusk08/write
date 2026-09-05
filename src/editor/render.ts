@@ -68,25 +68,3 @@ export async function renderChart(source: string, target: HTMLElement, dark: boo
     return fail(target, error);
   }
 }
-
-let katexLoader: Promise<typeof import("katex").default> | null = null;
-
-async function loadKatex() {
-  katexLoader ??= Promise.all([import("katex"), import("katex/dist/katex.min.css")]).then(
-    ([module]) => module.default,
-  );
-  return katexLoader;
-}
-
-export async function renderMath(source: string, target: HTMLElement): Promise<Teardown> {
-  try {
-    const katex = await loadKatex();
-    katex.render(source, target, { displayMode: true, throwOnError: false, output: "html" });
-    delete target.dataset.state;
-    return () => {
-      target.innerHTML = "";
-    };
-  } catch (error) {
-    return fail(target, error);
-  }
-}
