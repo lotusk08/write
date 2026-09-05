@@ -12,8 +12,6 @@ declare module "@tiptap/core" {
 
 export const PLATFORMS = ["youtube", "x", "bilibili", "spotify", "twitch", "audio", "video"] as const;
 
-// The blog draws each embed with a Vue component of its own; a file player
-// takes the file as `src`, a platform takes the id it publishes under.
 const FILE_PLATFORMS = new Set(["audio", "video"]);
 
 function componentName(platform: string): string {
@@ -22,9 +20,6 @@ function componentName(platform: string): string {
 
 export const EMBED_TAG = /^<Embed([A-Z][A-Za-z]*)\s+(?:id|src)=(["'])([^"']+)\2\s*\/>$/;
 
-// What the posts said while the blog was Jekyll. Still read, never written:
-// nothing renders Liquid any more, so opening such a post and publishing it
-// again is what moves it over.
 export const EMBED_LIQUID =
   /^\{%\s*include\s+embed\/([a-z]+)\.html\s+(?:id|src)=(["'])([^"']+)\2\s*%\}$/;
 

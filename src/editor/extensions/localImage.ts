@@ -6,6 +6,7 @@ import { ySyncPluginKey } from "@tiptap/y-tiptap";
 import { LOCAL_PREFIX, imageStore, isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
 import { displaySrc } from "../../lib/site.ts";
 import { CENTER_ROW, withRowClasses } from "./blogFormat.ts";
+import { galleryAt } from "./gallery.ts";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -121,7 +122,7 @@ export const LocalImage = Image.extend({
                 void Promise.all(stored.map((image) => imageStore.remove(image.id)));
                 return;
               }
-              const row = stored.length > 1 && stored.length <= ROW_LIMIT;
+              const row = stored.length > 1 && stored.length <= ROW_LIMIT && !galleryAt(editor.state);
               editor
                 .chain()
                 .focus()
@@ -174,15 +175,26 @@ export const LocalImage = Image.extend({
       caption.className = "editor-image-alt editor-image-caption";
       caption.textContent = "Add caption";
 
+      const inGallery = () => {
+        const pos = getPos();
+        if (typeof pos !== "number" || pos > editor.state.doc.content.size) {
+          return false;
+        }
+        return editor.state.doc.resolve(pos).parent.type.name === "gallery";
+      };
+
       let generation = 0;
       const paint = (attrs: Record<string, unknown>) => {
         const mine = ++generation;
         const src = String(attrs.src ?? "");
+        const gallery = inGallery();
         applyLayout(figure, img, String(attrs.ial ?? ""));
         figure.toggleAttribute("data-join", Boolean(attrs.joinPrevious));
         img.alt = String(attrs.alt ?? "");
         alt.textContent = attrs.alt ? String(attrs.alt) : "Add alt text";
         alt.classList.toggle("is-empty", !attrs.alt);
+        caption.textContent = gallery && attrs.title ? String(attrs.title) : "Add caption";
+        caption.classList.toggle("is-empty", gallery && !attrs.title);
         img.onerror = null;
         if (isLocalSrc(src)) {
           void resolveLocalSrc(src)
@@ -209,8 +221,7 @@ export const LocalImage = Image.extend({
       };
       paint(node.attrs);
 
-      alt.addEventListener("mousedown", (event) => {
-        event.preventDefault();
+      const edit = (button: HTMLButtonElement, attribute: "alt" | "title", placeholder: string) => {
         const pos = getPos();
         if (typeof pos !== "number") {
           return;
@@ -221,8 +232,8 @@ export const LocalImage = Image.extend({
         }
         const field = document.createElement("input");
         field.className = "editor-image-alt-input";
-        field.placeholder = "Alt text (describes the image)";
-        field.value = String(current.attrs.alt ?? "");
+        field.placeholder = placeholder;
+        field.value = String(current.attrs[attribute] ?? "");
         const finish = (commit: boolean) => {
           if (!field.isConnected) {
             return;
@@ -234,12 +245,12 @@ export const LocalImage = Image.extend({
               editor.view.dispatch(
                 editor.state.tr.setNodeMarkup(at, undefined, {
                   ...target.attrs,
-                  alt: field.value.trim(),
+                  [attribute]: field.value.trim() || (attribute === "title" ? null : ""),
                 }),
               );
             }
           }
-          field.replaceWith(alt);
+          field.replaceWith(button);
         };
         field.addEventListener("keydown", (press) => {
           press.stopPropagation();
@@ -252,13 +263,22 @@ export const LocalImage = Image.extend({
           }
         });
         field.addEventListener("blur", () => finish(true));
-        alt.replaceWith(field);
+        button.replaceWith(field);
         field.focus();
         field.select();
+      };
+
+      alt.addEventListener("mousedown", (event) => {
+        event.preventDefault();
+        edit(alt, "alt", "Alt text (describes the image)");
       });
 
       caption.addEventListener("mousedown", (event) => {
         event.preventDefault();
+        if (inGallery()) {
+          edit(caption, "title", "Caption, shown on the card");
+          return;
+        }
         const pos = getPos();
         if (typeof pos !== "number") {
           return;
@@ -278,9 +298,6 @@ export const LocalImage = Image.extend({
           .insertContentAt(after, {
             type: "paragraph",
             attrs: { joinPrevious: true, sameLine: true },
-            // The space that will sit between the image and the caption: what
-            // separates two blocks written on one line is theirs to carry, so
-            // that a caption put beside an image comes out beside it.
             content: [{ type: "text", text: " " }],
           })
           .focus(after + 2)

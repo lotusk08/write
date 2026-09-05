@@ -4,7 +4,9 @@ import type { ReactNode } from "react";
 import { useEffect, useRef } from "react";
 import { CENTER_ROW, canImageRow, inImageRow } from "../editor/extensions/blogFormat.ts";
 import { embedFromUrl } from "../editor/extensions/embed.ts";
+import { canGallery, galleryAt, isGalleryKind, type GalleryKind } from "../editor/extensions/gallery.ts";
 import type { NoteType } from "../editor/extensions/noteQuote.ts";
+import { GalleryMenu } from "./GalleryMenu.tsx";
 import { Icon, type IconName } from "./Icons.tsx";
 import { NoteMenu } from "./NoteMenu.tsx";
 
@@ -79,6 +81,8 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
       centered: CENTERABLE.some((type) => instance.getAttributes(type).blockIal === CENTER_ROW),
       imageRow: inImageRow(instance.state),
       canImageRow: canImageRow(instance.state),
+      gallery: ((kind) => (isGalleryKind(kind) ? kind : null))(galleryAt(instance.state)?.node.attrs.kind) as GalleryKind | null,
+      canGallery: canGallery(instance.state),
       highlight: instance.isActive("highlight"),
       superscript: instance.isActive("superscript"),
       subscript: instance.isActive("subscript"),
@@ -204,6 +208,7 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
           disabled={!state.canImageRow}
           onClick={() => editor.chain().focus().toggleImageRow().run()}
         />
+        <GalleryMenu editor={editor} kind={state.gallery} enabled={state.canGallery} />
         <Tool icon="video" title="Embed a video — YouTube, X, Spotify…" onClick={insertEmbed} />
         <Tool
           icon="table"

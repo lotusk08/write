@@ -22,9 +22,6 @@ function marksOf(node: JSONContent): Mark[] {
   return [];
 }
 
-// A backslash is escaped only where leaving it bare would make it one: before
-// ASCII punctuation. The `\ne` in a line of maths is a command, and writing it
-// `\\ne` puts a line break in the equation.
 function escapeText(text: string): string {
   return text
     .split(/(\[\^[^\]\s]+\])/)
@@ -34,9 +31,6 @@ function escapeText(text: string): string {
         : part
             .replace(/\\(?=[!-/:-@[-`{-~])/g, "\\\\")
             .replace(/([`*_[\]])/g, "\\$1")
-            // Only a `<` that could open a tag or an address needs holding
-            // back. The site turns `<<` and `>>` into guillemets, and escaping
-            // either of them wrote the angle brackets into the post instead.
             .replace(/<(?=[a-zA-Z/!?])/g, "\\<"),
     )
     .join("");
@@ -48,8 +42,6 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
   }
   const code = marks.find((mark) => mark.type === "code");
   if (code) {
-    // The fence has to outrun the longest run of backticks the code holds,
-    // or the span closes inside its own content.
     const longest = Math.max(0, ...[...text.matchAll(/`+/g)].map((run) => run[0].length));
     const fence = "`".repeat(longest + 1);
     const padding = text.startsWith("`") || text.endsWith("`") ? " " : "";
@@ -165,8 +157,6 @@ function textNode(node: JSONContent): string {
   const marks = node.marks as Mark[] | undefined;
   const raw = node.text ?? "";
   const code = marks?.some((mark) => mark.type === "code");
-  // A link that says its own address is written the short way, unescaped: the
-  // underscores in a URL are part of it.
   const link = marks?.length === 1 && marks[0].type === "link" ? marks[0] : null;
   if (link && !link.attrs?.title && link.attrs?.href === raw && AUTOLINK.test(raw)) {
     return `<${raw}>`;
@@ -230,6 +220,18 @@ function image(node: JSONContent, options: SerializeOptions): string {
   const title = node.attrs?.title ? ` "${String(node.attrs.title)}"` : "";
   const ial = node.attrs?.ial ? String(node.attrs.ial) : "";
   return `![${alt}](${src}${title})${ial}`;
+}
+
+function fenced(info: string, body: string): string {
+  const inner = Math.max(2, ...[...body.matchAll(/^[ \t]*(`{3,})/gm)].map((run) => run[1].length));
+  const fence = "`".repeat(inner + 1);
+  return `${fence}${info}\n${body}\n${fence}`;
+}
+
+function galleryBlock(node: JSONContent, options: SerializeOptions): string {
+  const kind = String(node.attrs?.kind ?? "deck");
+  const photos = (node.content ?? []).filter((child) => child.type === "image");
+  return fenced(`gallery ${kind}`, photos.map((photo) => image(photo, options)).join("\n"));
 }
 
 function indentContinuation(block: string, indent: string): string {
@@ -333,7 +335,6 @@ function blockIal(nodes: JSONContent[], index: number): string {
     first -= 1;
   }
   const run = nodes.slice(first, index + 1);
-  // Already written above the run, where the post put it.
   if (run.some((image) => image.attrs?.ialAbove)) {
     return "";
   }
@@ -357,8 +358,6 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         const before = Boolean(node.attrs?.joinPrevious);
         const content = withoutEdgeBreaks(node.content, before, after);
         const caption = before && nodes[index - 1]?.type === "image";
-        // A `>` is only a quote where a line begins, which is the one place
-        // a paragraph has to hold it back.
         out.push(inline(caption ? captionContent(content) : content, options).replace(/^>/gm, "\\>"));
         break;
       }
@@ -390,11 +389,12 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
       case "codeBlock": {
         const language = String(node.attrs?.language ?? "");
         const code = (node.content ?? []).map((child) => child.text ?? "").join("");
-        const inner = Math.max(2, ...[...code.matchAll(/^[ \t]*(`{3,})/gm)].map((run) => run[1].length));
-        const fence = "`".repeat(inner + 1);
-        out.push(`${fence}${language}\n${code}\n${fence}`);
+        out.push(fenced(language, code));
         break;
       }
+      case "gallery":
+        out.push(galleryBlock(node, options));
+        break;
       case "embed":
         out.push(embedTag(String(node.attrs?.platform ?? "youtube"), String(node.attrs?.id ?? "")));
         break;

@@ -34,19 +34,20 @@ browser.
   survive reloads. The open draft renames in place on a double-click and carries
   the delete button.
 - **Front matter.** Title, description, slug, date, author, categories, tags,
-  cover image, and the `pin` / `toc` / `math` / `mermaid` / `chart` switches the blog
-  already uses. It is written the way the blog's own `update-lqip.js` would
-  write it — block sequences, no unnecessary quoting, empty fields omitted — so
-  a site build never rewrites a published post's front matter.
+  cover image, and the `pin` / `toc` switches the blog uses. It is written the
+  way the published posts already are — block sequences, no unnecessary
+  quoting, empty fields omitted — so re-publishing a post never moves a line
+  of its front matter.
 - **Callouts.** Quotes can carry the blog's five note styles, exported as
   `{: .note-info }` and friends, plus its centred `{: .author }` attribution.
   Body headings start at H2, since the title lives in front matter.
 - **The blog's own formats.** `{: .filepath}` code, centred image rows
-  (`{: .d-flex .c-center }`) and `<EmbedYoutube id="…" />` players are
-  first-class here — paste a YouTube, X, Spotify, Bilibili or Twitch link and
-  the right component is written for you. Any other attribute list a post
-  carries is kept exactly as written, so editing a post does not rewrite lines
-  you did not touch.
+  (`{: .d-flex .c-center }`), the ```` ```gallery ```` fence — deck, fan, peek
+  or fold, made from a run of photos with one menu — and
+  `<EmbedYoutube id="…" />` players are first-class here — paste a YouTube, X,
+  Spotify, Bilibili or Twitch link and the right component is written for
+  you. Any other attribute list a post carries is kept exactly as written, so
+  editing a post does not rewrite lines you did not touch.
 - **Seeing what the blog will render.** Mermaid diagrams, Chart.js charts and
   `$$ … $$` maths are drawn live above their source; embedded videos play in
   place. The libraries load only when a post actually uses them.

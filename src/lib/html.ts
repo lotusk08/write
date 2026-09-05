@@ -61,6 +61,8 @@ export async function buildHtmlDocument(editorHtml: string, meta: PostMeta): Pro
   h1 { font-size: 2rem; line-height: 1.2; }
   .lede { color: #666; font-style: italic; }
   img { max-width: 100%; border-radius: 8px; }
+  figure[data-gallery] { display: flex; gap: 8px; margin: 1.5rem 0; overflow-x: auto; }
+  figure[data-gallery] img { max-height: 240px; }
   pre { padding: 1rem; border-radius: 8px; background: rgb(128 128 128 / 12%); overflow-x: auto; }
   code { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 0.85em; }
   blockquote { padding-left: 1rem; border-left: 3px solid rgb(128 128 128 / 40%); margin-left: 0; color: #666; }

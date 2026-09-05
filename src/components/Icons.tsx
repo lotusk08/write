@@ -109,6 +109,13 @@ const PATHS = {
       <rect x="16" y="6" width="5.5" height="12" rx="1.5" />
     </>
   ),
+  gallery: (
+    <>
+      <rect x="7" y="8" width="14" height="12" rx="2" />
+      <path d="M3 14V6a2 2 0 0 1 2-2h11" />
+      <path d="m21 18-4-4-6 6" />
+    </>
+  ),
   rule: (
     <>
       <path d="M3 12h4M10 12h4M17 12h4" />

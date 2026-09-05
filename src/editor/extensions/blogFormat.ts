@@ -59,6 +59,7 @@ const BLOCKS = [
   "horizontalRule",
   "collapsible",
   "footnoteDef",
+  "gallery",
 ];
 
 interface RowImage {
@@ -66,10 +67,13 @@ interface RowImage {
   node: Node;
 }
 
-function imageRun(state: EditorState): RowImage[] {
+export function imageRun(state: EditorState): RowImage[] {
   const { from, to } = state.selection;
   const touched: RowImage[] = [];
   state.doc.nodesBetween(from, to, (node, pos) => {
+    if (node.type.name === "gallery") {
+      return false;
+    }
     if (node.type.name === "image") {
       touched.push({ pos, node });
       return false;

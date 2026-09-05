@@ -10,6 +10,7 @@ import { BlockAttributes, FilepathCode } from "./extensions/blogFormat.ts";
 import { collapsibleExtensions } from "./extensions/collapsible.ts";
 import { Embed } from "./extensions/embed.ts";
 import { footnoteExtensions } from "./extensions/footnote.ts";
+import { Gallery } from "./extensions/gallery.ts";
 import { EnterBreaks } from "./extensions/lineBreak.ts";
 import { MathBlock, PreviewCodeBlock, RawBlock } from "./extensions/preview.ts";
 import { NoteQuote } from "./extensions/noteQuote.ts";
@@ -40,6 +41,7 @@ export const buildEditorExtensions = (options: { collab?: boolean } = {}) => [
   Subscript.extend({ excludes: "superscript" }),
   Typography.configure({ laquo: false, raquo: false }),
   LocalImage.configure({ inline: false, allowBase64: true }),
+  Gallery,
   ...collapsibleExtensions,
   ...footnoteExtensions,
   Placeholder.configure({

@@ -74,11 +74,13 @@ its own npm lockfile.
 
 ## Publishing format
 
-The blog's build runs `update-lqip.js`, which re-serialises post front matter
-with js-yaml. `buildFrontMatter` in `src/lib/markdown.ts` is written to be a
-fixed point of that pass: block sequences, js-yaml's plain-scalar quoting rules,
-and no empty keys (a bare `description:` would come back as the string `null`).
-Change it only alongside a round-trip check against those exact options.
+Nothing on the blog rewrites front matter any more — sizes and placeholders
+are measured by its build and never written into a post — so what
+`buildFrontMatter` in `src/lib/markdown.ts` writes is what stays in the
+repository. It keeps the conventions the published posts already follow all
+the same: block sequences, plain scalars where they are safe, and no empty
+keys (a bare `description:` reads back as `null`), so a post published before
+the move re-publishes without moving a line.
 
 Body output follows the blog too: headings start at H2, images are committed
 under `public/assets/img/post` and written as `/assets/img/post/…`, and
@@ -91,9 +93,21 @@ next time it is published; nothing writes one again. A component carrying more
 than the one prop the editor models (`compact`, `types`, `title` …) is kept as
 a raw block instead, which is written back exactly as it was found.
 
+A gallery is the blog's ```` ```gallery <kind> ```` fence — `deck`, `fan`,
+`peek` or `fold` — holding one image per line, `![alt](src "caption")`, the
+title being the caption the card shows. Here it is a `gallery` node whose
+children are ordinary image nodes (`src/editor/extensions/gallery.ts`), so a
+local photo inside one is stored, shrunk, uploaded and repointed exactly like
+any other image, and the toolbar's gallery menu turns a run of images into
+one, changes its kind, or separates it again. A fence that names no kind, an
+unknown one, or holds anything but image lines stays a code block and is
+written back as found — the site shows it as code too. A fence's whole info
+string is kept in the code block's `language`, which is how `gallery peekk`
+survives a round trip.
+
 Images are published in the format they arrived in, named from it. The blog's
-build converts them — `convert-images.js` runs ahead of the LQIP pass, writes
-WebP and repoints the post that referenced them — because that is the one end
+build converts them — `convert-images.js` runs first, writes WebP and repoints
+the post that referenced them, gallery fences included — because that is the one end
 with a real encoder: WebKit has none behind its canvas, so converting here
 never worked from an iPhone, which is where most of these photos come from.
 
@@ -190,8 +204,9 @@ Things that took a bug to learn, and that a change here can quietly undo:
   from it by a blank line, and it is parsed with quoted values taken whole —
   the base64 inside `lqip="…"` contains things that look like classes and
   widths.
-- `w=` and `h=` in an attribute list are the image's natural dimensions, written
-  by the blog's build. Display width is a class (`.w-50`, `.w-75`).
+- `w=`/`h=` (or `width=`/`height=`) in an attribute list size the image. The
+  blog's build measures every image itself and writes nothing into a post, but
+  one that carries them keeps them. Display width is a class (`.w-50`, `.w-75`).
 - Code spans are literal: escaping them writes the backslashes into the code.
   A link wraps its emphasis, not the other way round — and because the editor
   stores marks per text node, `[a *b* c](url)` is three nodes sharing one link:
@@ -227,15 +242,13 @@ Things that took a bug to learn, and that a change here can quietly undo:
 - A photo in a row carries `{: .normal .gap }`. `.gap` is `margin-right: 0.25rem`
   in the blog's stylesheet, so the spacing between photos is the site's to set;
   the editor reads the same class rather than inventing a margin of its own.
-- Front matter the app has no field for survives anyway. `image.lqip` and
-  `redirect_from` are the two the blog actually uses, and both are written by
-  something other than this app — losing them on an edit would blank a
-  placeholder or break every old URL into a post. Unknown top-level keys are
-  kept as their raw lines and written back at the end.
-- `image:` is written `path, alt, lqip`, because `update-lqip.js` does
-  `frontMatter.image.lqip = …` and a new key in JavaScript lands last. That is
-  the order a post published from here comes back in, so re-publishing moves
-  nothing.
+- Front matter the app has no field for survives anyway. `redirect_from` is
+  one the blog actually uses, and an `image.lqip` a post still carries wins
+  over the placeholder the build measures — losing either on an edit would
+  break every old URL into a post or swap a placeholder. Unknown top-level
+  keys are kept as their raw lines and written back at the end.
+- `image:` is written `path, alt, lqip`, the order every published post
+  already has, so re-publishing moves nothing.
 - A bare `null` in front matter is YAML's null, not the word: reading it as
   text put "null" in the description of every post that had none, and writing
   it back quoted made it permanent. Quoted `"null"` is still text.
@@ -251,7 +264,7 @@ Things that took a bug to learn, and that a change here can quietly undo:
   no type filter. `horizontalRule` and `collapsible` were missing, so
   `{: .divider }` under a rule and `{: .collapse }` under a `<details>` were
   stripped the first time the post passed through the editor and deleted from
-  the repository on re-publish.
+  the repository on re-publish. `gallery` is on the list for the same reason.
 - A command may run inside `can()`, which hands it the live transaction with
   `dispatch` off — whatever it does to `tr` there is dispatched anyway.
   `setCollapsible` probes the fit on a throwaway `Transform` and touches `tr`

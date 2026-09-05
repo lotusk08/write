@@ -84,8 +84,6 @@ function metaWithCover(draft: Draft, imageUrls: Map<string, string>) {
   return { ...draft.meta, cover: resolved ? { ...cover, path: resolved } : null };
 }
 
-// The blog serves `public/` at the site root, so where an image is committed
-// and the address a post points at it by are no longer the same string.
 function imagePaths(settings: Settings): { dir: string; url: string } {
   const dir = settings.imagesDir.replace(/^\/+|\/+$/g, "");
   return { dir, url: dir.replace(/^public\//, "") };

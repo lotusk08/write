@@ -1,15 +1,12 @@
 import type { JSONContent } from "@tiptap/core";
 import type { PostMeta } from "../../shared/types.ts";
 import { EMBED_LIQUID, EMBED_TAG, embedPlatform } from "../editor/extensions/embed.ts";
+import { isGalleryKind } from "../editor/extensions/gallery.ts";
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
 
 const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---[^\S\n]*(?:\r?\n|$)/;
 
-// Trailing spaces on the last line are kept. markdown-it trims a paragraph of
-// its own, so writing them back changes nothing there — but where an attribute
-// list is lifted off the end of one, the space under it is left showing, and
-// dropping it here is the one place that would not come back the same.
 function trimAscii(value: string): string {
   return value.replace(/^[ \t\n]+/, "").replace(/\n[ \t\n]*$/, "");
 }
@@ -130,14 +127,9 @@ const IMAGE = /^!\[([^\]]*)\]\(/;
 const LINK = /^\[((?:[^[\]\\]|\\.)*)\]\(/;
 const FOOTNOTE_REF = /^\[\^([^\]\s]+)\]/;
 const TAG = /^<(u|mark|sup|sub)>([\s\S]*?)<\/\1>/;
-// `<https://…>`: a link whose text is its own address, which is how markdown
-// says one without writing it twice.
 const AUTOLINK = /^<([a-zA-Z][\w+.-]{1,31}:[^\s<>]*)>/;
 const ESCAPABLE = /[!-/:-@[-`{-~]/;
 
-// Where the address opened at `from` closes. Parentheses inside it balance, as
-// markdown-it balances them: a link whose URL carries a pair of its own is not
-// cut at the first one, which used to drop everything past it into the text.
 function addressEnd(source: string, from: number): number {
   let depth = 0;
   for (let i = from; i < source.length; i++) {
@@ -178,11 +170,7 @@ function linkTarget(rest: string, from: number): Target | null {
   return { href: inner.trim(), ...(title ? { title } : {}), end: close + 1 };
 }
 
-// Where the emphasis opened at the head of `rest` closes. A code span and a
-// link's address are stepped over whole: the asterisks inside a URL are part of
-// it, and reading one as the closing mark loses the link the next time round.
 function emphasisEnd(rest: string, opening: string): number {
-  // The mark has to close on something: the earliest it can is one character in.
   let i = opening.length + 1;
   while (i < rest.length) {
     if (rest[i] === "\\") {
@@ -227,8 +215,6 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
     const rest = source.slice(i);
     const char = source[i];
 
-    // A backslash escapes ASCII punctuation and nothing else, so the one in
-    // `\eqref` is a backslash the reader is meant to see.
     if (char === "\\" && ESCAPABLE.test(source[i + 1] ?? "")) {
       buffer += source[i + 1];
       i += 2;
@@ -419,7 +405,47 @@ function paragraph(source: string): JSONContent {
   return content.length ? { type: "paragraph", content } : { type: "paragraph" };
 }
 
-const FENCE = /^(\s*)(```+|~~~+)\s*([\w+-]*)\s*$/;
+const FENCE = /^(\s*)(```+|~~~+)(.*)$/;
+const GALLERY_IAL = /^\{:[^}\n]*\}$/;
+
+interface Fence {
+  marker: string;
+  info: string;
+}
+
+function openingFence(line: string): Fence | null {
+  const match = FENCE.exec(line);
+  if (!match) {
+    return null;
+  }
+  const info = match[3].trim();
+  if (match[2][0] === "`" && info.includes("`")) {
+    return null;
+  }
+  return { marker: match[2], info };
+}
+
+function galleryFromFence(info: string, lines: string[]): JSONContent | null {
+  const [name, kind, ...rest] = info.split(/\s+/);
+  if (name !== "gallery" || !isGalleryKind(kind) || rest.length) {
+    return null;
+  }
+  const photos: JSONContent[] = [];
+  for (const line of lines) {
+    const [image, tail, ...more] = parseInline(line.trim());
+    if (image?.type !== "image" || more.length) {
+      return null;
+    }
+    if (tail) {
+      if (tail.type !== "text" || tail.marks?.length || !GALLERY_IAL.test(tail.text ?? "")) {
+        return null;
+      }
+      image.attrs = { ...image.attrs, ial: tail.text };
+    }
+    photos.push(image);
+  }
+  return photos.length ? { type: "gallery", attrs: { kind }, content: photos } : null;
+}
 const MATH = /^\s*\$\$\s*$/;
 const LIQUID = /^\{%[\s\S]*%\}$/;
 const FOOTNOTE_DEF = /^\[\^([^\]\s]+)\]:[^\S\n]*/;
@@ -431,8 +457,6 @@ const BULLET = /^(\s*)([-*+])\s+(.*)$/;
 const ORDERED = /^(\s*)(\d+)[.)]\s+(.*)$/;
 const LIST_START = /^ {0,3}(?:[-*+]|\d+[.)])\s+/;
 const NOTE = /^\{:\s*\.(?:note-)?(tip|info|important|warning|danger|author)\s*\}\s*$/;
-// An attribute list closes the block it names, whatever follows it, and it may
-// be written under three spaces of indent — both as kramdown read one.
 const BLOCK_IAL = /^ {0,3}\{:[^}\n]*\}\s*$/;
 const TABLE_DIVIDER = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
 
@@ -441,7 +465,7 @@ function isBlockStart(line: string): boolean {
     !line.trim() ||
     HEADING.test(line) ||
     RULE.test(line) ||
-    FENCE.test(line) ||
+    openingFence(line) !== null ||
     MATH.test(line) ||
     HTML_BLOCK.test(line) ||
     LIQUID.test(line.trim()) ||
@@ -493,9 +517,6 @@ function parseBlocks(lines: string[]): JSONContent[] {
 
   const settle = () => {
     if (pending !== null && out.length > pendingAt) {
-      // Written above its block rather than under it. Both name the same
-      // block, but only the one above leaves a line of its own in the HTML,
-      // so which side it was on has to ride along.
       out[pendingAt].attrs = { ...out[pendingAt].attrs, blockIal: pending, ialAbove: true };
       pending = null;
     }
@@ -567,23 +588,23 @@ function parseBlocks(lines: string[]): JSONContent[] {
       continue;
     }
 
-    const fence = FENCE.exec(line);
+    const fence = openingFence(line);
     if (fence) {
       const code: string[] = [];
       i += 1;
-      // A fence closes on a run at least as long as the one that opened it, so
-      // a ```` block can hold a ``` one.
-      const closes = new RegExp(`^\\s*${fence[2][0]}{${fence[2].length},}\\s*$`);
+      const closes = new RegExp(`^\\s*${fence.marker[0]}{${fence.marker.length},}\\s*$`);
       while (i < lines.length && !closes.test(lines[i])) {
         code.push(lines[i]);
         i += 1;
       }
       i += 1;
-      out.push({
-        type: "codeBlock",
-        attrs: { language: fence[3] || null },
-        ...(code.length ? { content: [{ type: "text", text: code.join("\n") }] } : {}),
-      });
+      out.push(
+        galleryFromFence(fence.info, code) ?? {
+          type: "codeBlock",
+          attrs: { language: fence.info || null },
+          ...(code.length ? { content: [{ type: "text", text: code.join("\n") }] } : {}),
+        },
+      );
       continue;
     }
 
@@ -631,8 +652,6 @@ function parseBlocks(lines: string[]): JSONContent[] {
         quoted.push(lines[i].trimStart().replace(/^>\s?/, ""));
         i += 1;
       }
-      // A quote runs on into every line that follows it, marker or no marker,
-      // as far as the next blank one or the attribute list that closes it.
       while (i < lines.length && lines[i].trim() && !BLOCK_IAL.test(lines[i])) {
         quoted.push(lines[i]);
         i += 1;
@@ -758,9 +777,6 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
   let startAt = 1;
   let tasks = false;
   let i = start;
-  // Where the last item's own text began. A marker indented that far belongs
-  // to the item — it is a list inside it — and anything less deep is the next
-  // item of this one, however it happens to be indented.
   let content = indent + 1;
 
   while (i < lines.length) {

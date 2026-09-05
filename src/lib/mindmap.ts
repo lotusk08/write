@@ -37,6 +37,7 @@ function clean(node: JSONContent): JSONContent | null {
   }
   if (node.content) {
     out.content = node.content
+      .flatMap((child) => (child.type === "gallery" ? (child.content ?? []) : [child]))
       .map(clean)
       .filter((child): child is JSONContent => child !== null);
   }

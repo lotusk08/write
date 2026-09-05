@@ -1480,6 +1480,49 @@ textarea {
   border-radius: var(--radius);
 }
 
+.editor-gallery {
+  margin: 1.4em 0;
+  padding: 10px 10px 8px;
+  border: 1px dashed var(--border-strong);
+  border-radius: var(--radius-lg);
+}
+
+.editor-gallery-label {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--faint);
+  font-family: var(--font-ui);
+  font-size: 12px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  user-select: none;
+}
+
+.editor-gallery-strip {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.ProseMirror .editor-gallery-strip .editor-image {
+  flex: 0 0 auto;
+  width: 200px;
+  margin: 0;
+  float: none !important;
+}
+
+.ProseMirror .editor-gallery-strip .editor-image img {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+}
+
+.editor-gallery.is-selected {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .collaboration-carets__caret {
   position: relative;
   margin-left: -1px;
