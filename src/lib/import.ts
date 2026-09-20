@@ -815,9 +815,9 @@ const TASK = /^\[([ xX])\]\s+(.*)$/;
 
 function parseList(lines: string[], start: number, indent: number): [JSONContent, number] {
   const items: JSONContent[] = [];
+  let tasks = false;
   let ordered = false;
   let startAt = 1;
-  let tasks = false;
   let i = start;
   let content = indent + 1;
 
@@ -842,9 +842,7 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
     content = marker;
     const body: string[] = [];
     const task = TASK.exec(match[3]);
-    if (items.length === 0 && task) {
-      tasks = true;
-    }
+    tasks = tasks || Boolean(task);
     body.push(task ? task[2] : match[3]);
     i += 1;
 
@@ -873,17 +871,17 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
     }
 
     items.push({
-      type: tasks ? "taskItem" : "listItem",
-      ...(tasks ? { attrs: { checked: task ? task[1].toLowerCase() === "x" : false } } : {}),
+      type: task ? "taskItem" : "listItem",
+      ...(task ? { attrs: { checked: task[1].toLowerCase() === "x" } } : {}),
       content: blocksOrEmpty(body),
     });
   }
 
-  const type = tasks ? "taskList" : ordered ? "orderedList" : "bulletList";
+  const type = ordered ? "orderedList" : tasks ? "taskList" : "bulletList";
   return [
     {
       type,
-      ...(ordered && !tasks ? { attrs: { start: startAt } } : {}),
+      ...(ordered ? { attrs: { start: startAt } } : {}),
       content: items,
     },
     i,

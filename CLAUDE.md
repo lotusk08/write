@@ -163,6 +163,12 @@ draws every one of these lines differently:
 - A list marker indented less than the item above it starts the next item of
   that list, however little it is indented; only one indented as far as that
   item's own text opens a list inside it.
+- A list is a task list when any item carries `[ ]` or `[x]`, not only when
+  the first one does: the site marks each item on its own and leaves the rest
+  plain, so an unmarked item stays a plain item inside a task list and a
+  numbered list keeps its numbers rather than turning into bullets. Reading
+  the kind off the first item put a checkbox on every item of one list and
+  deleted the markers from another.
 - A table runs on the same way: markdown-it reads every line under it as a row
   until a blank one or a line that opens a block of its own, so a sentence
   written hard against a table is a row of it on the site and has to be one

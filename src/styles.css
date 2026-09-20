@@ -988,20 +988,29 @@ textarea {
   list-style: none;
 }
 
-.ProseMirror ul[data-type="taskList"] li {
+.ProseMirror ul[data-type="taskList"] > li[data-checked] {
   display: flex;
   gap: 8px;
   align-items: flex-start;
 }
 
-.ProseMirror ul[data-type="taskList"] li > label {
+.ProseMirror ul[data-type="taskList"] > li:not([data-checked]) {
+  padding-left: 23px;
+}
+
+.ProseMirror ol > li[data-checked] > label {
+  float: left;
+  margin-right: 8px;
+}
+
+.ProseMirror li[data-checked] > label {
   display: flex;
   height: 1lh;
   align-items: center;
   margin-top: 0.1em;
 }
 
-.ProseMirror ul[data-type="taskList"] input {
+.ProseMirror li[data-checked] input {
   width: 15px;
   height: 15px;
   margin: 0;

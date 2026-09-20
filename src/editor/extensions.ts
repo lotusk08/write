@@ -1,5 +1,5 @@
 import Highlight from "@tiptap/extension-highlight";
-import { TaskItem, TaskList } from "@tiptap/extension-list";
+import { OrderedList, TaskItem, TaskList } from "@tiptap/extension-list";
 import Placeholder from "@tiptap/extension-placeholder";
 import Subscript from "@tiptap/extension-subscript";
 import Superscript from "@tiptap/extension-superscript";
@@ -23,6 +23,7 @@ export const buildEditorExtensions = (options: { collab?: boolean } = {}) => [
     codeBlock: false,
     code: false,
     blockquote: false,
+    orderedList: false,
     ...(options.collab ? { undoRedo: false as const } : {}),
   }),
   PreviewCodeBlock.configure({ languageClassPrefix: "language-" }),
@@ -32,7 +33,8 @@ export const buildEditorExtensions = (options: { collab?: boolean } = {}) => [
   BlockAttributes,
   EnterBreaks,
   NoteQuote,
-  TaskList,
+  OrderedList.extend({ content: "(listItem|taskItem)+" }),
+  TaskList.extend({ content: "(taskItem|listItem)+" }),
   TaskItem.configure({ nested: true }),
   TableKit.configure({ table: { resizable: true } }),
   Highlight,
