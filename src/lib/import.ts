@@ -462,7 +462,7 @@ const TABLE_DIVIDER = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
 const SETEXT = /^ {0,3}(=+|-+)[^\S\n]*$/;
 const FENCE_LINE = /^ {0,3}(?:```|~~~)/;
 
-function isBlockStart(line: string): boolean {
+function isBlockStart(line: string, except: "" | "table" | "footnote" = ""): boolean {
   return (
     !line.trim() ||
     HEADING.test(line) ||
@@ -471,13 +471,13 @@ function isBlockStart(line: string): boolean {
     MATH.test(line) ||
     HTML_BLOCK.test(line) ||
     LIQUID.test(line.trim()) ||
-    FOOTNOTE_DEF.test(line) ||
+    (except !== "footnote" && FOOTNOTE_DEF.test(line)) ||
     LIST_START.test(line) ||
     NOTE.test(line) ||
     BLOCK_IAL.test(line) ||
     line.trimStart().startsWith(">") ||
     line.trimStart().startsWith("<details") ||
-    line.trimStart().startsWith("|")
+    (except !== "table" && line.trimStart().startsWith("|"))
   );
 }
 
@@ -511,7 +511,7 @@ function cells(row: string[], header: boolean, align: (string | null)[]): JSONCo
   };
 }
 
-function parseBlocks(lines: string[]): JSONContent[] {
+function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[] {
   const out: JSONContent[] = [];
   let i = 0;
   let pending: string | null = null;
@@ -687,7 +687,12 @@ function parseBlocks(lines: string[]): JSONContent[] {
       continue;
     }
 
-    if (line.trimStart().startsWith("|") && i + 1 < lines.length && TABLE_DIVIDER.test(lines[i + 1])) {
+    if (
+      line.trimStart().startsWith("|") &&
+      !lazy?.has(i) &&
+      i + 1 < lines.length &&
+      TABLE_DIVIDER.test(lines[i + 1])
+    ) {
       const header = splitRow(line);
       const align = alignments(lines[i + 1]);
       i += 2;
@@ -695,7 +700,7 @@ function parseBlocks(lines: string[]): JSONContent[] {
       while (
         i < lines.length &&
         lines[i].trim() &&
-        (lines[i].trimStart().startsWith("|") || !isBlockStart(lines[i]))
+        (lines[i].trimStart().startsWith("|") || !isBlockStart(lines[i], "footnote"))
       ) {
         const row = splitRow(lines[i]);
         while (row.length < header.length) {
@@ -711,23 +716,25 @@ function parseBlocks(lines: string[]): JSONContent[] {
     const footnote = FOOTNOTE_DEF.exec(line);
     if (footnote) {
       const body: string[] = [line.slice(footnote[0].length)];
-      let lazy = true;
+      const carried = new Set<number>();
+      let flowing = true;
       i += 1;
       while (i < lines.length) {
         const next = lines[i];
         if (!next.trim()) {
           if (/^ {4}\S/.test(lines[i + 1] ?? "")) {
             body.push("");
-            lazy = false;
+            flowing = false;
             i += 1;
             continue;
           }
           break;
         }
         if (!/^ {4}/.test(next)) {
-          if (!lazy || isBlockStart(next)) {
+          if (!flowing || isBlockStart(next, "table")) {
             break;
           }
+          carried.add(body.length);
           body.push(next);
           i += 1;
           continue;
@@ -735,7 +742,11 @@ function parseBlocks(lines: string[]): JSONContent[] {
         body.push(next.slice(4));
         i += 1;
       }
-      out.push({ type: "footnoteDef", attrs: { label: footnote[1] }, content: blocksOrEmpty(body) });
+      out.push({
+        type: "footnoteDef",
+        attrs: { label: footnote[1] },
+        content: blocksOrEmpty(body, carried),
+      });
       continue;
     }
 
@@ -767,11 +778,17 @@ function parseBlocks(lines: string[]): JSONContent[] {
     }
 
     const buffer: string[] = [line];
+    const opened = i;
     i += 1;
-    while (i < lines.length && !isBlockStart(lines[i]) && !SETEXT.test(lines[i])) {
+    while (
+      i < lines.length &&
+      !isBlockStart(lines[i], lazy?.has(i) ? "table" : "") &&
+      !SETEXT.test(lines[i])
+    ) {
       buffer.push(lines[i]);
       i += 1;
     }
+    const carried = buffer.some((_, at) => lazy?.has(opened + at));
     const under = i < lines.length ? SETEXT.exec(lines[i]) : null;
     if (under) {
       i += 1;
@@ -782,7 +799,12 @@ function parseBlocks(lines: string[]): JSONContent[] {
       });
       continue;
     }
-    out.push(...blocksFromInline(parseInline(trimAscii(buffer.join("\n")))));
+    const written = blocksFromInline(parseInline(trimAscii(buffer.join("\n"))));
+    out.push(
+      ...(carried
+        ? written.map((block) => ({ ...block, attrs: { ...block.attrs, lazy: true } }))
+        : written),
+    );
   }
 
   settle(true);
@@ -806,8 +828,8 @@ function rowAttributes(blocks: JSONContent[]): JSONContent[] {
   return blocks;
 }
 
-function blocksOrEmpty(lines: string[]): JSONContent[] {
-  const parsed = parseBlocks(lines);
+function blocksOrEmpty(lines: string[], lazy?: ReadonlySet<number>): JSONContent[] {
+  const parsed = parseBlocks(lines, lazy);
   return parsed.length ? parsed : [{ type: "paragraph" }];
 }
 
@@ -841,6 +863,7 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
     const marker = match[0].length - match[3].length;
     content = marker;
     const body: string[] = [];
+    const carried = new Set<number>();
     const task = TASK.exec(match[3]);
     tasks = tasks || Boolean(task);
     body.push(task ? task[2] : match[3]);
@@ -862,7 +885,8 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
         i += 1;
         continue;
       }
-      if (!isBlockStart(next)) {
+      if (!isBlockStart(next, "table")) {
+        carried.add(body.length);
         body.push(next);
         i += 1;
         continue;
@@ -873,7 +897,7 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
     items.push({
       type: task ? "taskItem" : "listItem",
       ...(task ? { attrs: { checked: task[1].toLowerCase() === "x" } } : {}),
-      content: blocksOrEmpty(body),
+      content: blocksOrEmpty(body, carried),
     });
   }
 

@@ -162,6 +162,12 @@ export const BlockAttributes = Extension.create({
             parseHTML: (element) => element.hasAttribute("data-same-line"),
             renderHTML: (attributes) => (attributes.sameLine ? { "data-same-line": "" } : {}),
           },
+          lazy: {
+            default: false,
+            keepOnSplit: false,
+            parseHTML: (element) => element.hasAttribute("data-lazy"),
+            renderHTML: (attributes) => (attributes.lazy ? { "data-lazy": "" } : {}),
+          },
         },
       },
     ];

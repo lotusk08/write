@@ -172,8 +172,17 @@ draws every one of these lines differently:
 - A table runs on the same way: markdown-it reads every line under it as a row
   until a blank one or a line that opens a block of its own, so a sentence
   written hard against a table is a row of it on the site and has to be one
-  here. A row short of the header's columns is filled out to it, which is what
-  markdown-it draws anyway.
+  here — a footnote definition included, which is why `isBlockStart` takes
+  what may not open where it is asked. A row short of the header's columns is
+  filled out to it, which is what markdown-it draws anyway.
+- What may open a block depends on where the line sits. A table cannot open
+  inside a list item or a footnote definition on a line less indented than
+  their own content, so a table written hard under a list is a run of pipes in
+  the last item on the site, not a table after it. A line that arrives that
+  way is carried into the block as lazy and written back flush against the
+  margin: indenting it to the item's column is what would turn it into the
+  table it was not. `lazy` rides on the block like `sameLine`, and like every
+  block attribute it must be declared in `BlockAttributes`.
 - A component or a Liquid tag is a block of its own only where it stands
   alone. With a line hard against it, the two are one HTML block on the site,
   so they are kept as one raw block rather than parted by a blank line that
@@ -224,7 +233,11 @@ Things that took a bug to learn, and that a change here can quietly undo:
   block above. Tabs indent by columns, not by one character.
 - An image and the line under it are one paragraph, and the blog styles that
   line as a caption; a row of images is one paragraph too. `joinPrevious` keeps
-  those together on the way out, and the row's `{: .d-flex .c-center }` belongs
+  those together on the way out. A run is a row only where one of its photos
+  says so: the row tool and a multi-photo insert both write
+  `{: .d-flex .c-center }` themselves, and reading a row out of `.gap` alone
+  invented one for a run of photos whose own list belonged to the quote around
+  them. The marker belongs
   on the last image of the run — Kramdown reads the list under the last line as
   the whole paragraph's. That is what the row tool and a multi-photo insert
   build, and `rowAttributes` in `import.ts` is what puts it back there.

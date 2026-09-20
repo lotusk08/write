@@ -227,10 +227,32 @@ function galleryBlock(node: JSONContent, options: SerializeOptions): string {
   return fenced(`gallery ${kind}`, photos.map((photo) => image(photo, options)).join("\n"));
 }
 
-function indentContinuation(block: string, indent: string): string {
+function indentedBody(
+  children: JSONContent[] | undefined,
+  indent: string,
+  options: SerializeOptions,
+): string {
+  return (children ?? []).reduce((text, child, position) => {
+    const rendered = blocks([child], options).join("\n\n");
+    const sticks = Boolean(child.attrs?.joinPrevious && child.attrs?.sameLine);
+    const piece = child.attrs?.lazy
+      ? rendered
+      : indentBlock(rendered, indent, position === 0 || sticks);
+    if (position === 0) {
+      return piece;
+    }
+    if (sticks) {
+      return text + piece;
+    }
+    const hugs = LIST_TYPES.has(child.type ?? "") || Boolean(child.attrs?.joinPrevious);
+    return `${text}${hugs ? "\n" : "\n\n"}${piece}`;
+  }, "");
+}
+
+function indentBlock(block: string, indent: string, skipFirst: boolean): string {
   return block
     .split("\n")
-    .map((line, index) => (index === 0 || line === "" ? line : indent + line))
+    .map((line, index) => ((skipFirst && index === 0) || line === "" ? line : indent + line))
     .join("\n");
 }
 
@@ -245,18 +267,7 @@ function listBlock(node: JSONContent, options: SerializeOptions, ordered: boolea
       const checkbox =
         item.type === "taskItem" ? (item.attrs?.checked ? "[x] " : "[ ] ") : "";
       const indent = " ".repeat(marker.length);
-      const body = (item.content ?? []).reduce((text, child, position) => {
-        const rendered = blocks([child], options).join("\n\n");
-        if (position === 0) {
-          return rendered;
-        }
-        if (child.attrs?.joinPrevious && child.attrs?.sameLine) {
-          return text + rendered;
-        }
-        const hugs = LIST_TYPES.has(child.type ?? "") || Boolean(child.attrs?.joinPrevious);
-        return `${text}${hugs ? "\n" : "\n\n"}${rendered}`;
-      }, "");
-      return marker + checkbox + indentContinuation(body, indent);
+      return marker + checkbox + indentedBody(item.content, indent, options);
     })
     .join("\n");
 }
@@ -307,8 +318,6 @@ function joinsRow(nodes: JSONContent[], index: number): boolean {
   );
 }
 
-const GAP_CLASS = /\.gap(?![\w-])/;
-
 function blockIal(nodes: JSONContent[], index: number): string {
   if (nodes[index].attrs?.ialAbove) {
     return "";
@@ -331,10 +340,7 @@ function blockIal(nodes: JSONContent[], index: number): string {
   if (run.some((image) => image.attrs?.ialAbove)) {
     return "";
   }
-  const row =
-    run.some((image) => image.attrs?.blockIal === CENTER_ROW) ||
-    run.some((image) => GAP_CLASS.test(String(image.attrs?.ial ?? "")));
-  return row ? CENTER_ROW : "";
+  return run.some((image) => image.attrs?.blockIal === CENTER_ROW) ? CENTER_ROW : "";
 }
 
 function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): string[] {
@@ -411,11 +417,11 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
       case "collapsible":
         out.push(collapsibleBlock(node, options));
         break;
-      case "footnoteDef": {
-        const body = blocks(node.content, options).join("\n\n");
-        out.push(`[^${String(node.attrs?.label ?? "")}]: ${indentContinuation(body, "    ")}`);
+      case "footnoteDef":
+        out.push(
+          `[^${String(node.attrs?.label ?? "")}]: ${indentedBody(node.content, "    ", options)}`,
+        );
         break;
-      }
       case "listItem":
       case "taskItem":
       case "collapsibleContent":
