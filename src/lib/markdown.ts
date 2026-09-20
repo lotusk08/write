@@ -41,22 +41,15 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
     return text;
   }
   const code = marks.find((mark) => mark.type === "code");
+  let out = text;
   if (code) {
     const longest = Math.max(0, ...[...text.matchAll(/`+/g)].map((run) => run[0].length));
     const fence = "`".repeat(longest + 1);
     const padding = text.startsWith("`") || text.endsWith("`") ? " " : "";
     const filepath = code.attrs?.filepath ? "{: .filepath}" : "";
-    const span = `${fence}${padding}${text}${padding}${fence}${filepath}`;
-    const link = marks.find((mark) => mark.type === "link");
-    if (!link) {
-      return span;
-    }
-    const href = String(link.attrs?.href ?? "");
-    const title = link.attrs?.title ? ` "${String(link.attrs.title)}"` : "";
-    return `[${span}](${href}${title})`;
+    out = `${fence}${padding}${text}${padding}${fence}${filepath}`;
   }
 
-  let out = text;
   for (const mark of [...marks].reverse()) {
     switch (mark.type) {
       case "bold":
@@ -363,7 +356,12 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
       }
       case "heading": {
         const level = Math.min(Math.max(Number(node.attrs?.level ?? 2), 1), 6);
-        out.push(`${"#".repeat(level)} ${inline(node.content, options)}`);
+        const text = inline(node.content, options);
+        out.push(
+          level < 3 && text.includes("\n")
+            ? `${text}\n${level === 1 ? "===" : "---"}`
+            : `${"#".repeat(level)} ${text}`,
+        );
         break;
       }
       case "blockquote": {

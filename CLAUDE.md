@@ -138,9 +138,9 @@ blog's own markdown-it pipeline (`scripts/markdown/index.js` — the renderer th
 site ships, so there is nothing to configure to match it) and compare the HTML.
 The corpus that matters is the published one, which is on the `blog` branch.
 
-**All 75 render byte for byte**, and each settles after one pass — write a post
+**All 77 render byte for byte**, and each settles after one pass — write a post
 back twice and the second is the first. So does every draft and page beside
-them, 87 files in all. Treat any of that as a regression. The ones that used to
+them, 89 files in all. Treat any of that as a regression. The ones that used to
 differ were each a place where this parser had been written against kramdown,
 which the site no longer runs, and they are worth knowing because markdown-it
 draws every one of these lines differently:
@@ -148,7 +148,12 @@ draws every one of these lines differently:
 - A quote runs on into every line that follows it, marker or no marker, as far
   as the next blank one. markdown-it carries only an open paragraph that way,
   so the site marks the rest of them itself before parsing — which is
-  kramdown's rule, and this parser's.
+  kramdown's rule, and this parser's. It is one run, not two: a line carrying
+  `>` again after an unmarked one is the same quote, and reading the marked
+  lines first and the lazy ones after made the second `>` a quote inside the
+  quote. A fence is where it stops — the site closes the quote at a line
+  opening one rather than reading the code as more of it — and so is an
+  attribute list, which names the quote instead.
 - An attribute list closes the block it names whatever follows it, and may be
   written under three spaces of indent. Which side of the block it was written
   on is a fact about the post, not a formatting choice: one above leaves a
@@ -158,6 +163,23 @@ draws every one of these lines differently:
 - A list marker indented less than the item above it starts the next item of
   that list, however little it is indented; only one indented as far as that
   item's own text opens a list inside it.
+- A table runs on the same way: markdown-it reads every line under it as a row
+  until a blank one or a line that opens a block of its own, so a sentence
+  written hard against a table is a row of it on the site and has to be one
+  here. A row short of the header's columns is filled out to it, which is what
+  markdown-it draws anyway.
+- A component or a Liquid tag is a block of its own only where it stands
+  alone. With a line hard against it, the two are one HTML block on the site,
+  so they are kept as one raw block rather than parted by a blank line that
+  would change what the page draws.
+- A heading may be written under its text (`---` or `===`). It is read as a
+  heading, and written back that way whenever it carries a line break, since
+  `##` has nowhere to put one; the site drew such a post as a paragraph and a
+  rule before the parser knew the form.
+- An attribute list with nothing after it is kept as a raw block rather than
+  dropped. Parted from a list by a blank line it still names the list on the
+  site — markdown-it hands the list the blank line — and a line the editor
+  cannot place is a line it must not delete.
 - What separates two blocks written on one line is theirs to carry: the space
   between an image and the caption beside it is kept in the caption, so a
   photo with text hard against it comes back hard against it. The caption tool
@@ -208,6 +230,10 @@ Things that took a bug to learn, and that a change here can quietly undo:
   blog's build measures every image itself and writes nothing into a post, but
   one that carries them keeps them. Display width is a class (`.w-50`, `.w-75`).
 - Code spans are literal: escaping them writes the backslashes into the code.
+  What is written around one stays around it: the span is built first and every
+  mark the text carries is wrapped over it in the order they sit, so a bolded
+  code span keeps its bold and a linked one inside bold keeps both. Writing the
+  span and stopping there dropped every mark but the link.
   A link wraps its emphasis, not the other way round — and because the editor
   stores marks per text node, `[a *b* c](url)` is three nodes sharing one link:
   serialised one node at a time it came out as three adjacent links, so
@@ -215,9 +241,10 @@ Things that took a bug to learn, and that a change here can quietly undo:
   and writes the link once, around it.
 - Footnotes are nodes: `[^id]` is a `footnoteRef` and `[^id]: …` a
   `footnoteDef` whose body is the text after the colon plus lines indented
-  four spaces. Kramdown does not lazily continue a definition onto an
-  unindented line — it starts a new paragraph — so the parser must not
-  either. A `[^id]` left as plain text still passes `escapeText` unescaped,
+  four spaces — and the unindented line under it, which markdown-it reads as
+  more of the note where kramdown started a paragraph. It runs on only while
+  the note is still one paragraph and only over a line that opens no block of
+  its own. A `[^id]` left as plain text still passes `escapeText` unescaped,
   which is what keeps drafts written before the node existed publishing.
 - Enter writes a line break; Enter again on the line it just made starts a
   paragraph. A phone keyboard has no Shift+Enter, so that was the only way to

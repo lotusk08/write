@@ -459,6 +459,8 @@ const LIST_START = /^ {0,3}(?:[-*+]|\d+[.)])\s+/;
 const NOTE = /^\{:\s*\.(?:note-)?(tip|info|important|warning|danger|author)\s*\}\s*$/;
 const BLOCK_IAL = /^ {0,3}\{:[^}\n]*\}\s*$/;
 const TABLE_DIVIDER = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
+const SETEXT = /^ {0,3}(=+|-+)[^\S\n]*$/;
+const FENCE_LINE = /^ {0,3}(?:```|~~~)/;
 
 function isBlockStart(line: string): boolean {
   return (
@@ -515,9 +517,19 @@ function parseBlocks(lines: string[]): JSONContent[] {
   let pending: string | null = null;
   let pendingAt = 0;
 
-  const settle = () => {
-    if (pending !== null && out.length > pendingAt) {
+  const keep = (value: string) => {
+    out.push({ type: "rawBlock", content: [{ type: "text", text: value }] });
+  };
+
+  const settle = (last = false) => {
+    if (pending === null) {
+      return;
+    }
+    if (out.length > pendingAt) {
       out[pendingAt].attrs = { ...out[pendingAt].attrs, blockIal: pending, ialAbove: true };
+      pending = null;
+    } else if (last) {
+      keep(pending);
       pending = null;
     }
   };
@@ -536,6 +548,9 @@ function parseBlocks(lines: string[]): JSONContent[] {
       if (out.length && lines[i - 1]?.trim()) {
         out[out.length - 1].attrs = { ...out[out.length - 1].attrs, blockIal: value };
       } else {
+        if (pending !== null) {
+          keep(pending);
+        }
         pending = value;
         pendingAt = out.length;
       }
@@ -558,7 +573,10 @@ function parseBlocks(lines: string[]): JSONContent[] {
       continue;
     }
 
-    if (LIQUID.test(line.trim()) || EMBED_TAG.test(line.trim())) {
+    if (
+      (LIQUID.test(line.trim()) || EMBED_TAG.test(line.trim())) &&
+      !lines[i + 1]?.trim()
+    ) {
       const trimmed = line.trim();
       const tag = EMBED_TAG.exec(trimmed) ?? EMBED_LIQUID.exec(trimmed);
       const platform = tag ? embedPlatform(tag[1]) : null;
@@ -647,12 +665,12 @@ function parseBlocks(lines: string[]): JSONContent[] {
 
     if (line.trimStart().startsWith(">")) {
       const quoted: string[] = [];
-      while (i < lines.length && lines[i].trimStart().startsWith(">")) {
-        quoted.push(lines[i].trimStart().replace(/^>\s?/, ""));
-        i += 1;
-      }
-      while (i < lines.length && lines[i].trim() && !BLOCK_IAL.test(lines[i])) {
-        quoted.push(lines[i]);
+      while (i < lines.length && lines[i].trim()) {
+        const marked = lines[i].trimStart().startsWith(">");
+        if (!marked && (BLOCK_IAL.test(lines[i]) || FENCE_LINE.test(lines[i]))) {
+          break;
+        }
+        quoted.push(marked ? lines[i].trimStart().replace(/^>\s?/, "") : lines[i]);
         i += 1;
       }
       let note: string | null = null;
@@ -674,8 +692,16 @@ function parseBlocks(lines: string[]): JSONContent[] {
       const align = alignments(lines[i + 1]);
       i += 2;
       const rows: JSONContent[] = [cells(header, true, align)];
-      while (i < lines.length && lines[i].trimStart().startsWith("|")) {
-        rows.push(cells(splitRow(lines[i]), false, align));
+      while (
+        i < lines.length &&
+        lines[i].trim() &&
+        (lines[i].trimStart().startsWith("|") || !isBlockStart(lines[i]))
+      ) {
+        const row = splitRow(lines[i]);
+        while (row.length < header.length) {
+          row.push("");
+        }
+        rows.push(cells(row, false, align));
         i += 1;
       }
       out.push({ type: "table", content: rows });
@@ -685,19 +711,26 @@ function parseBlocks(lines: string[]): JSONContent[] {
     const footnote = FOOTNOTE_DEF.exec(line);
     if (footnote) {
       const body: string[] = [line.slice(footnote[0].length)];
+      let lazy = true;
       i += 1;
       while (i < lines.length) {
         const next = lines[i];
         if (!next.trim()) {
           if (/^ {4}\S/.test(lines[i + 1] ?? "")) {
             body.push("");
+            lazy = false;
             i += 1;
             continue;
           }
           break;
         }
         if (!/^ {4}/.test(next)) {
-          break;
+          if (!lazy || isBlockStart(next)) {
+            break;
+          }
+          body.push(next);
+          i += 1;
+          continue;
         }
         body.push(next.slice(4));
         i += 1;
@@ -735,14 +768,24 @@ function parseBlocks(lines: string[]): JSONContent[] {
 
     const buffer: string[] = [line];
     i += 1;
-    while (i < lines.length && !isBlockStart(lines[i])) {
+    while (i < lines.length && !isBlockStart(lines[i]) && !SETEXT.test(lines[i])) {
       buffer.push(lines[i]);
       i += 1;
+    }
+    const under = i < lines.length ? SETEXT.exec(lines[i]) : null;
+    if (under) {
+      i += 1;
+      out.push({
+        type: "heading",
+        attrs: { level: under[1].startsWith("=") ? 1 : 2 },
+        content: parseInline(trimAscii(buffer.join("\n"))),
+      });
+      continue;
     }
     out.push(...blocksFromInline(parseInline(trimAscii(buffer.join("\n")))));
   }
 
-  settle();
+  settle(true);
   return rowAttributes(out);
 }
 
