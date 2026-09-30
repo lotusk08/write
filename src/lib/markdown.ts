@@ -500,6 +500,21 @@ function yamlString(value: string): string {
   return plainIsSafe ? text : `"${text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
 }
 
+export function uniqueNames(values: string[]): string[] {
+  const seen = new Set<string>();
+  return values.filter((value) => {
+    const key = value
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N}]+/gu, "-")
+      .replace(/^-+|-+$/g, "");
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
 function yamlList(key: string, values: string[]): string[] {
   if (values.length === 0) {
     return [`${key}: []`];
@@ -513,8 +528,8 @@ export function buildFrontMatter(meta: PostMeta): string {
     lines.push(`description: ${yamlString(meta.description)}`);
   }
   lines.push(`author: ${yamlString(meta.author)}`, `date: ${yamlString(meta.date)}`);
-  lines.push(...yamlList("categories", meta.categories));
-  lines.push(...yamlList("tags", meta.tags));
+  lines.push(...yamlList("categories", uniqueNames(meta.categories)));
+  lines.push(...yamlList("tags", uniqueNames(meta.tags)));
   lines.push(`pin: ${Boolean(meta.pin)}`, `toc: ${Boolean(meta.toc)}`);
   if (meta.cover?.path) {
     lines.push("image:", `  path: ${yamlString(meta.cover.path)}`);

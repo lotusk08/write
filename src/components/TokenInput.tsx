@@ -1,4 +1,5 @@
 import { useState, type KeyboardEvent } from "react";
+import { uniqueNames } from "../lib/markdown.ts";
 
 interface TokenInputProps {
   id: string;
@@ -11,12 +12,15 @@ export function TokenInput({ id, values, placeholder, onChange }: TokenInputProp
   const [draft, setDraft] = useState("");
 
   const commit = (raw: string) => {
-    const added = raw
-      .split(",")
-      .map((item) => item.trim())
-      .filter((item) => item && !values.includes(item));
-    if (added.length) {
-      onChange([...values, ...added]);
+    const next = uniqueNames([
+      ...values,
+      ...raw
+        .split(",")
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ]);
+    if (next.length !== values.length) {
+      onChange(next);
     }
     setDraft("");
   };
