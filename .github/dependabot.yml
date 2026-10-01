@@ -1,0 +1,10 @@
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    groups:
+      npm-deps:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+    schedule:
+      interval: "weekly"
