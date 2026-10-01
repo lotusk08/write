@@ -17,7 +17,7 @@ import {
   fetchPostSource,
   shareRoomState,
 } from "./lib/api.ts";
-import { draftStore, type Draft } from "./lib/db.ts";
+import { draftStore, resolveLocalSrc, type Draft } from "./lib/db.ts";
 import { createDraft, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
 import { markdownToDoc, parsePost, postPathFromLink, slugFromPath } from "./lib/import.ts";
@@ -42,9 +42,15 @@ import {
 } from "./lib/share.ts";
 import { buildHtmlDocument } from "./lib/html.ts";
 import { docToMarkdown, docToPlainText } from "./lib/markdown.ts";
-import { draftSlug, markdownForExport, type PublishPlan } from "./lib/publish.ts";
+import {
+  draftSlug,
+  markdownForExport,
+  repointCover,
+  repointDoc,
+  type PublishPlan,
+} from "./lib/publish.ts";
 import { applyConfig, loadSettings, saveSettings, type Settings } from "./lib/settings.ts";
-import { setSiteUrl } from "./lib/site.ts";
+import { setSiteUrl, showPublishedAs } from "./lib/site.ts";
 import { countWords, datePrefix, rememberValue, slugify, tidyEdited } from "./lib/text.ts";
 import { usePinnedViewport } from "./lib/viewport.ts";
 
@@ -61,6 +67,25 @@ const LABELS: Record<ExportFormat, string> = {
 
 const SAVE_DEBOUNCE_MS = 600;
 const PARSE_DEBOUNCE_MS = 300;
+
+let booting: Promise<{ drafts: Draft[]; settings: Settings; config: AppConfig | null }> | null = null;
+
+function boot() {
+  booting ??= (async () => {
+    const [stored, config] = await Promise.all([draftStore.all(), fetchAppConfig()]);
+    const settings = config ? applyConfig(loadSettings(), config) : loadSettings();
+    if (config) {
+      saveSettings(settings);
+    }
+    if (stored.length) {
+      return { drafts: sortDrafts(stored), settings, config };
+    }
+    const draft = createDraft(settings);
+    await draftStore.put(draft);
+    return { drafts: [draft], settings, config };
+  })();
+  return booting;
+}
 
 export default function App() {
   usePinnedViewport();
@@ -242,28 +267,23 @@ export default function App() {
   }, [editor, currentId]);
 
   useEffect(() => {
-    void (async () => {
-      const [stored, remote] = await Promise.all([draftStore.all(), fetchAppConfig()]);
-      let active = loadSettings();
+    let live = true;
+    void boot().then(({ drafts: stored, settings: active, config: remote }) => {
+      if (!live) {
+        return;
+      }
       if (remote) {
-        active = applyConfig(active, remote);
         setConfig(remote);
         setSettings(active);
-        saveSettings(active);
       }
       setSiteUrl(active.siteUrl);
-      const sorted = sortDrafts(stored);
-      if (sorted.length === 0) {
-        const draft = createDraft(active);
-        await draftStore.put(draft);
-        setDrafts([draft]);
-        setCurrentId(draft.id);
-      } else {
-        setDrafts(sorted);
-        setCurrentId(sorted[0].id);
-      }
+      setDrafts(stored);
+      setCurrentId(stored[0].id);
       setReady(true);
-    })();
+    });
+    return () => {
+      live = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -645,10 +665,8 @@ export default function App() {
   }, [editor]);
 
   const onPublished = useCallback(
-    (result: PublishResult, plan: PublishPlan) => {
+    async (id: string, result: PublishResult, plan: PublishPlan) => {
       setPublishOpen(false);
-      queueSave({ publishedPath: plan.markdownPath, publishedAt: Date.now() });
-      void flush();
       setToast({
         message: result.pullRequestUrl
           ? `Pull request opened for ${plan.markdownPath}`
@@ -656,8 +674,65 @@ export default function App() {
         kind: "info",
         href: result.pullRequestUrl ?? result.commitUrl,
       });
+      const urls = plan.imageUrls;
+      await Promise.all(
+        [...urls].map(async ([local, url]) => {
+          const shown = await resolveLocalSrc(local).catch(() => null);
+          if (shown) {
+            showPublishedAs(url, shown);
+          }
+        }),
+      );
+      const published = { publishedPath: plan.markdownPath, publishedAt: Date.now() };
+
+      if (id !== currentIdRef.current) {
+        const draft = draftsRef.current.find((item) => item.id === id);
+        if (draft) {
+          const next: Draft = {
+            ...draft,
+            ...published,
+            doc: repointDoc(draft.doc, urls),
+            meta: repointCover(draft.meta, urls),
+            updatedAt: Date.now(),
+          };
+          await draftStore.put(next);
+          setDrafts((list) => sortDrafts(list.map((item) => (item.id === id ? next : item))));
+        }
+        return;
+      }
+
+      if (sourceRef.current !== null) {
+        const text = [...urls].reduce(
+          (out, [local, url]) => out.split(local).join(url),
+          sourceRef.current,
+        );
+        if (text !== sourceRef.current) {
+          changeSource(text);
+        }
+      } else if (editor && !editor.isDestroyed) {
+        const { tr } = editor.state;
+        editor.state.doc.descendants((node, pos) => {
+          const url = node.type.name === "image" ? urls.get(String(node.attrs.src)) : undefined;
+          if (url) {
+            tr.setNodeMarkup(pos, undefined, { ...node.attrs, src: url });
+          }
+        });
+        if (tr.docChanged) {
+          editor.view.dispatch(tr.setMeta("addToHistory", false));
+        }
+      }
+      const draft = draftsRef.current.find((item) => item.id === id);
+      if (draft) {
+        const meta = { ...draft.meta, ...pendingRef.current.meta };
+        const repointed = repointCover(meta, urls);
+        if (repointed !== meta) {
+          updateMeta({ cover: repointed.cover });
+        }
+      }
+      queueSave(published);
+      await flush();
     },
-    [flush, queueSave],
+    [changeSource, editor, flush, queueSave, updateMeta],
   );
 
   useEffect(() => {
@@ -937,7 +1012,7 @@ export default function App() {
           config={config}
           onSettingsChange={updateSettings}
           onClose={() => setPublishOpen(false)}
-          onPublished={onPublished}
+          onPublished={(result, plan) => void onPublished(current.id, result, plan)}
         />
       ) : null}
 

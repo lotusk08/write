@@ -35,9 +35,11 @@ export function Dialog({ title, subtitle, onClose, children, footer }: DialogPro
         aria-modal="true"
         aria-label={title}
       >
-        <h2>{title}</h2>
-        {subtitle ? <p className="hint" style={{ marginTop: 0 }}>{subtitle}</p> : null}
-        {children}
+        <header className="dialog-head">
+          <h2>{title}</h2>
+          {subtitle ? <p className="hint">{subtitle}</p> : null}
+        </header>
+        <div className="dialog-body">{children}</div>
         {footer ? <div className="dialog-actions">{footer}</div> : null}
       </div>
     </div>

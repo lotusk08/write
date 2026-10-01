@@ -1,7 +1,10 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { useCallback, useEffect, useRef, useState, type CSSProperties } from "react";
+import { createPortal } from "react-dom";
 import type { Draft } from "../lib/db.ts";
 import { draftLabel } from "../lib/draft.ts";
+import { useMediaQuery } from "../lib/viewport.ts";
 import { Icon } from "./Icons.tsx";
+import { useFloatingMenu } from "./useFloatingMenu.ts";
 
 interface DraftRailProps {
   drafts: Draft[];
@@ -24,8 +27,18 @@ export function DraftRail({
   const [editing, setEditing] = useState<string | null>(null);
   const field = useRef<HTMLInputElement>(null);
   const renaming = editing !== null;
+  const touch = useMediaQuery("(pointer: coarse)");
+  const [listing, setListing] = useState(false);
+  const anchor = useRef<HTMLButtonElement | null>(null);
+  const list = useRef<HTMLDivElement>(null);
+  const closeList = useCallback(() => setListing(false), []);
 
-  useEffect(() => setEditing(null), [currentId]);
+  useFloatingMenu(listing, closeList, anchor, list);
+
+  useEffect(() => {
+    setEditing(null);
+    setListing(false);
+  }, [currentId]);
 
   useEffect(() => {
     if (renaming) {
@@ -53,7 +66,16 @@ export function DraftRail({
           className="rail-tab is-layer"
           style={{ "--z": ordered.length - ordered.indexOf(draft) } as CSSProperties}
           title={draftLabel(draft)}
-          onClick={() => onSelect(draft.id)}
+          aria-label={touch && sheets.length > 1 ? "All drafts" : draftLabel(draft)}
+          aria-haspopup={touch && sheets.length > 1 ? "menu" : undefined}
+          onClick={(event) => {
+            if (touch && sheets.length > 1) {
+              anchor.current = event.currentTarget;
+              setListing((value) => !value);
+            } else {
+              onSelect(draft.id);
+            }
+          }}
         >
           <Icon name="file" size={13} />
           {draft.publishedPath ? (
@@ -127,6 +149,33 @@ export function DraftRail({
 
         {deck(open === -1 ? [] : ordered.slice(open + 1))}
       </div>
+
+      {listing
+        ? createPortal(
+            <div ref={list} className="menu floating draft-list" role="menu" aria-label="Drafts">
+              {ordered.map((draft) => (
+                <button
+                  key={draft.id}
+                  type="button"
+                  role="menuitem"
+                  aria-current={draft.id === currentId ? "true" : undefined}
+                  onClick={() => {
+                    setListing(false);
+                    if (draft.id !== currentId) {
+                      onSelect(draft.id);
+                    }
+                  }}
+                >
+                  <span className="draft-list-title">{draftLabel(draft)}</span>
+                  {draft.publishedPath ? (
+                    <span className="dot" title={`Published to ${draft.publishedPath}`} />
+                  ) : null}
+                </button>
+              ))}
+            </div>,
+            document.body,
+          )
+        : null}
     </nav>
   );
 }

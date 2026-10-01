@@ -1,5 +1,5 @@
 import type { JSONContent } from "@tiptap/core";
-import type { PublishFile } from "../../shared/types.ts";
+import type { PostMeta, PublishFile } from "../../shared/types.ts";
 import type { Draft, StoredImage } from "./db.ts";
 import { imageStore, isLocalSrc, localId } from "./db.ts";
 import { blobToBase64, extensionFor, shrinkImage } from "./images.ts";
@@ -142,6 +142,18 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
   files.unshift({ path: markdownPath, contentBase64: await blobToBase64(new Blob([markdown])) });
 
   return { slug, markdownPath, markdown, files, imageUrls, skippedImages };
+}
+
+export function repointDoc(doc: JSONContent, urls: Map<string, string>): JSONContent {
+  const src = doc.type === "image" ? doc.attrs?.src : undefined;
+  const url = typeof src === "string" ? urls.get(src) : undefined;
+  const node = url ? { ...doc, attrs: { ...doc.attrs, src: url } } : doc;
+  return node.content ? { ...node, content: node.content.map((child) => repointDoc(child, urls)) } : node;
+}
+
+export function repointCover(meta: PostMeta, urls: Map<string, string>): PostMeta {
+  const url = meta.cover?.path ? urls.get(meta.cover.path) : undefined;
+  return url && meta.cover ? { ...meta, cover: { ...meta.cover, path: url } } : meta;
 }
 
 export function defaultCommitMessage(draft: Draft, isUpdate: boolean): string {

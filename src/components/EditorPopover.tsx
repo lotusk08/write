@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { createPortal } from "react-dom";
 import type { AppConfig } from "../../shared/types.ts";
 import { resolvedTheme, type MenuTab, type Settings } from "../lib/settings.ts";
@@ -60,6 +60,14 @@ export function EditorPopover({
   const [chosen, setChosen] = useState<ExportFormat[]>([]);
   const sheet = useMediaQuery(PHONE_QUERY);
 
+  const dismiss = useCallback(() => {
+    const inside = Boolean(panel.current?.contains(document.activeElement));
+    onClose();
+    if (inside) {
+      window.requestAnimationFrame(() => anchorRef.current?.focus({ preventScroll: true }));
+    }
+  }, [onClose, anchorRef]);
+
   useLayoutEffect(() => {
     const region = regionRef.current;
     if (!open || !region) {
@@ -87,7 +95,7 @@ export function EditorPopover({
     }
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape" && escapeCloses) {
-        onClose();
+        dismiss();
       }
     };
     const onDown = (event: PointerEvent) => {
@@ -103,7 +111,7 @@ export function EditorPopover({
       document.removeEventListener("keydown", onKey);
       document.removeEventListener("pointerdown", onDown);
     };
-  }, [open, escapeCloses, onClose, anchorRef]);
+  }, [open, escapeCloses, onClose, dismiss, anchorRef]);
 
   if (!open || !frame) {
     return null;
@@ -172,6 +180,17 @@ export function EditorPopover({
         >
           <Icon name="focus" />
         </button>
+        {sheet ? (
+          <button
+            type="button"
+            className="btn icon ghost"
+            title="Close"
+            aria-label="Close menu"
+            onClick={dismiss}
+          >
+            <Icon name="close" />
+          </button>
+        ) : null}
       </header>
 
       <div className="popover-body">

@@ -63,6 +63,9 @@ its own npm lockfile.
 - `npm run dev` — Vite on :5173. The editor only; `/api` is not there, so
   publishing and `?edit=` need `wrangler dev` (which serves `dist`, so build
   first) with a `.dev.vars` holding `GITHUB_TOKEN` and `WRITE_PASSWORD`.
+  StrictMode runs every effect twice here, so the startup is one promise
+  (`boot()` in `App.tsx`) both runs wait on: two runs against an empty store
+  made two drafts.
 - `npm run typecheck` — `tsc -b` across the app, `worker/` and `shared/`.
 - `npm run build` — emits `dist`, flat. Wrangler bundles `worker/` itself, so
   there is no Cloudflare plugin in the Vite build and nothing nested under
@@ -84,6 +87,12 @@ its own npm lockfile.
   post; `import.ts` reads one back and is the inverse of it. `viewport.ts`
   measures the part of the window a phone keyboard leaves on screen; the shell
   is pinned to it and every pop-up is placed against it, not `innerHeight`.
+  The publish dialog sits inside that band too: its title and its actions
+  stay put and only the middle scrolls, because the password field raises
+  the keyboard the moment the dialog opens, and a dialog that scrolled as one
+  piece put Commit below it. The rail is its own stacking context, so the open
+  tab's z-index stops at the rail rather than drawing over the dialog's scrim,
+  and toasts sit under the scrim with the rest of the app.
 - `worker/index.ts` — the only thing holding a credential. The blog endpoints
   (`/api/config`, `/api/source`, `/api/publish`, `/api/topics`), the share
   endpoints (`/api/share`, `/api/share/<token>`), a constant-time check on the
@@ -143,12 +152,26 @@ alpha; other formats, and anything that fails to re-encode or comes back
 bigger, pass through whole. Downscaling works on an iPhone — it was only a
 WebP encoder WebKit lacked, and this writes JPEG and PNG.
 
+A publish repoints the draft. Every `local:` photo it uploaded — in the body,
+in a gallery, the cover — is renamed in the draft to the address it was
+published at (`plan.imageUrls`), so the next publish of the same draft uploads
+nothing but the Markdown and writes it byte for byte the same. Before that, every
+publish sent every photo again, and since a new image is numbered past every
+name the post already uses, each one would have added another copy to the
+repository and pointed the post at it. The body is repointed through the
+editor, outside its history, so a shared room carries it to everyone in it and
+undo does not bring the `local:` address back; in the Markdown source view it
+is the text that is repointed.
+
 The site does not serve what was pushed: the host builds `blog` itself, and
 `convert-images.js` writes the WebP, deletes the file it was made from and
 repoints the post in that build's checkout. The repository keeps the photo as
-published, and the draft here goes on pointing at a JPEG the site does not
-serve. The image node tries the WebP when the original 404s, which is what a
-photo published as a JPEG does once the site has been built.
+published, and the draft here, once published, points at a JPEG the site does
+not serve. The image node tries the WebP when the original 404s, which is what
+a photo published as a JPEG does once the site has been built. Until then
+nothing is there at all, so the tab that published keeps showing its own copy
+of each photo (`showPublishedAs` in `lib/site.ts`) until it is reloaded; the
+mindmap is handed the site's address (`siteSrc`), never that copy.
 
 ## Tags and categories
 
@@ -185,6 +208,10 @@ dropped every tag added after them. An empty answer from `/api/topics` is not
 kept for the session, so one failed fetch is retried on the next open.
 A typed field is tidied on blur only if it was edited while focused, so
 looking at a multi-line description read from a post leaves its lines alone.
+The row is scrolled into view again whenever the panel it scrolls in changes
+size, a frame later, rather than on the viewport's resize event: that event
+arrives before the sheet has shrunk to the keyboard, and the chips were
+measured against the old height and left under the sheet's footer.
 
 ## Round-tripping published posts
 
@@ -467,7 +494,22 @@ paragraph is the way out of it.
 
 The publish password lives in session storage (`src/lib/password.ts`), never in
 Settings: one prompt per sitting, and closing the tab — or the app going away
-on a phone — is what forgets it.
+on a phone — is what forgets it. A `401` empties the field and puts the caret
+back in it, so the wrong password is not sent again by a second tap.
+
+## Drafts rail and menu
+
+The drafts rail is a deck: every draft but the open one is a sheet stacked
+under its neighbour, fanned out by hover. A phone has no hover, and ten drafts
+were ten strips a few pixels high with no title on any of them. On a coarse
+pointer a deck of more than one sheet is a single target that opens a list of
+every draft by title, each row 44px, scrolling inside the visible band; a deck
+of one still opens its draft directly. The open tab's delete button is 32px
+there.
+
+The menu sheet covers the ⌘ button that opened it, so on a phone it carries
+its own close button, and closing it from inside — that button or Escape —
+hands focus back to ⌘.
 
 ## Sharing a draft
 

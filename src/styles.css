@@ -288,6 +288,7 @@ textarea {
 
 .rail {
   position: relative;
+  isolation: isolate;
   display: flex;
   width: 46px;
   flex-shrink: 0;
@@ -423,6 +424,28 @@ textarea {
 .rail-tab-delete:hover {
   background: var(--hover);
   color: var(--danger);
+}
+
+.draft-list {
+  width: min(300px, calc(100vw - 16px));
+}
+
+.draft-list button {
+  min-height: 44px;
+  gap: 10px;
+}
+
+.draft-list-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draft-list button[aria-current] {
+  background: var(--hover);
+  font-weight: 600;
 }
 
 .card-dock {
@@ -1883,14 +1906,19 @@ textarea {
 }
 
 .dialog {
+  display: flex;
   width: min(580px, 100%);
   max-height: 100%;
-  padding: 22px 24px;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 16px;
   background: var(--panel);
   box-shadow: var(--shadow-pop);
-  overflow-y: auto;
+  overflow: hidden;
+}
+
+.dialog-head {
+  padding: 22px 24px 0;
 }
 
 .dialog h2 {
@@ -1900,15 +1928,24 @@ textarea {
   letter-spacing: -0.01em;
 }
 
-.dialog > .hint {
-  margin-bottom: 18px;
+.dialog-head .hint {
+  margin: 0 0 18px;
+}
+
+.dialog-body {
+  min-height: 0;
+  flex: 1;
+  padding: 0 24px 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .dialog-actions {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  margin-top: 20px;
+  padding: 14px 24px 18px;
+  border-top: 1px solid var(--border);
 }
 
 .code-preview {
@@ -2000,7 +2037,7 @@ textarea {
 
 .toast {
   position: fixed;
-  z-index: 50;
+  z-index: 42;
   bottom: calc(24px + var(--app-bottom, 0px));
   left: 50%;
   max-width: min(520px, calc(100vw - 40px));
@@ -2072,8 +2109,12 @@ textarea {
 
 @media (width <= 640px) {
   .rail {
-    width: 34px;
+    width: 40px;
     padding-top: 8px;
+  }
+
+  .scrim {
+    padding: 12px;
   }
 
   .title-input {
@@ -2165,8 +2206,34 @@ textarea {
     width: 20px;
   }
 
+  .rail-tab.is-open {
+    padding-inline: 1px;
+  }
+
   .rail-tab-delete {
+    width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
     opacity: 1;
     pointer-events: auto;
+  }
+
+  .rail-deck .rail-tab.is-layer,
+  .rail-deck:hover .rail-tab.is-layer,
+  .rail-deck:has(:focus-visible) .rail-tab.is-layer {
+    width: 34px;
+    height: 40px;
+    margin-top: -30px;
+  }
+
+  .rail-tab.is-layer:hover {
+    z-index: var(--z, 1);
+  }
+
+  .rail-deck .rail-tab.is-layer:first-child,
+  .rail-deck:hover .rail-tab.is-layer:first-child,
+  .rail-deck:has(:focus-visible) .rail-tab.is-layer:first-child {
+    margin-top: 0;
   }
 }
