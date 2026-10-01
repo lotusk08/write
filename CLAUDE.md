@@ -350,8 +350,19 @@ Things that took a bug to learn, and that a change here can quietly undo:
   paragraph. A phone keyboard has no Shift+Enter, so that was the only way to
   say `<br>` and every line of a poem became its own paragraph — a `>` gap
   between each one, and an attribution several gaps below the quote it belonged
-  to. `lineBreak.ts`, and only where a paragraph flows: a list item, a table
-  cell and a section summary keep their own Enter.
+  to. `lineBreak.ts`, and only where a paragraph flows: a list item and a
+  section summary keep their own Enter, and a table cell has the one below.
+- A table cell is one line. `markdown.ts` writes each row on one line of
+  pipes, so a second paragraph or a break typed into a cell showed as two
+  lines here and published as one, joined by a space. Enter in a cell moves to
+  the cell below, and out of the table under the last row, as Tab moves
+  across; Shift+Enter there does nothing.
+- A line that is nothing but a fence opener — ```` ```mermaid ````, ```` ``` ````,
+  `~~~py` — becomes a code block on Enter, with the rest of the line as its
+  language. Tiptap runs its fence rule on Enter too, but the line-break flow
+  takes Enter first, so the line got a `<br>` after it and the whole thing
+  published as a paragraph. markdown-it opens a fence even straight after
+  other text, so a fence line under a break parts the paragraph there.
 - Every newline inside a paragraph is a `<br>`: the site sets `breaks: true`,
   as kramdown's `hard_wrap` did. Reading one as a wrap and joining the lines
   with a space took a break out of every post opened here, and writing a break
@@ -422,6 +433,29 @@ Things that took a bug to learn, and that a change here can quietly undo:
   updates, which replace the whole doc on every keystroke and carry
   `ySyncPluginKey` meta — and an insert that started before a swap is dropped,
   its blobs removed, rather than landing in the other draft.
+- An insert hands the cursor on. ProseMirror leaves a node selection on a
+  photo or a player it has just placed, and the next key typed replaced it —
+  two embeds in a row left one. `insertBlocks` puts the cursor in the
+  paragraph after what it inserted, making one when none follows, and the
+  divider, a new gallery and a separated one do the same. Over a selected
+  block the insert lands after it and after whatever joins it — its caption,
+  the rest of its row — so neither is cut in two; photos added over a gallery
+  photo join the gallery, and the cursor leaves it. A table keeps the cursor
+  in its first cell, with a paragraph made under it to leave by.
+- `#` types an H2, as `##` does: the title is the page's only H1 and the
+  contents start at H2. Level 1 stays in the schema, so a post that has an
+  H1 opens with it and writes it back.
+- A `local:` address never reaches an `<img src>`: the browser fetches an image
+  the moment one is made, even off the page, and the scheme fails once per
+  photo. The node view resolves it to a blob URL first, but `renderHTML` is
+  what the view draws with while `EditorContent` is unmounted for the
+  Markdown source, and what `getHTML` and the clipboard serialise. It renders
+  as `data-local-src`, is read back from there, and the HTML export inlines
+  it from there.
+- The formatting bubble shows over selected text only. Over a selected photo
+  or gallery it had nothing to format and ran off the right edge of a phone.
+- The file-path button takes `code.filepath` off on its second press; it used
+  to flip the attribute and leave plain `code` behind.
 
 In an `.author` quote the site styles the last paragraph as the attribution —
 right-aligned, italic, the dash added by CSS — and the editor now shows the
