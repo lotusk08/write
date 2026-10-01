@@ -12,7 +12,7 @@ import { Embed } from "./extensions/embed.ts";
 import { footnoteExtensions } from "./extensions/footnote.ts";
 import { Gallery } from "./extensions/gallery.ts";
 import { EnterBreaks } from "./extensions/lineBreak.ts";
-import { PreviewCodeBlock, RawBlock } from "./extensions/preview.ts";
+import { PreviewCodeBlock, RawBlock, RawInline } from "./extensions/preview.ts";
 import { NoteQuote } from "./extensions/noteQuote.ts";
 import { LocalImage } from "./extensions/localImage.ts";
 
@@ -28,6 +28,7 @@ export const buildEditorExtensions = (options: { collab?: boolean } = {}) => [
   }),
   PreviewCodeBlock.configure({ languageClassPrefix: "language-" }),
   RawBlock,
+  RawInline,
   Embed,
   FilepathCode,
   BlockAttributes,
