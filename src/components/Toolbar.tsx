@@ -157,14 +157,10 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
           icon="file"
           title="File path — the blog's {: .filepath}"
           active={state.filepath}
-          onClick={() =>
-            editor
-              .chain()
-              .focus()
-              .setCode()
-              .updateAttributes("code", { filepath: !state.filepath })
-              .run()
-          }
+          onClick={() => {
+            const chain = editor.chain().focus().extendMarkRange("code");
+            (state.filepath ? chain.unsetMark("code") : chain.setMark("code", { filepath: true })).run();
+          }}
         />
         <Tool icon="link" title="Link" active={state.link} onClick={setLink} />
         <Tool icon="footnote" title="Footnote — marker here, note at the end" onClick={() => editor.chain().focus().insertFootnote().run()} />
