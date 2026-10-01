@@ -142,12 +142,26 @@ alpha; other formats, and anything that fails to re-encode or comes back
 bigger, pass through whole. Downscaling works on an iPhone — it was only a
 WebP encoder WebKit lacked, and this writes JPEG and PNG.
 
+A publish repoints the draft. Every `local:` photo it uploaded — in the body,
+in a gallery, the cover — is renamed in the draft to the address it was
+published at (`plan.imageUrls`), so the next publish of the same draft uploads
+nothing but the Markdown and writes it byte for byte the same. Before that, every
+publish sent every photo again, and since a new image is numbered past every
+name the post already uses, each one would have added another copy to the
+repository and pointed the post at it. The body is repointed through the
+editor, outside its history, so a shared room carries it to everyone in it and
+undo does not bring the `local:` address back; in the Markdown source view it
+is the text that is repointed.
+
 The site does not serve what was pushed: the host builds `blog` itself, and
 `convert-images.js` writes the WebP, deletes the file it was made from and
 repoints the post in that build's checkout. The repository keeps the photo as
-published, and the draft here goes on pointing at a JPEG the site does not
-serve. The image node tries the WebP when the original 404s, which is what a
-photo published as a JPEG does once the site has been built.
+published, and the draft here, once published, points at a JPEG the site does
+not serve. The image node tries the WebP when the original 404s, which is what
+a photo published as a JPEG does once the site has been built. Until then
+nothing is there at all, so the tab that published keeps showing its own copy
+of each photo (`showPublishedAs` in `lib/site.ts`) until it is reloaded; the
+mindmap is handed the site's address (`siteSrc`), never that copy.
 
 ## Tags and categories
 

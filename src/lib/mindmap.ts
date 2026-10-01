@@ -1,7 +1,7 @@
 import type { JSONContent } from "@tiptap/core";
 import { isLocalSrc } from "./db.ts";
 import { docToMarkdown } from "./markdown.ts";
-import { displaySrc } from "./site.ts";
+import { siteSrc } from "./site.ts";
 
 export const THINK_URL = "https://think.stevehoang.com";
 
@@ -30,7 +30,7 @@ function clean(node: JSONContent): JSONContent | null {
       const alt = String(node.attrs?.alt ?? "").trim();
       return alt ? { type: "paragraph", content: [{ type: "text", text: alt }] } : null;
     }
-    out.attrs = { ...out.attrs, src: displaySrc(src) };
+    out.attrs = { ...out.attrs, src: siteSrc(src) };
   }
   if (node.marks) {
     out.marks = cleanMarks(node.marks as Mark[]);
