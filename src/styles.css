@@ -1695,6 +1695,51 @@ textarea {
   outline: none;
 }
 
+.token-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.token-suggestion {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--panel);
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1.4;
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.token-suggestion.is-active {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.token-suggestion-count {
+  color: var(--faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+@media (hover: hover) {
+  .token-suggestion:hover {
+    border-color: var(--border-strong);
+    background: var(--hover);
+  }
+
+  .token-suggestion.is-active:hover {
+    border-color: var(--accent);
+    background: var(--accent-soft);
+  }
+}
+
 .cover-card {
   margin: 0;
   border: 1px solid var(--border);
@@ -2075,6 +2120,16 @@ textarea {
   .tool {
     width: 36px;
     height: 36px;
+  }
+
+  .token-suggestion {
+    min-height: 36px;
+    padding: 6px 13px;
+    font-size: 14px;
+  }
+
+  .token-suggestion-count {
+    font-size: 12px;
   }
 
   .bubble {

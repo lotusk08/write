@@ -22,6 +22,17 @@ export interface PostMeta {
   extra?: string[];
 }
 
+export interface Topic {
+  title: string;
+  slug: string;
+  count: number;
+}
+
+export interface Topics {
+  tags: Topic[];
+  categories: Topic[];
+}
+
 export interface PublishFile {
   path: string;
   contentBase64: string;

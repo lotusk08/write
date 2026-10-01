@@ -2,6 +2,7 @@ import type { JSONContent } from "@tiptap/core";
 import type { PostMeta } from "../../shared/types.ts";
 import { CENTER_ROW } from "../editor/extensions/blogFormat.ts";
 import { embedTag } from "../editor/extensions/embed.ts";
+import { topicSlug } from "./topics.ts";
 
 export interface SerializeOptions {
   resolveImage?: (src: string) => string;
@@ -503,10 +504,7 @@ function yamlString(value: string): string {
 export function uniqueNames(values: string[]): string[] {
   const seen = new Set<string>();
   return values.filter((value) => {
-    const key = value
-      .toLowerCase()
-      .replace(/[^\p{L}\p{N}]+/gu, "-")
-      .replace(/^-+|-+$/g, "");
+    const key = topicSlug(value);
     if (seen.has(key)) {
       return false;
     }

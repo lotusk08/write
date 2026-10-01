@@ -1,4 +1,10 @@
-import type { AppConfig, PublishRequest, PublishResult } from "../../shared/types.ts";
+import type {
+  AppConfig,
+  PublishRequest,
+  PublishResult,
+  Topic,
+  Topics,
+} from "../../shared/types.ts";
 
 export class PasswordRejected extends Error {
   constructor(message: string) {
@@ -36,6 +42,38 @@ export async function fetchAppConfig(): Promise<AppConfig | null> {
   } catch {
     return null;
   }
+}
+
+const NO_TOPICS: Topics = { tags: [], categories: [] };
+
+let topics: Promise<Topics> | null = null;
+
+function topicList(value: unknown): Topic[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value.filter(
+    (topic): topic is Topic =>
+      typeof topic?.title === "string" &&
+      typeof topic?.slug === "string" &&
+      typeof topic?.count === "number",
+  );
+}
+
+export function fetchTopics(): Promise<Topics> {
+  topics ??= fetch("/api/topics", { headers: { accept: "application/json" } })
+    .then(async (response) => {
+      if (!response.ok || !(response.headers.get("content-type") ?? "").includes("application/json")) {
+        throw new Error("No topics.");
+      }
+      const body = (await response.json()) as Partial<Record<keyof Topics, unknown>>;
+      return { tags: topicList(body.tags), categories: topicList(body.categories) };
+    })
+    .catch(() => {
+      topics = null;
+      return NO_TOPICS;
+    });
+  return topics;
 }
 
 export interface PostSource {

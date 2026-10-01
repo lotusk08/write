@@ -50,7 +50,11 @@ its own npm lockfile.
   there is no Cloudflare plugin in the Vite build and nothing nested under
   `dist`.
 - `npm run deploy` — builds, then `wrangler deploy`. The custom domain lives on
-  this Worker; deploying anywhere else leaves the old app on it.
+  this Worker; deploying anywhere else leaves the old app on it. Built by
+  Cloudflare from git, the build command is `npm run build`. Node 24
+  (`.node-version`), as the blog: pinned to 22, the build image carried no
+  pnpm for it, and a `pnpm run build` command failed every build from
+  20 September.
 
 ## Layout
 
@@ -63,8 +67,8 @@ its own npm lockfile.
   measures the part of the window a phone keyboard leaves on screen; the shell
   is pinned to it and every pop-up is placed against it, not `innerHeight`.
 - `worker/index.ts` — the only thing holding a credential. The blog endpoints
-  (`/api/config`, `/api/source`, `/api/publish`), the share endpoints
-  (`/api/share`, `/api/share/<token>`), a constant-time check on the
+  (`/api/config`, `/api/source`, `/api/publish`, `/api/topics`), the share
+  endpoints (`/api/share`, `/api/share/<token>`), a constant-time check on the
   password, and path validation against the configured directories so a leaked
   password cannot rewrite workflows. `worker/share.ts` is the `ShareRoom`
   Durable Object behind sharing: a y-websocket server, one room per token.
@@ -121,12 +125,39 @@ alpha; other formats, and anything that fails to re-encode or comes back
 bigger, pass through whole. Downscaling works on an iPhone — it was only a
 WebP encoder WebKit lacked, and this writes JPEG and PNG.
 
-The repository does not stay as it was pushed: the assets workflow runs that
-build on `blog`, and `convert-images.js` writes the WebP, deletes the file it
-was made from and repoints the post, which the run commits back. The draft
-here is never told, so it goes on pointing at a JPEG that is no longer there.
-The image node tries the WebP when the original 404s, which is what a photo
-published as a JPEG does once the site has been built.
+The site does not serve what was pushed: the host builds `blog` itself, and
+`convert-images.js` writes the WebP, deletes the file it was made from and
+repoints the post in that build's checkout. The repository keeps the photo as
+published, and the draft here goes on pointing at a JPEG the site does not
+serve. The image node tries the WebP when the original 404s, which is what a
+photo published as a JPEG does once the site has been built.
+
+## Tags and categories
+
+The blog files a topic under its slug — lowercased, every run of anything but
+a letter or digit a dash — so `Em` and `em` are one topic under two names, and
+the post that brought the second spelling is the one that split it. The Tags
+and Categories fields offer what the blog already has instead: the build
+publishes `topics.json` (title, slug and count of every tag and category, the
+title being the most-used spelling), and `GET /api/topics` passes it on from
+`SITE_URL`, cached at Cloudflare for five minutes. It is public, like a
+published post, so it asks no password; if the site does not answer it returns
+empty lists with a 200, and the fields simply suggest nothing. The app asks
+once a session, when the post panel opens (`fetchTopics` in `lib/api.ts`).
+
+While a field has focus, a row of chips sits under it — inline rather than a
+pop-up, so the sheet scrolls it into view above a phone keyboard like the rest
+of the panel. An empty field shows the eight most used; typing narrows them to
+the ones whose title or slug starts with it, then the ones containing it, with
+diacritics folded so `tet` finds `Tết`. What the post already carries is never
+offered. A chip is picked on click, with the pointer's mousedown and
+pointerdown cancelled so the input keeps focus and its blur does not eat the
+tap. Picking on pointerdown instead would add a tag for every scroll of the
+sheet that happened to start on a chip. Arrow keys move through the row and Enter takes the one lit;
+otherwise Enter and comma commit what was typed, and a name that slugifies
+like an existing topic is written in the blog's spelling. A new name is still
+a new name. `topicSlug` in `lib/topics.ts` is that one rule, also behind
+`uniqueNames` when the front matter is written.
 
 ## Round-tripping published posts
 

@@ -6,7 +6,14 @@ import {
   readTextFile,
   tokenLogin,
 } from "../shared/github.ts";
-import type { AppConfig, PublishFile, PublishRequest, PublishResult } from "../shared/types.ts";
+import type {
+  AppConfig,
+  PublishFile,
+  PublishRequest,
+  PublishResult,
+  Topic,
+  Topics,
+} from "../shared/types.ts";
 
 export { ShareRoom } from "./share.ts";
 
@@ -160,6 +167,43 @@ function handleConfig(env: Env): Response {
     ...(missing ? { problem: missing } : {}),
   };
   return json(config);
+}
+
+const TOPICS_TTL = 300;
+
+function topicList(value: unknown): Topic[] {
+  if (!Array.isArray(value)) {
+    return [];
+  }
+  return value
+    .filter((topic) => typeof topic?.title === "string" && typeof topic?.slug === "string")
+    .slice(0, 2000)
+    .map((topic) => ({
+      title: String(topic.title).slice(0, 200),
+      slug: String(topic.slug).slice(0, 200),
+      count: Number.isFinite(topic.count) ? Number(topic.count) : 0,
+    }));
+}
+
+async function handleTopics(env: Env): Promise<Response> {
+  const none: Topics = { tags: [], categories: [] };
+  const site = (env.SITE_URL || "").replace(/\/+$/, "");
+  if (!site) {
+    return json(none);
+  }
+  try {
+    const response = await fetch(`${site}/topics.json`, {
+      headers: { accept: "application/json" },
+      cf: { cacheEverything: true, cacheTtlByStatus: { "200-299": TOPICS_TTL, "300-599": 60 } },
+    });
+    if (!response.ok) {
+      return json(none);
+    }
+    const body = (await response.json()) as Partial<Record<keyof Topics, unknown>>;
+    return json({ tags: topicList(body.tags), categories: topicList(body.categories) });
+  } catch {
+    return json(none);
+  }
 }
 
 async function handlePublish(request: Request, env: Env): Promise<Response> {
@@ -343,6 +387,9 @@ export default {
       return request.method === "GET"
         ? handleSource(request, env)
         : json({ error: "Use GET." }, 405);
+    }
+    if (url.pathname === "/api/topics") {
+      return request.method === "GET" ? handleTopics(env) : json({ error: "Use GET." }, 405);
     }
     if (url.pathname.startsWith("/api/")) {
       return json({ error: "Not found." }, 404);

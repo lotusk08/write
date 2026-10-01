@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import type { AppConfig, PostMeta } from "../../../shared/types.ts";
+import type { AppConfig, PostMeta, Topics } from "../../../shared/types.ts";
+import { fetchTopics } from "../../lib/api.ts";
 import { isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
 import type { Settings } from "../../lib/settings.ts";
 import { displaySrc } from "../../lib/site.ts";
@@ -37,6 +38,19 @@ export function PostPanel({
 }: PostPanelProps) {
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const coverInput = useRef<HTMLInputElement>(null);
+  const [topics, setTopics] = useState<Topics | null>(null);
+
+  useEffect(() => {
+    let live = true;
+    void fetchTopics().then((found) => {
+      if (live) {
+        setTopics(found);
+      }
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
 
   useEffect(() => {
     const path = meta.cover?.path;
@@ -68,6 +82,7 @@ export function PostPanel({
             id="meta-categories"
             values={meta.categories}
             placeholder="Vietnamese"
+            suggestions={topics?.categories}
             onChange={(categories) => onChange({ categories })}
           />
         </div>
@@ -77,6 +92,7 @@ export function PostPanel({
             id="meta-tags"
             values={meta.tags}
             placeholder="coffee, morning"
+            suggestions={topics?.tags}
             onChange={(tags) => onChange({ tags })}
           />
         </div>
