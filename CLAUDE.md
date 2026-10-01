@@ -86,6 +86,12 @@ its own npm lockfile.
   post; `import.ts` reads one back and is the inverse of it. `viewport.ts`
   measures the part of the window a phone keyboard leaves on screen; the shell
   is pinned to it and every pop-up is placed against it, not `innerHeight`.
+  The publish dialog sits inside that band too: its title and its actions
+  stay put and only the middle scrolls, because the password field raises
+  the keyboard the moment the dialog opens, and a dialog that scrolled as one
+  piece put Commit below it. The rail is its own stacking context, so the open
+  tab's z-index stops at the rail rather than drawing over the dialog's scrim,
+  and toasts sit under the scrim with the rest of the app.
 - `worker/index.ts` — the only thing holding a credential. The blog endpoints
   (`/api/config`, `/api/source`, `/api/publish`, `/api/topics`), the share
   endpoints (`/api/share`, `/api/share/<token>`), a constant-time check on the
@@ -449,7 +455,8 @@ paragraph is the way out of it.
 
 The publish password lives in session storage (`src/lib/password.ts`), never in
 Settings: one prompt per sitting, and closing the tab — or the app going away
-on a phone — is what forgets it.
+on a phone — is what forgets it. A `401` empties the field and puts the caret
+back in it, so the wrong password is not sent again by a second tap.
 
 ## Sharing a draft
 

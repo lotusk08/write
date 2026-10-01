@@ -288,6 +288,7 @@ textarea {
 
 .rail {
   position: relative;
+  isolation: isolate;
   display: flex;
   width: 46px;
   flex-shrink: 0;
@@ -1883,14 +1884,19 @@ textarea {
 }
 
 .dialog {
+  display: flex;
   width: min(580px, 100%);
   max-height: 100%;
-  padding: 22px 24px;
+  flex-direction: column;
   border: 1px solid var(--border);
   border-radius: 16px;
   background: var(--panel);
   box-shadow: var(--shadow-pop);
-  overflow-y: auto;
+  overflow: hidden;
+}
+
+.dialog-head {
+  padding: 22px 24px 0;
 }
 
 .dialog h2 {
@@ -1900,15 +1906,24 @@ textarea {
   letter-spacing: -0.01em;
 }
 
-.dialog > .hint {
-  margin-bottom: 18px;
+.dialog-head .hint {
+  margin: 0 0 18px;
+}
+
+.dialog-body {
+  min-height: 0;
+  flex: 1;
+  padding: 0 24px 6px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .dialog-actions {
   display: flex;
   gap: 8px;
   justify-content: flex-end;
-  margin-top: 20px;
+  padding: 14px 24px 18px;
+  border-top: 1px solid var(--border);
 }
 
 .code-preview {
@@ -2000,7 +2015,7 @@ textarea {
 
 .toast {
   position: fixed;
-  z-index: 50;
+  z-index: 42;
   bottom: calc(24px + var(--app-bottom, 0px));
   left: 50%;
   max-width: min(520px, calc(100vw - 40px));
@@ -2074,6 +2089,10 @@ textarea {
   .rail {
     width: 34px;
     padding-top: 8px;
+  }
+
+  .scrim {
+    padding: 12px;
   }
 
   .title-input {

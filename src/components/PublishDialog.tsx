@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppConfig, PublishResult } from "../../shared/types.ts";
 import { PasswordRejected, publish } from "../lib/api.ts";
 import { rememberPassword, sessionPassword } from "../lib/password.ts";
@@ -29,8 +29,9 @@ export function PublishDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState(sessionPassword);
-  const [rejected, setRejected] = useState(false);
-  const asking = !sessionPassword() || rejected;
+  const [rejected, setRejected] = useState(0);
+  const passwordField = useRef<HTMLInputElement>(null);
+  const asking = !sessionPassword() || rejected > 0;
 
   const repo = settings.repo;
   const baseBranch = settings.branch;
@@ -53,6 +54,12 @@ export function PublishDialog({
       cancelled = true;
     };
   }, [draft, settings]);
+
+  useEffect(() => {
+    if (rejected) {
+      passwordField.current?.focus();
+    }
+  }, [rejected]);
 
   const renamedFrom =
     draft.publishedPath && plan && plan.markdownPath !== draft.publishedPath
@@ -92,7 +99,8 @@ export function PublishDialog({
       onPublished(result, plan);
     } catch (cause) {
       if (cause instanceof PasswordRejected) {
-        setRejected(true);
+        setRejected((count) => count + 1);
+        setPassword("");
         rememberPassword("");
       }
       setError(cause instanceof Error ? cause.message : String(cause));
@@ -136,6 +144,7 @@ export function PublishDialog({
         <div className="field">
           <label htmlFor="publish-password">Password</label>
           <input
+            ref={passwordField}
             id="publish-password"
             className="input"
             type="password"
