@@ -39,8 +39,9 @@ for a literal `..` and then pasting the path into the URL let
 `src/posts/%252e%252e/drafts/x.md` through — the query decoded it to `%2e%2e`,
 GitHub's URL parser to `..` — which read drafts without the password, and with
 `?ref=` or more levels up, any file or repository the token could see.
-Publishing goes to `BLOG_BRANCH` and nowhere else; the client never sends a
-branch, and the field that took one let a leaked password move tags.
+Publishing goes to `BLOG_BRANCH`, or — with "open a pull request" on — to
+the app's own `post/<slug>` branch (`PROPOSAL_BRANCH`), and nowhere else: a
+free branch field let a leaked password move tags or commit to `main`.
 Request bodies are read through `readCapped`, which counts bytes as they
 stream, so a chunked upload cannot be buffered whole before its size is
 known. Reading a published post is public, so it is rate-limited instead

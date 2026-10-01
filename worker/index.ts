@@ -33,6 +33,7 @@ export interface Env {
 }
 
 const MAX_REQUEST_BYTES = 20 * 1024 * 1024;
+const PROPOSAL_BRANCH = /^post\/[a-z0-9][a-z0-9-]{0,99}$/;
 
 function githubToken(env: Env): string {
   return (env.GITHUB_TOKEN ?? "").trim();
@@ -293,10 +294,12 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
     return json({ error: checked.error }, 400);
   }
 
-  const branch = env.BLOG_BRANCH || "main";
-  if (body.branch !== undefined && body.branch !== null && body.branch !== branch) {
-    return json({ error: `Publishing goes to ${branch} only.` }, 400);
+  const base = env.BLOG_BRANCH || "main";
+  const proposed = typeof body.branch === "string" && PROPOSAL_BRANCH.test(body.branch);
+  if (body.branch !== undefined && body.branch !== null && body.branch !== base && !proposed) {
+    return json({ error: `Publishing goes to ${base}, or to a post/<slug> branch for a pull request.` }, 400);
   }
+  const branch = proposed ? (body.branch as string) : base;
 
   const message =
     (typeof body.message === "string" ? body.message : "").trim().slice(0, 500) ||
@@ -310,7 +313,13 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
       baseBranch: env.BLOG_BRANCH || undefined,
       message,
       files: checked.files,
-      pullRequest: null,
+      pullRequest:
+        proposed && body.pullRequest && typeof body.pullRequest.title === "string"
+          ? {
+              title: body.pullRequest.title.slice(0, 200),
+              body: typeof body.pullRequest.body === "string" ? body.pullRequest.body.slice(0, 2000) : "",
+            }
+          : null,
     });
     return json(result);
   } catch (error) {
