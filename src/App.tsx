@@ -674,7 +674,7 @@ export default function App() {
         kind: "info",
         href: result.pullRequestUrl ?? result.commitUrl,
       });
-      const urls = plan.imageUrls;
+      const urls = result.pullRequestUrl ? new Map<string, string>() : plan.imageUrls;
       await Promise.all(
         [...urls].map(async ([local, url]) => {
           const shown = await resolveLocalSrc(local).catch(() => null);

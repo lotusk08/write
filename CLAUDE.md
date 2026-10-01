@@ -161,7 +161,9 @@ name the post already uses, each one would have added another copy to the
 repository and pointed the post at it. The body is repointed through the
 editor, outside its history, so a shared room carries it to everyone in it and
 undo does not bring the `local:` address back; in the Markdown source view it
-is the text that is repointed.
+is the text that is repointed. A pull request repoints nothing: its photos are
+on the `post/<slug>` branch until it merges, and a draft pointing at them
+would publish straight to `blog` without them.
 
 The site does not serve what was pushed: the host builds `blog` itself, and
 `convert-images.js` writes the WebP, deletes the file it was made from and
