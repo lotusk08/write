@@ -135,6 +135,17 @@ export const BlockAttributes = Extension.create({
         },
       },
       {
+        types: ["link"],
+        attributes: {
+          within: {
+            default: null,
+            parseHTML: (element) => element.getAttribute("data-within"),
+            renderHTML: (attributes) =>
+              attributes.within ? { "data-within": attributes.within as string } : {},
+          },
+        },
+      },
+      {
         types: BLOCKS,
         attributes: {
           blockIal: {

@@ -199,6 +199,20 @@ function emphasisEnd(rest: string, opening: string): number {
   return -1;
 }
 
+function linkWithin(nodes: JSONContent[], outer: Mark[], added: Mark[]): JSONContent[] {
+  const linkOf = (node: JSONContent) => (node.marks as Mark[] | undefined)?.find((mark) => mark.type === "link");
+  const link = nodes.length ? linkOf(nodes[0]) : undefined;
+  if (!link || outer.includes(link) || !nodes.every((node) => linkOf(node) === link)) {
+    return nodes;
+  }
+  const within = [...added.map((mark) => mark.type), ...String(link.attrs?.within ?? "").split(" ")];
+  const marked = { ...link, attrs: { ...link.attrs, within: within.filter(Boolean).join(" ") } };
+  return nodes.map((node) => ({
+    ...node,
+    marks: (node.marks as Mark[]).map((mark) => (mark === link ? marked : mark)),
+  }));
+}
+
 export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
   const out: JSONContent[] = [];
   let buffer = "";
@@ -292,7 +306,7 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
       if (tag) {
         flush();
         const mark = { u: "underline", mark: "highlight", sup: "superscript", sub: "subscript" }[tag[1]] as string;
-        out.push(...parseInline(tag[2], [...marks, { type: mark }]));
+        out.push(...linkWithin(parseInline(tag[2], [...marks, { type: mark }]), marks, [{ type: mark }]));
         i += tag[0].length;
         continue;
       }
@@ -316,7 +330,7 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
                 ? [{ type: "bold" }]
                 : [{ type: "italic" }];
         flush();
-        out.push(...parseInline(rest.slice(opening.length, close), [...marks, ...added]));
+        out.push(...linkWithin(parseInline(rest.slice(opening.length, close), [...marks, ...added]), marks, added));
         i += close + opening.length;
         continue;
       }

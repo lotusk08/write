@@ -12,10 +12,24 @@ type Mark = { type: string; attrs?: Record<string, unknown> };
 
 const REF_MARKS = new Set(["bold", "italic", "strike", "underline", "highlight"]);
 
+function nesting(marks: Mark[]): Mark[] {
+  const link = marks.find((mark) => mark.type === "link");
+  if (!link) {
+    return marks;
+  }
+  const within = String(link.attrs?.within ?? "").split(" ");
+  const others = marks.filter((mark) => mark !== link);
+  return [
+    ...others.filter((mark) => within.includes(mark.type)),
+    link,
+    ...others.filter((mark) => !within.includes(mark.type)),
+  ];
+}
+
 function marksOf(node: JSONContent): Mark[] {
   const marks = (node.marks as Mark[] | undefined) ?? [];
   if (node.type === "text") {
-    return marks;
+    return nesting(marks);
   }
   if (node.type === "footnoteRef") {
     return marks.filter((mark) => REF_MARKS.has(mark.type));
@@ -148,10 +162,10 @@ function wrap(text: string, mark: Mark): string {
 const AUTOLINK = /^[a-zA-Z][\w+.-]{1,31}:[^\s<>]*$/;
 
 function textNode(node: JSONContent): string {
-  const marks = node.marks as Mark[] | undefined;
+  const marks = marksOf(node);
   const raw = node.text ?? "";
-  const code = marks?.some((mark) => mark.type === "code");
-  const link = marks?.length === 1 && marks[0].type === "link" ? marks[0] : null;
+  const code = marks.some((mark) => mark.type === "code");
+  const link = marks.length === 1 && marks[0].type === "link" ? marks[0] : null;
   if (link && !link.attrs?.title && link.attrs?.href === raw && AUTOLINK.test(raw)) {
     return `<${raw}>`;
   }

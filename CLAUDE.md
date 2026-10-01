@@ -289,6 +289,18 @@ Things that took a bug to learn, and that a change here can quietly undo:
   serialised one node at a time it came out as three adjacent links, so
   `inline` in `markdown.ts` groups a run of text nodes carrying the same link
   and writes the link once, around it.
+- Where emphasis and a link cover exactly the same words, which one is outside
+  is the post's to say, and the posts say both: `*[Title](url)*` in reference
+  lists and captions, `[*Title*](url)` in quotes. The parser hands marks over
+  outermost first, but ProseMirror re-sorts every mark by schema rank, link
+  first, so through the editor the first form came back as the second — an
+  `<em>` inside the link instead of around it. Reach cannot settle it when the
+  spans are equal, so the link carries it: a `within` attribute naming the
+  marks written around it over the same span (declared on `link` in
+  `BlockAttributes`, `data-within` in the DOM so a paste keeps it), and
+  `nesting` in `markdown.ts` puts those outside the link and everything else
+  inside, whatever order the marks arrive in. A link with no `within` — every
+  one made in the editor — wraps its emphasis.
 - Footnotes are nodes: `[^id]` is a `footnoteRef` and `[^id]: …` a
   `footnoteDef` whose body is the text after the colon plus lines indented
   four spaces — and the unindented line under it, which markdown-it reads as
