@@ -458,6 +458,16 @@ Settings: one prompt per sitting, and closing the tab — or the app going away
 on a phone — is what forgets it. A `401` empties the field and puts the caret
 back in it, so the wrong password is not sent again by a second tap.
 
+## Drafts rail and menu
+
+The drafts rail is a deck: every draft but the open one is a sheet stacked
+under its neighbour, fanned out by hover. A phone has no hover, and ten drafts
+were ten strips a few pixels high with no title on any of them. On a coarse
+pointer a deck of more than one sheet is a single target that opens a list of
+every draft by title, each row 44px, scrolling inside the visible band; a deck
+of one still opens its draft directly. The open tab's delete button is 32px
+there.
+
 ## Sharing a draft
 
 The Share tab holds one switch and a name — no password. The password guards

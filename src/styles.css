@@ -426,6 +426,28 @@ textarea {
   color: var(--danger);
 }
 
+.draft-list {
+  width: min(300px, calc(100vw - 16px));
+}
+
+.draft-list button {
+  min-height: 44px;
+  gap: 10px;
+}
+
+.draft-list-title {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.draft-list button[aria-current] {
+  background: var(--hover);
+  font-weight: 600;
+}
+
 .card-dock {
   position: sticky;
   bottom: 0;
@@ -2087,7 +2109,7 @@ textarea {
 
 @media (width <= 640px) {
   .rail {
-    width: 34px;
+    width: 40px;
     padding-top: 8px;
   }
 
@@ -2184,8 +2206,34 @@ textarea {
     width: 20px;
   }
 
+  .rail-tab.is-open {
+    padding-inline: 1px;
+  }
+
   .rail-tab-delete {
+    width: 32px;
+    height: 32px;
+    align-items: center;
+    justify-content: center;
     opacity: 1;
     pointer-events: auto;
+  }
+
+  .rail-deck .rail-tab.is-layer,
+  .rail-deck:hover .rail-tab.is-layer,
+  .rail-deck:has(:focus-visible) .rail-tab.is-layer {
+    width: 34px;
+    height: 40px;
+    margin-top: -30px;
+  }
+
+  .rail-tab.is-layer:hover {
+    z-index: var(--z, 1);
+  }
+
+  .rail-deck .rail-tab.is-layer:first-child,
+  .rail-deck:hover .rail-tab.is-layer:first-child,
+  .rail-deck:has(:focus-visible) .rail-tab.is-layer:first-child {
+    margin-top: 0;
   }
 }
