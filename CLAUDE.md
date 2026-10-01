@@ -62,6 +62,9 @@ its own npm lockfile.
 - `npm run dev` — Vite on :5173. The editor only; `/api` is not there, so
   publishing and `?edit=` need `wrangler dev` (which serves `dist`, so build
   first) with a `.dev.vars` holding `GITHUB_TOKEN` and `WRITE_PASSWORD`.
+  StrictMode runs every effect twice here, so the startup is one promise
+  (`boot()` in `App.tsx`) both runs wait on: two runs against an empty store
+  made two drafts.
 - `npm run typecheck` — `tsc -b` across the app, `worker/` and `shared/`.
 - `npm run build` — emits `dist`, flat. Wrangler bundles `worker/` itself, so
   there is no Cloudflare plugin in the Vite build and nothing nested under

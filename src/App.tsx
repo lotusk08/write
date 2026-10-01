@@ -67,6 +67,25 @@ const LABELS: Record<ExportFormat, string> = {
 const SAVE_DEBOUNCE_MS = 600;
 const PARSE_DEBOUNCE_MS = 300;
 
+let booting: Promise<{ drafts: Draft[]; settings: Settings; config: AppConfig | null }> | null = null;
+
+function boot() {
+  booting ??= (async () => {
+    const [stored, config] = await Promise.all([draftStore.all(), fetchAppConfig()]);
+    const settings = config ? applyConfig(loadSettings(), config) : loadSettings();
+    if (config) {
+      saveSettings(settings);
+    }
+    if (stored.length) {
+      return { drafts: sortDrafts(stored), settings, config };
+    }
+    const draft = createDraft(settings);
+    await draftStore.put(draft);
+    return { drafts: [draft], settings, config };
+  })();
+  return booting;
+}
+
 export default function App() {
   usePinnedViewport();
 
@@ -247,28 +266,23 @@ export default function App() {
   }, [editor, currentId]);
 
   useEffect(() => {
-    void (async () => {
-      const [stored, remote] = await Promise.all([draftStore.all(), fetchAppConfig()]);
-      let active = loadSettings();
+    let live = true;
+    void boot().then(({ drafts: stored, settings: active, config: remote }) => {
+      if (!live) {
+        return;
+      }
       if (remote) {
-        active = applyConfig(active, remote);
         setConfig(remote);
         setSettings(active);
-        saveSettings(active);
       }
       setSiteUrl(active.siteUrl);
-      const sorted = sortDrafts(stored);
-      if (sorted.length === 0) {
-        const draft = createDraft(active);
-        await draftStore.put(draft);
-        setDrafts([draft]);
-        setCurrentId(draft.id);
-      } else {
-        setDrafts(sorted);
-        setCurrentId(sorted[0].id);
-      }
+      setDrafts(stored);
+      setCurrentId(stored[0].id);
       setReady(true);
-    })();
+    });
+    return () => {
+      live = false;
+    };
   }, []);
 
   useEffect(() => {
