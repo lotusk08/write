@@ -171,6 +171,8 @@ function linkTarget(rest: string, from: number): Target | null {
 }
 
 function emphasisEnd(rest: string, opening: string): number {
+  const char = opening[0];
+  const inner: number[] = [];
   let i = opening.length + 1;
   while (i < rest.length) {
     if (rest[i] === "\\") {
@@ -190,6 +192,23 @@ function emphasisEnd(rest: string, opening: string): number {
         i = close + 1;
         continue;
       }
+    }
+    if (char !== "~" && rest[i] === char && rest[i - 1] !== char) {
+      let run = 1;
+      while (rest[i + run] === char) {
+        run += 1;
+      }
+      const closes = /\S/.test(rest[i - 1] ?? "");
+      if (closes && !inner.length && run >= opening.length) {
+        return i;
+      }
+      if (closes && inner.at(-1) === run) {
+        inner.pop();
+      } else if (!closes && /\S/.test(rest[i + run] ?? "")) {
+        inner.push(run);
+      }
+      i += run;
+      continue;
     }
     if (rest.startsWith(opening, i) && /\S/.test(rest[i - 1] ?? "")) {
       return i;

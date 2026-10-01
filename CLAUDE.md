@@ -236,6 +236,13 @@ draws every one of these lines differently:
 - Emphasis closes on the first delimiter that is not inside a code span or a
   link's address, and an address balances its own parentheses. A URL carrying
   `**` or `()` used to cut the link in half on the second pass through.
+  A closer pairs with the nearest opener before it, as markdown-it pairs them:
+  `emphasisEnd` keeps the runs of `*` or `_` that open inside the span on a
+  stack, and a closing run of the same length shuts the innermost first. Taking
+  the first closer made `x *a. *b *c* d` italic from `a` to `c`, where the site
+  draws two literal stars and an italic `c`, and broke `*a **b** c*` at the
+  bold's first star. Strikethrough is left out of it: markdown-it does not
+  nest `~~` that way, and `~~a ~~b~~ c~~` closes on the first.
 - A fence closes on a run of backticks at least as long as the one that opened
   it, and a block is written with one longer than anything inside it, so a
   ```` ```` ```` block can hold a ``` ``` ``` one. A code span is fenced the
