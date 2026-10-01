@@ -213,9 +213,9 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
         <Tool
           icon="table"
           title="Insert table"
-          onClick={() => editor.chain().focus().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+          onClick={() => editor.chain().focus().insertTableBlock({ rows: 3, cols: 3, withHeaderRow: true }).run()}
         />
-        <Tool icon="rule" title="Divider" onClick={() => editor.chain().focus().setHorizontalRule().run()} />
+        <Tool icon="rule" title="Divider" onClick={() => editor.chain().focus().insertBlocks({ type: "horizontalRule" }).run()} />
         <Tool
           icon="center"
           title="Centre this block — the blog's {: .d-flex .c-center }"

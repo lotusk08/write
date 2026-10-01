@@ -126,7 +126,7 @@ export const LocalImage = Image.extend({
               editor
                 .chain()
                 .focus()
-                .insertContent(
+                .insertBlocks(
                   stored.map((image, index) => ({
                     type: this.name,
                     attrs: {

@@ -1,8 +1,9 @@
 import { Node, mergeAttributes } from "@tiptap/core";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { NodeSelection, TextSelection, type EditorState } from "@tiptap/pm/state";
+import { NodeSelection, type EditorState } from "@tiptap/pm/state";
 import type { NodeView } from "@tiptap/pm/view";
 import { imageRun, withoutRowClasses } from "./blogFormat.ts";
+import { continueAfter } from "./insertBlocks.ts";
 
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
@@ -114,8 +115,7 @@ export const Gallery = Node.create({
           const gallery = this.type.create({ kind }, run.map(({ node }) => plainImage(node)));
           if (dispatch) {
             tr.replaceWith(first.pos, last.pos + last.node.nodeSize, gallery);
-            tr.setSelection(NodeSelection.create(tr.doc, first.pos));
-            dispatch(tr);
+            dispatch(continueAfter(tr, first.pos + gallery.nodeSize));
           }
           return true;
         },
@@ -131,8 +131,7 @@ export const Gallery = Node.create({
             const images: ProseMirrorNode[] = [];
             current.node.forEach((child) => images.push(plainImage(child)));
             tr.replaceWith(current.pos, current.pos + current.node.nodeSize, images);
-            tr.setSelection(TextSelection.near(tr.doc.resolve(current.pos)));
-            dispatch(tr);
+            dispatch(continueAfter(tr, current.pos + images.reduce((size, image) => size + image.nodeSize, 0)));
           }
           return true;
         },

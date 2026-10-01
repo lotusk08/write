@@ -11,6 +11,7 @@ import { collapsibleExtensions } from "./extensions/collapsible.ts";
 import { Embed } from "./extensions/embed.ts";
 import { footnoteExtensions } from "./extensions/footnote.ts";
 import { Gallery } from "./extensions/gallery.ts";
+import { InsertBlocks } from "./extensions/insertBlocks.ts";
 import { EnterBreaks } from "./extensions/lineBreak.ts";
 import { PreviewCodeBlock, RawBlock } from "./extensions/preview.ts";
 import { NoteQuote } from "./extensions/noteQuote.ts";
@@ -32,6 +33,7 @@ export const buildEditorExtensions = (options: { collab?: boolean } = {}) => [
   FilepathCode,
   BlockAttributes,
   EnterBreaks,
+  InsertBlocks,
   NoteQuote,
   OrderedList.extend({ content: "(listItem|taskItem)+" }),
   TaskList.extend({ content: "(taskItem|listItem)+" }),

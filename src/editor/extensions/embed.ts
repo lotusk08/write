@@ -113,7 +113,7 @@ export const Embed = Node.create({
       setEmbed:
         (attributes) =>
         ({ commands }) =>
-          commands.insertContent({ type: this.name, attrs: attributes }),
+          commands.insertBlocks({ type: this.name, attrs: attributes }),
     };
   },
 
