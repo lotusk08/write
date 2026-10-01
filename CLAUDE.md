@@ -207,6 +207,10 @@ dropped every tag added after them. An empty answer from `/api/topics` is not
 kept for the session, so one failed fetch is retried on the next open.
 A typed field is tidied on blur only if it was edited while focused, so
 looking at a multi-line description read from a post leaves its lines alone.
+The row is scrolled into view again whenever the panel it scrolls in changes
+size, a frame later, rather than on the viewport's resize event: that event
+arrives before the sheet has shrunk to the keyboard, and the chips were
+measured against the old height and left under the sheet's footer.
 
 ## Round-tripping published posts
 

@@ -11,10 +11,13 @@ interface TokenInputProps {
   onChange: (values: string[]) => void;
 }
 
-function scroller(element: HTMLElement): HTMLElement | null {
+function scroller(element: HTMLElement, overflowing = true): HTMLElement | null {
   for (let node = element.parentElement; node; node = node.parentElement) {
     const { overflowY } = getComputedStyle(node);
-    if ((overflowY === "auto" || overflowY === "scroll") && node.scrollHeight > node.clientHeight) {
+    if (
+      (overflowY === "auto" || overflowY === "scroll") &&
+      (!overflowing || node.scrollHeight > node.clientHeight)
+    ) {
       return node;
     }
   }
@@ -66,17 +69,24 @@ export function TokenInput({ id, values, placeholder, suggestions = [], onChange
   }, [open, draft]);
 
   useEffect(() => {
-    const view = window.visualViewport;
-    if (!focused || !view) {
+    const parent = focused && box.current ? scroller(box.current, false) : null;
+    if (!parent) {
       return;
     }
-    const onResize = () => {
-      if (box.current) {
-        reveal(box.current, list.current ?? box.current);
-      }
+    let frame = 0;
+    const observer = new ResizeObserver(() => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(() => {
+        if (box.current) {
+          reveal(box.current, list.current ?? box.current);
+        }
+      });
+    });
+    observer.observe(parent);
+    return () => {
+      observer.disconnect();
+      window.cancelAnimationFrame(frame);
     };
-    view.addEventListener("resize", onResize);
-    return () => view.removeEventListener("resize", onResize);
   }, [focused]);
 
   const commit = (raw: string) => {
