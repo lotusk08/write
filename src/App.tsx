@@ -1,5 +1,6 @@
 import { EditorContent, useEditor } from "@tiptap/react";
 import { BubbleMenu } from "@tiptap/react/menus";
+import { NodeSelection } from "@tiptap/pm/state";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AppConfig, PostMeta, PublishResult } from "../shared/types.ts";
 import { DraftRail } from "./components/DraftRail.tsx";
@@ -769,7 +770,17 @@ export default function App() {
                   />
                 ) : editor ? (
                   <>
-                    <BubbleMenu editor={editor} className="bubble">
+                    <BubbleMenu
+                      editor={editor}
+                      className="bubble"
+                      shouldShow={({ editor: instance, element, view, state, from, to }) =>
+                        !(state.selection instanceof NodeSelection) &&
+                        !state.selection.empty &&
+                        instance.isEditable &&
+                        (view.hasFocus() || element.contains(document.activeElement)) &&
+                        state.doc.textBetween(from, to).length > 0
+                      }
+                    >
                       {(
                         [
                           ["bold", "Bold", () => editor.chain().focus().toggleBold().run()],
