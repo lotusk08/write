@@ -60,3 +60,7 @@ export function relativeTime(timestamp: number): string {
   }
   return formatter.format(-Math.round(seconds / 31557600), "year");
 }
+
+export function tidyField(input: string): string {
+  return input.replace(/\s*\n\s*/g, " ").trim();
+}

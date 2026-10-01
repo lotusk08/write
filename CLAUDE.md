@@ -358,7 +358,12 @@ Things that took a bug to learn, and that a change here can quietly undo:
   their key for an unknown key too, kept raw with it. On the way out a value is
   written exactly — a newline as `\n` inside double quotes, never folded into a
   space or trimmed — so the file reads differently but js-yaml reads the
-  same string back. `pin` and `toc` are read as the site reads them, not as
+  same string back. Tidying belongs to typing, not writing: the title,
+  description, author and alt fields trim themselves and fold their line
+  breaks into spaces on blur (`tidyField`), which is what the writer used to
+  do to every value. Left to the writer, a phone keyboard's trailing space
+  published `"Title "`; done in the writer, it changed values read from a
+  post that meant their spaces. `pin` and `toc` are read as the site reads them, not as
   YAML 1.1 did: `pin` is on only for `true` (or `"true"`), `toc` off only for
   `false`, so `pin: yes` and `toc: no` stay what the site already draws.
 - `pin` and `toc` are coerced with `Boolean()` before interpolation. A draft

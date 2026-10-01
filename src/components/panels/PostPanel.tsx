@@ -4,6 +4,7 @@ import { fetchTopics } from "../../lib/api.ts";
 import { isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
 import type { Settings } from "../../lib/settings.ts";
 import { displaySrc } from "../../lib/site.ts";
+import { tidyField } from "../../lib/text.ts";
 import { TokenInput } from "../TokenInput.tsx";
 import { Section } from "./Section.tsx";
 
@@ -153,6 +154,12 @@ export function PostPanel({
                     cover: { ...meta.cover, path: meta.cover?.path ?? "", alt: event.target.value },
                   })
                 }
+                onBlur={(event) => {
+                  const alt = tidyField(event.target.value);
+                  if (alt !== event.target.value) {
+                    onChange({ cover: { ...meta.cover, path: meta.cover?.path ?? "", alt } });
+                  }
+                }}
               />
             </>
           ) : null}
@@ -186,6 +193,12 @@ export function PostPanel({
             className="input"
             value={meta.author}
             onChange={(event) => onChange({ author: event.target.value })}
+            onBlur={(event) => {
+              const author = tidyField(event.target.value);
+              if (author !== event.target.value) {
+                onChange({ author });
+              }
+            }}
           />
         </div>
       </Section>

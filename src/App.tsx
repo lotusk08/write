@@ -44,7 +44,7 @@ import { docToMarkdown, docToPlainText } from "./lib/markdown.ts";
 import { draftSlug, markdownForExport, type PublishPlan } from "./lib/publish.ts";
 import { applyConfig, loadSettings, saveSettings, type Settings } from "./lib/settings.ts";
 import { setSiteUrl } from "./lib/site.ts";
-import { countWords, datePrefix, slugify } from "./lib/text.ts";
+import { countWords, datePrefix, slugify, tidyField } from "./lib/text.ts";
 import { usePinnedViewport } from "./lib/viewport.ts";
 
 type SaveState = "idle" | "saving" | "saved";
@@ -737,6 +737,12 @@ export default function App() {
                   placeholder="Title"
                   value={current.meta.title}
                   onChange={(event) => updateMeta({ title: event.target.value })}
+                  onBlur={(event) => {
+                    const title = tidyField(event.target.value);
+                    if (title !== event.target.value) {
+                      updateMeta({ title });
+                    }
+                  }}
                 />
                 <textarea
                   ref={description}
@@ -745,6 +751,12 @@ export default function App() {
                   rows={1}
                   value={current.meta.description}
                   onChange={(event) => updateMeta({ description: event.target.value })}
+                  onBlur={(event) => {
+                    const description = tidyField(event.target.value);
+                    if (description !== event.target.value) {
+                      updateMeta({ description });
+                    }
+                  }}
                 />
                 {source !== null ? (
                   <textarea
