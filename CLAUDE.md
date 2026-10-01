@@ -28,7 +28,24 @@ than at a prompt. Drafts do not — they are the writing nobody has seen — and
 does publishing. So the password appears in one place, the publish dialog.
 
 The Worker fails closed: with no `WRITE_PASSWORD` set it refuses to publish at
-all, because it would otherwise be an open endpoint holding a write token.
+all, because it would otherwise be an open endpoint holding a write token. A
+password of nothing but whitespace counts as unset, and it is compared as two
+SHA-256 digests, so the comparison takes the same time whatever its length.
+
+A repository path is checked as segments and sent as segments: `repoPath`
+refuses `%`, `?`, `#`, a backslash, control characters and any empty, `.` or
+`..` segment, and `readTextFile` encodes each segment into the URL. Checking
+for a literal `..` and then pasting the path into the URL let
+`src/posts/%252e%252e/drafts/x.md` through — the query decoded it to `%2e%2e`,
+GitHub's URL parser to `..` — which read drafts without the password, and with
+`?ref=` or more levels up, any file or repository the token could see.
+Publishing goes to `BLOG_BRANCH` and nowhere else; the client never sends a
+branch, and the field that took one let a leaked password move tags.
+Request bodies are read through `readCapped`, which counts bytes as they
+stream, so a chunked upload cannot be buffered whole before its size is
+known. Reading a published post is public, so it is rate-limited instead
+(`SOURCE_RATE`, sixty a minute per connection): each read spends the
+token's GitHub quota.
 
 `401` is reserved for that password and nothing else — it is the app's cue to
 forget what it stored and ask again, so GitHub's own 401 and 403 are reported
@@ -462,7 +479,13 @@ That works only because those bytes carry the room's own struct IDs: an
 update rebuilt from the draft's JSON would mint new IDs and duplicate every
 node on merge, which is why the JSON copy must never be used to seed. The
 switch itself shows the state it is heading to while the request runs rather
-than snapping back until the token lands. Only the body is
+than snapping back until the token lands. A room keeps its document in
+1 MB pieces (`chunks` and `doc:0`, `doc:1`, …), because a SQLite-backed
+Durable Object limits the size of a single stored value — 2 MB, as far as
+could be told, where a seed may be twice that — and wrangler's local runtime
+does not enforce it; a room saved as one `doc` value before is read and rewritten in pieces.
+A seed is tried on a throwaway Y.Doc first, so one that is not an update is a
+400 rather than an uncaught error. Only the body is
 shared; title and front matter stay per-device. Trying it locally means
 `wrangler dev` — the room is a Durable Object, and Vite serves no `/api`. In
 wrangler's local runtime a binary WebSocket message arrives as a Blob, not the

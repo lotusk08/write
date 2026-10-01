@@ -110,7 +110,7 @@ export async function readTextFile(
   try {
     const file = await gh<{ content: string; encoding: string }>(
       token,
-      `/repos/${repo}/contents/${path}?ref=${encodeURIComponent(branch)}`,
+      `/repos/${repo}/contents/${path.split("/").map(encodeURIComponent).join("/")}?ref=${encodeURIComponent(branch)}`,
     );
     if (file.encoding !== "base64") {
       return null;

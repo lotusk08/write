@@ -10,6 +10,14 @@ const MESSAGE_QUERY_AWARENESS = 3;
 const SAVE_DELAY_MS = 900;
 const CLOSE_ENDED = 4404;
 const ROOM_TTL_MS = 14 * 24 * 60 * 60 * 1000;
+const CHUNK_BYTES = 1024 * 1024;
+
+function bytesOf(value: unknown): Uint8Array | null {
+  if (value instanceof Uint8Array) {
+    return value;
+  }
+  return value instanceof ArrayBuffer ? new Uint8Array(value) : null;
+}
 
 export class ShareRoom {
   private state: DurableObjectState;
@@ -72,12 +80,46 @@ export class ShareRoom {
       return;
     }
     this.loaded = true;
-    const stored = await this.state.storage.get("doc");
-    if (stored instanceof Uint8Array) {
+    const stored = await this.readDoc();
+    if (stored) {
       Y.applyUpdate(this.doc, stored);
-    } else if (stored instanceof ArrayBuffer) {
-      Y.applyUpdate(this.doc, new Uint8Array(stored));
     }
+  }
+
+  private async readDoc(): Promise<Uint8Array | null> {
+    const count = await this.state.storage.get("chunks");
+    if (typeof count !== "number") {
+      return bytesOf(await this.state.storage.get("doc"));
+    }
+    const keys = Array.from({ length: count }, (_, index) => `doc:${index}`);
+    const stored = await this.state.storage.get(keys);
+    const parts = keys.map((key) => bytesOf(stored.get(key)));
+    if (parts.some((part) => part === null)) {
+      return null;
+    }
+    const doc = new Uint8Array(parts.reduce((size, part) => size + part!.byteLength, 0));
+    let offset = 0;
+    for (const part of parts) {
+      doc.set(part!, offset);
+      offset += part!.byteLength;
+    }
+    return doc;
+  }
+
+  private async saveDoc(extra: Record<string, unknown>): Promise<void> {
+    const update = Y.encodeStateAsUpdate(this.doc);
+    const count = Math.max(1, Math.ceil(update.byteLength / CHUNK_BYTES));
+    const previous = await this.state.storage.get("chunks");
+    const entries: Record<string, unknown> = { ...extra, chunks: count };
+    for (let index = 0; index < count; index++) {
+      entries[`doc:${index}`] = update.slice(index * CHUNK_BYTES, (index + 1) * CHUNK_BYTES);
+    }
+    await this.state.storage.put(entries);
+    const stale = ["doc"];
+    for (let index = count; index < (typeof previous === "number" ? previous : 0); index++) {
+      stale.push(`doc:${index}`);
+    }
+    await this.state.storage.delete(stale);
   }
 
   private queueSave(): void {
@@ -86,7 +128,9 @@ export class ShareRoom {
     }
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      void this.state.storage.put({ doc: Y.encodeStateAsUpdate(this.doc), touched: Date.now() });
+      this.saveDoc({ touched: Date.now() }).catch((error) => {
+        console.error("share room: save failed", error);
+      });
     }, SAVE_DELAY_MS);
   }
 
@@ -229,9 +273,17 @@ export class ShareRoom {
       await this.load();
       const body = new Uint8Array(await request.arrayBuffer());
       if (body.byteLength > 0) {
+        const seed = new Y.Doc();
+        try {
+          Y.applyUpdate(seed, body);
+        } catch {
+          return new Response("Not a document.", { status: 400 });
+        } finally {
+          seed.destroy();
+        }
         Y.applyUpdate(this.doc, body);
       }
-      await this.state.storage.put({ doc: Y.encodeStateAsUpdate(this.doc), live: true });
+      await this.saveDoc({ live: true });
       await this.keepAlive();
       return new Response(null, { status: 204 });
     }

@@ -21,6 +21,7 @@ export interface Env {
   ASSETS: Fetcher;
   SHARE: DurableObjectNamespace;
   SHARE_RATE?: RateLimit;
+  SOURCE_RATE?: RateLimit;
   GITHUB_TOKEN?: string;
   WRITE_PASSWORD?: string;
   BLOG_REPO?: string;
@@ -45,15 +46,78 @@ function dirs(env: Env) {
   };
 }
 
-function sameSecret(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
+async function digest(value: string): Promise<Uint8Array> {
+  return new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(value)));
+}
+
+async function sameSecret(a: string, b: string): Promise<boolean> {
+  const [left, right] = await Promise.all([digest(a), digest(b)]);
   let differences = 0;
-  for (let index = 0; index < a.length; index++) {
-    differences |= a.charCodeAt(index) ^ b.charCodeAt(index);
+  for (let index = 0; index < left.length; index++) {
+    differences |= left[index] ^ right[index];
   }
   return differences === 0;
+}
+
+const UNSAFE_PATH = /[%?#\\\x00-\x1f\x7f]/;
+
+function repoPath(raw: string): string | null {
+  const path = raw.replace(/^\/+/, "");
+  if (!path || path.length > 300 || UNSAFE_PATH.test(path)) {
+    return null;
+  }
+  return path.split("/").some((segment) => segment === "" || segment === "." || segment === "..")
+    ? null
+    : path;
+}
+
+async function readCapped(request: Request, max: number): Promise<Uint8Array | null> {
+  if (Number(request.headers.get("content-length") ?? "0") > max) {
+    return null;
+  }
+  if (!request.body) {
+    return new Uint8Array();
+  }
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    size += value.byteLength;
+    if (size > max) {
+      await reader.cancel();
+      return null;
+    }
+    chunks.push(value);
+  }
+  const body = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    body.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return body;
+}
+
+function noindex(response: Response): Response {
+  if (response.status === 101) {
+    return response;
+  }
+  const marked = new Response(response.body, response);
+  marked.headers.set("x-robots-tag", "noindex");
+  return marked;
+}
+
+async function limited(limiter: RateLimit | undefined, request: Request, scope: string): Promise<boolean> {
+  if (!limiter) {
+    return false;
+  }
+  const ip = request.headers.get("cf-connecting-ip") ?? "";
+  const { success } = await limiter.limit({ key: `${scope}:${ip}` });
+  return !success;
 }
 
 function unreachable(env: Env): string | null {
@@ -70,7 +134,7 @@ function problem(env: Env): string | null {
   if (!env.GITHUB_TOKEN) {
     return unreachable(env);
   }
-  if (!env.WRITE_PASSWORD) {
+  if (!env.WRITE_PASSWORD?.trim()) {
     return "Publishing is disabled until WRITE_PASSWORD is set (`wrangler secret put WRITE_PASSWORD`), otherwise this endpoint would let anyone write to the blog.";
   }
   return unreachable(env);
@@ -93,19 +157,19 @@ function crossSite(request: Request): boolean {
     return false;
   }
   try {
-    return new URL(origin).host !== new URL(request.url).host;
+    return new URL(origin).origin !== new URL(request.url).origin;
   } catch {
     return true;
   }
 }
 
-function authorize(request: Request, env: Env): Response | null {
+async function authorize(request: Request, env: Env): Promise<Response | null> {
   const missing = problem(env);
   if (missing) {
     return json({ error: missing }, env.GITHUB_TOKEN ? 500 : 501);
   }
   const supplied = request.headers.get("x-write-password") ?? "";
-  if (!sameSecret(supplied, env.WRITE_PASSWORD!)) {
+  if (!(await sameSecret(supplied, env.WRITE_PASSWORD!))) {
     return json({ error: supplied ? "Wrong password." : "This needs the publish password." }, 401);
   }
   return null;
@@ -117,8 +181,6 @@ function upstreamStatus(error: unknown): number {
   }
   return error.status === 401 || error.status === 403 ? 502 : error.status;
 }
-
-const BRANCH_RE = /^[A-Za-z0-9._\-/]{1,120}$/;
 
 function validateFiles(files: unknown, env: Env): { files: PublishFile[] } | { error: string } {
   if (!Array.isArray(files) || files.length === 0) {
@@ -136,8 +198,8 @@ function validateFiles(files: unknown, env: Env): { files: PublishFile[] } | { e
     if (typeof file?.path !== "string" || typeof file?.contentBase64 !== "string") {
       return { error: "Malformed file entry." };
     }
-    const path = file.path.replace(/^\/+/, "");
-    if (path.includes("..") || path.includes("//") || path.length > 300) {
+    const path = repoPath(file.path);
+    if (!path) {
       return { error: `Unsafe path: ${file.path}` };
     }
     if (!allowed.some((dir) => path.startsWith(dir))) {
@@ -207,15 +269,22 @@ async function handleTopics(env: Env): Promise<Response> {
 }
 
 async function handlePublish(request: Request, env: Env): Promise<Response> {
-  const denied = authorize(request, env);
+  const denied = await authorize(request, env);
   if (denied) {
     return denied;
   }
 
+  const raw = await readCapped(request, MAX_REQUEST_BYTES + 1024 * 1024);
+  if (!raw) {
+    return json({ error: "Publish payload is too large (max ~20 MB)." }, 400);
+  }
   let body: PublishRequest;
   try {
-    body = (await request.json()) as PublishRequest;
+    body = JSON.parse(new TextDecoder().decode(raw)) as PublishRequest;
   } catch {
+    return json({ error: "Invalid JSON body." }, 400);
+  }
+  if (!body || typeof body !== "object" || Array.isArray(body)) {
     return json({ error: "Invalid JSON body." }, 400);
   }
 
@@ -224,12 +293,14 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
     return json({ error: checked.error }, 400);
   }
 
-  const branch = body.branch?.trim() || env.BLOG_BRANCH || "main";
-  if (!BRANCH_RE.test(branch)) {
-    return json({ error: `Invalid branch name: ${branch}` }, 400);
+  const branch = env.BLOG_BRANCH || "main";
+  if (body.branch !== undefined && body.branch !== null && body.branch !== branch) {
+    return json({ error: `Publishing goes to ${branch} only.` }, 400);
   }
 
-  const message = (body.message || "").trim().slice(0, 500) || "post: update from write";
+  const message =
+    (typeof body.message === "string" ? body.message : "").trim().slice(0, 500) ||
+    "post: update from write";
 
   try {
     const result: PublishResult = await commitFiles({
@@ -239,7 +310,7 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
       baseBranch: env.BLOG_BRANCH || undefined,
       message,
       files: checked.files,
-      pullRequest: body.pullRequest ?? null,
+      pullRequest: null,
     });
     return json(result);
   } catch (error) {
@@ -272,10 +343,14 @@ async function whyMissing(env: Env, branch: string, path: string): Promise<strin
 
 async function handleSource(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
-  const path = (url.searchParams.get("path") ?? "").replace(/^\/+/, "");
+  const requested = url.searchParams.get("path") ?? "";
+  const path = repoPath(requested);
   const allowed = Object.values(dirs(env)).map((dir) => `${dir.replace(/\/+$/, "")}/`);
-  if (path.includes("..") || !allowed.some((dir) => path.startsWith(dir))) {
-    return json({ error: `Path outside the allowed directories (${allowed.join(", ")}): ${path}` }, 400);
+  if (!path || !allowed.some((dir) => path.startsWith(dir))) {
+    return json({ error: `Path outside the allowed directories (${allowed.join(", ")}): ${requested}` }, 400);
+  }
+  if (await limited(env.SOURCE_RATE, request, "source")) {
+    return json({ error: "Too many requests — wait a minute and try again." }, 429);
   }
   if (!/\.(md|markdown)$/i.test(path)) {
     return json({ error: "Only Markdown files can be opened." }, 400);
@@ -288,7 +363,7 @@ async function handleSource(request: Request, env: Env): Promise<Response> {
       return json({ error: missing }, env.GITHUB_TOKEN ? 500 : 501);
     }
   } else {
-    const denied = authorize(request, env);
+    const denied = await authorize(request, env);
     if (denied) {
       return denied;
     }
@@ -316,22 +391,14 @@ async function handleShareCreate(request: Request, env: Env): Promise<Response> 
   if (crossSite(request)) {
     return json({ error: "Shares can only be managed from the app itself." }, 403);
   }
-  if (env.SHARE_RATE) {
-    const ip = request.headers.get("cf-connecting-ip") ?? "";
-    const { success } = await env.SHARE_RATE.limit({ key: `share:${ip}` });
-    if (!success) {
-      return json(
-        { error: "Too many new shares from this connection — wait a minute and try again." },
-        429,
-      );
-    }
+  if (await limited(env.SHARE_RATE, request, "share")) {
+    return json(
+      { error: "Too many new shares from this connection — wait a minute and try again." },
+      429,
+    );
   }
-  const declared = Number(request.headers.get("content-length") ?? "0");
-  if (declared > SHARE_SEED_MAX_BYTES) {
-    return json({ error: "Draft is too large to share (max ~4 MB)." }, 400);
-  }
-  const seed = await request.arrayBuffer();
-  if (seed.byteLength > SHARE_SEED_MAX_BYTES) {
+  const seed = await readCapped(request, SHARE_SEED_MAX_BYTES);
+  if (!seed) {
     return json({ error: "Draft is too large to share (max ~4 MB)." }, 400);
   }
   const token = [...crypto.getRandomValues(new Uint8Array(16))]
@@ -339,6 +406,9 @@ async function handleShareCreate(request: Request, env: Env): Promise<Response> 
     .join("");
   const room = env.SHARE.get(env.SHARE.idFromName(token));
   const seeded = await room.fetch("https://share/seed", { method: "POST", body: seed });
+  if (seeded.status === 400) {
+    return json({ error: "That is not a draft the app can share." }, 400);
+  }
   if (!seeded.ok) {
     return json({ error: "Could not start the share." }, 500);
   }
@@ -348,16 +418,16 @@ async function handleShareCreate(request: Request, env: Env): Promise<Response> 
 async function handleShareRoom(request: Request, env: Env, token: string): Promise<Response> {
   const room = env.SHARE.get(env.SHARE.idFromName(token));
   if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-    return room.fetch(request);
+    return noindex(await room.fetch(request));
   }
   if (request.method === "DELETE") {
     if (crossSite(request)) {
       return json({ error: "Shares can only be managed from the app itself." }, 403);
     }
-    return room.fetch("https://share/", { method: "DELETE" });
+    return noindex(await room.fetch("https://share/", { method: "DELETE" }));
   }
   if (request.method === "GET") {
-    return room.fetch("https://share/", { method: "GET" });
+    return noindex(await room.fetch("https://share/", { method: "GET" }));
   }
   return json({ error: "Use GET, DELETE, or a WebSocket." }, 405);
 }
@@ -367,7 +437,7 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === "/api/config") {
-      return handleConfig(env);
+      return request.method === "GET" ? handleConfig(env) : json({ error: "Use GET." }, 405);
     }
     if (url.pathname === "/api/share") {
       return request.method === "POST"
