@@ -468,6 +468,10 @@ every draft by title, each row 44px, scrolling inside the visible band; a deck
 of one still opens its draft directly. The open tab's delete button is 32px
 there.
 
+The menu sheet covers the ⌘ button that opened it, so on a phone it carries
+its own close button, and closing it from inside — that button or Escape —
+hands focus back to ⌘.
+
 ## Sharing a draft
 
 The Share tab holds one switch and a name — no password. The password guards
