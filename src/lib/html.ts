@@ -1,14 +1,13 @@
 import type { PostMeta } from "../../shared/types.ts";
-import { isLocalSrc, localId, imageStore } from "./db.ts";
+import { localId, imageStore } from "./db.ts";
 import { bytesToBase64 } from "../../shared/base64.ts";
 
 async function inlineImages(root: Document): Promise<void> {
-  const images = [...root.querySelectorAll("img")].filter((img) =>
-    isLocalSrc(img.getAttribute("src")),
-  );
+  const images = [...root.querySelectorAll("img[data-local-src]")];
   await Promise.all(
     images.map(async (img) => {
-      const stored = await imageStore.get(localId(img.getAttribute("src") ?? ""));
+      const stored = await imageStore.get(localId(img.getAttribute("data-local-src") ?? ""));
+      img.removeAttribute("data-local-src");
       if (!stored) {
         img.removeAttribute("src");
         return;

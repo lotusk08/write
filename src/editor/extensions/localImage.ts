@@ -97,6 +97,14 @@ export const LocalImage = Image.extend({
   addAttributes() {
     return {
       ...this.parent?.(),
+      src: {
+        default: null,
+        parseHTML: (element) => element.getAttribute("data-local-src") ?? element.getAttribute("src"),
+        renderHTML: (attributes) =>
+          isLocalSrc(attributes.src as string | null)
+            ? { "data-local-src": attributes.src as string }
+            : { src: attributes.src as string | null },
+      },
       title: { default: null },
       ial: {
         default: null,
@@ -104,6 +112,10 @@ export const LocalImage = Image.extend({
         renderHTML: (attributes) => (attributes.ial ? { "data-ial": attributes.ial as string } : {}),
       },
     };
+  },
+
+  parseHTML() {
+    return [...(this.parent?.() ?? []), { tag: "img[data-local-src]" }];
   },
 
   addCommands() {
