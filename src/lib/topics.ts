@@ -4,6 +4,7 @@ export const SUGGESTION_LIMIT = 8;
 
 export function topicSlug(value: string): string {
   return value
+    .normalize("NFC")
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "");

@@ -36,6 +36,10 @@ function reveal(top: HTMLElement, bottom: HTMLElement) {
   }
 }
 
+function changed(next: string[], values: string[]): boolean {
+  return next.length !== values.length || next.some((value, index) => value !== values[index]);
+}
+
 export function TokenInput({ id, values, placeholder, suggestions = [], onChange }: TokenInputProps) {
   const [draft, setDraft] = useState("");
   const [focused, setFocused] = useState(false);
@@ -80,11 +84,11 @@ export function TokenInput({ id, values, placeholder, suggestions = [], onChange
       ...values,
       ...raw
         .split(",")
-        .map((item) => item.trim())
+        .map((item) => item.normalize("NFC").trim())
         .filter(Boolean)
         .map((item) => existingSpelling(item, suggestions)),
     ]);
-    if (next.length !== values.length) {
+    if (changed(next, values)) {
       onChange(next);
     }
     setDraft("");
@@ -92,7 +96,7 @@ export function TokenInput({ id, values, placeholder, suggestions = [], onChange
 
   const pick = (topic: Topic) => {
     const next = uniqueNames([...values, topic.title]);
-    if (next.length !== values.length) {
+    if (changed(next, values)) {
       onChange(next);
     }
     setDraft("");
@@ -100,6 +104,9 @@ export function TokenInput({ id, values, placeholder, suggestions = [], onChange
   };
 
   const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) {
+      return;
+    }
     if (event.key === "ArrowDown" && open) {
       event.preventDefault();
       setActive((index) => Math.min(index + 1, offered.length - 1));
@@ -154,7 +161,14 @@ export function TokenInput({ id, values, placeholder, suggestions = [], onChange
           autoCorrect="off"
           spellCheck={false}
           onChange={(event) => {
-            setDraft(event.target.value);
+            const typed = event.target.value;
+            const cut = typed.lastIndexOf(",");
+            if (cut !== -1 && !(event.nativeEvent as InputEvent).isComposing) {
+              commit(typed.slice(0, cut));
+              setDraft(typed.slice(cut + 1).trimStart());
+            } else {
+              setDraft(typed);
+            }
             setDismissed(false);
           }}
           onKeyDown={onKeyDown}

@@ -405,6 +405,7 @@ const FOOTNOTE_REF = /^\[\^([^\]\s]+)\]/;
 const TAG = /^<(u|mark|sup|sub)>([\s\S]*?)<\/\1>/;
 const AUTOLINK = /^<([a-zA-Z][\w+.-]{1,31}:[^\s<>]*)>/;
 const ESCAPABLE = /[!-/:-@[-`{-~]/;
+const WORD = /[\p{L}\p{N}]/u;
 
 function addressEnd(source: string, from: number): number {
   let depth = 0;
@@ -449,7 +450,8 @@ function linkTarget(rest: string, from: number): Target | null {
 function emphasisEnd(rest: string, opening: string): number {
   const char = opening[0];
   const inner: number[] = [];
-  let i = opening.length + 1;
+  let i = opening.length;
+  i += rest[i] === "\\" ? 2 : 1;
   while (i < rest.length) {
     if (rest[i] === "\\") {
       i += 2;
@@ -474,13 +476,28 @@ function emphasisEnd(rest: string, opening: string): number {
       while (rest[i + run] === char) {
         run += 1;
       }
-      const closes = /\S/.test(rest[i - 1] ?? "");
-      if (closes && !inner.length && run >= opening.length) {
-        return i;
+      const before = rest[i - 1] ?? "";
+      const after = rest[i + run] ?? "";
+      let closes = /\S/.test(before);
+      let opens = /\S/.test(after);
+      if (char === "_") {
+        closes &&= !WORD.test(after);
+        opens &&= !WORD.test(before);
       }
-      if (closes && inner.at(-1) === run) {
-        inner.pop();
-      } else if (!closes && /\S/.test(rest[i + run] ?? "")) {
+      if (closes) {
+        let left = run;
+        while (inner.length && left >= inner.at(-1)!) {
+          left -= inner.pop()!;
+        }
+        if (!inner.length && left >= opening.length) {
+          return i + run - left;
+        }
+        if (left < run) {
+          i += run;
+          continue;
+        }
+      }
+      if (opens && !closes) {
         inner.push(run);
       }
       i += run;
@@ -614,7 +631,7 @@ export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
         /^(\*|_)(?=\S)/.exec(rest)?.[1];
       const close = opening ? emphasisEnd(rest, opening) : -1;
       const underscore = opening?.startsWith("_");
-      const boundary = !underscore || !/\w/.test(source[i - 1] ?? "");
+      const boundary = !underscore || !WORD.test(source[i - 1] ?? "");
       if (opening && close > 0 && boundary) {
         const added =
           opening === "~~"

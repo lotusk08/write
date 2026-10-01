@@ -64,3 +64,15 @@ export function relativeTime(timestamp: number): string {
 export function tidyField(input: string): string {
   return input.replace(/\s*\n\s*/g, " ").trim();
 }
+
+export function rememberValue(element: HTMLInputElement | HTMLTextAreaElement): void {
+  element.dataset.before = element.value;
+}
+
+export function tidyEdited(element: HTMLInputElement | HTMLTextAreaElement): string | null {
+  if (element.value === element.dataset.before) {
+    return null;
+  }
+  const tidy = tidyField(element.value);
+  return tidy === element.value ? null : tidy;
+}

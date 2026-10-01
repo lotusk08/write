@@ -4,7 +4,7 @@ import { fetchTopics } from "../../lib/api.ts";
 import { isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
 import type { Settings } from "../../lib/settings.ts";
 import { displaySrc } from "../../lib/site.ts";
-import { tidyField } from "../../lib/text.ts";
+import { rememberValue, tidyEdited } from "../../lib/text.ts";
 import { TokenInput } from "../TokenInput.tsx";
 import { Section } from "./Section.tsx";
 
@@ -154,9 +154,10 @@ export function PostPanel({
                     cover: { ...meta.cover, path: meta.cover?.path ?? "", alt: event.target.value },
                   })
                 }
+                onFocus={(event) => rememberValue(event.currentTarget)}
                 onBlur={(event) => {
-                  const alt = tidyField(event.target.value);
-                  if (alt !== event.target.value) {
+                  const alt = tidyEdited(event.currentTarget);
+                  if (alt !== null) {
                     onChange({ cover: { ...meta.cover, path: meta.cover?.path ?? "", alt } });
                   }
                 }}
@@ -193,9 +194,10 @@ export function PostPanel({
             className="input"
             value={meta.author}
             onChange={(event) => onChange({ author: event.target.value })}
+            onFocus={(event) => rememberValue(event.currentTarget)}
             onBlur={(event) => {
-              const author = tidyField(event.target.value);
-              if (author !== event.target.value) {
+              const author = tidyEdited(event.currentTarget);
+              if (author !== null) {
                 onChange({ author });
               }
             }}

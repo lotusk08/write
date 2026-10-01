@@ -174,7 +174,16 @@ sheet that happened to start on a chip. Arrow keys move through the row and Ente
 otherwise Enter and comma commit what was typed, and a name that slugifies
 like an existing topic is written in the blog's spelling. A new name is still
 a new name. `topicSlug` in `lib/topics.ts` is that one rule, also behind
-`uniqueNames` when the front matter is written.
+`uniqueNames` when the front matter is written; it composes the text first
+(NFC), since a decomposed `Tết` slugged to `te-t`. Enter is ignored while an
+input method is composing — Vietnamese Telex holds the word open, and Enter
+then committed half of it — and a typed comma commits as well as the key,
+because Gboard reports every key as 229 and the comma key never arrives as
+one. The list compares contents, not lengths: a post holding `Em` and `em`
+dropped every tag added after them. An empty answer from `/api/topics` is not
+kept for the session, so one failed fetch is retried on the next open.
+A typed field is tidied on blur only if it was edited while focused, so
+looking at a multi-line description read from a post leaves its lines alone.
 
 ## Round-tripping published posts
 
@@ -259,7 +268,12 @@ draws every one of these lines differently:
   the first closer made `x *a. *b *c* d` italic from `a` to `c`, where the site
   draws two literal stars and an italic `c`, and broke `*a **b** c*` at the
   bold's first star. Strikethrough is left out of it: markdown-it does not
-  nest `~~` that way, and `~~a ~~b~~ c~~` closes on the first.
+  nest `~~` that way, and `~~a ~~b~~ c~~` closes on the first. One closing
+  run may shut the inner span and the outer one together — `*a **b c***` — so
+  a run pays off the stack and closes the outer with what is left. An
+  underscore between two letters or digits neither opens nor closes, and a
+  letter is any script's: `/\w/` let `Hà_Nội_ và` turn italic. The scan for
+  a closer starts after an escape at the front of the span, not inside it.
 - A fence closes on a run of backticks at least as long as the one that opened
   it, and a block is written with one longer than anything inside it, so a
   ```` ```` ```` block can hold a ``` ``` ``` one. A code span is fenced the

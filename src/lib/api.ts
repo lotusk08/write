@@ -67,7 +67,11 @@ export function fetchTopics(): Promise<Topics> {
         throw new Error("No topics.");
       }
       const body = (await response.json()) as Partial<Record<keyof Topics, unknown>>;
-      return { tags: topicList(body.tags), categories: topicList(body.categories) };
+      const found = { tags: topicList(body.tags), categories: topicList(body.categories) };
+      if (!found.tags.length && !found.categories.length) {
+        throw new Error("No topics.");
+      }
+      return found;
     })
     .catch(() => {
       topics = null;

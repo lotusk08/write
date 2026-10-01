@@ -44,7 +44,7 @@ import { docToMarkdown, docToPlainText } from "./lib/markdown.ts";
 import { draftSlug, markdownForExport, type PublishPlan } from "./lib/publish.ts";
 import { applyConfig, loadSettings, saveSettings, type Settings } from "./lib/settings.ts";
 import { setSiteUrl } from "./lib/site.ts";
-import { countWords, datePrefix, slugify, tidyField } from "./lib/text.ts";
+import { countWords, datePrefix, rememberValue, slugify, tidyEdited } from "./lib/text.ts";
 import { usePinnedViewport } from "./lib/viewport.ts";
 
 type SaveState = "idle" | "saving" | "saved";
@@ -737,9 +737,10 @@ export default function App() {
                   placeholder="Title"
                   value={current.meta.title}
                   onChange={(event) => updateMeta({ title: event.target.value })}
+                  onFocus={(event) => rememberValue(event.currentTarget)}
                   onBlur={(event) => {
-                    const title = tidyField(event.target.value);
-                    if (title !== event.target.value) {
+                    const title = tidyEdited(event.currentTarget);
+                    if (title !== null) {
                       updateMeta({ title });
                     }
                   }}
@@ -751,9 +752,10 @@ export default function App() {
                   rows={1}
                   value={current.meta.description}
                   onChange={(event) => updateMeta({ description: event.target.value })}
+                  onFocus={(event) => rememberValue(event.currentTarget)}
                   onBlur={(event) => {
-                    const description = tidyField(event.target.value);
-                    if (description !== event.target.value) {
+                    const description = tidyEdited(event.currentTarget);
+                    if (description !== null) {
                       updateMeta({ description });
                     }
                   }}
