@@ -1,4 +1,4 @@
-import { Extension } from "@tiptap/core";
+import { Extension, textblockTypeInputRule } from "@tiptap/core";
 import Code from "@tiptap/extension-code";
 import type { Node } from "@tiptap/pm/model";
 import { NodeSelection, type EditorState } from "@tiptap/pm/state";
@@ -260,6 +260,27 @@ export const FilepathCode = Code.extend({
         parseHTML: (element) => element.classList.contains("filepath"),
         renderHTML: (attributes) => (attributes.filepath ? { class: "filepath" } : {}),
       },
+    };
+  },
+});
+
+export const PostHeadings = Extension.create({
+  name: "postHeadings",
+  priority: 101,
+
+  addInputRules() {
+    return [
+      textblockTypeInputRule({
+        find: /^#\s$/,
+        type: this.editor.schema.nodes.heading,
+        getAttributes: { level: 2 },
+      }),
+    ];
+  },
+
+  addKeyboardShortcuts() {
+    return {
+      "Mod-Alt-1": () => this.editor.commands.toggleHeading({ level: 2 }),
     };
   },
 });

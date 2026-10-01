@@ -6,7 +6,7 @@ import Superscript from "@tiptap/extension-superscript";
 import { TableKit } from "@tiptap/extension-table";
 import Typography from "@tiptap/extension-typography";
 import StarterKit from "@tiptap/starter-kit";
-import { BlockAttributes, FilepathCode } from "./extensions/blogFormat.ts";
+import { BlockAttributes, FilepathCode, PostHeadings } from "./extensions/blogFormat.ts";
 import { collapsibleExtensions } from "./extensions/collapsible.ts";
 import { Embed } from "./extensions/embed.ts";
 import { footnoteExtensions } from "./extensions/footnote.ts";
@@ -32,6 +32,7 @@ export const buildEditorExtensions = (options: { collab?: boolean } = {}) => [
   Embed,
   FilepathCode,
   BlockAttributes,
+  PostHeadings,
   EnterBreaks,
   InsertBlocks,
   NoteQuote,
