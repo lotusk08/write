@@ -84,7 +84,8 @@ its own npm lockfile.
   IndexedDB-backed images, `<Embed… />` players, mermaid/chart previews,
   and the attribute lists the blog lays posts out with.
 - `src/lib/` holds storage, export and publishing logic. `markdown.ts` writes a
-  post; `import.ts` reads one back and is the inverse of it. `viewport.ts`
+  post; `import.ts` reads one back and is the inverse of it; `inline.ts` is the
+  site's inline parser, ported, which both of them consult. `viewport.ts`
   measures the part of the window a phone keyboard leaves on screen; the shell
   is pinned to it and every pop-up is placed against it, not `innerHeight`.
   The publish dialog sits inside that band too: its title and its actions
@@ -289,21 +290,36 @@ draws every one of these lines differently:
 - Trailing spaces on the last line of a block are kept. markdown-it trims a
   paragraph of its own, so they change nothing there — but lifting an
   attribute list off the end of one leaves the space under it showing.
-- Emphasis closes on the first delimiter that is not inside a code span or a
-  link's address, and an address balances its own parentheses. A URL carrying
-  `**` or `()` used to cut the link in half on the second pass through.
-  A closer pairs with the nearest opener before it, as markdown-it pairs them:
-  `emphasisEnd` keeps the runs of `*` or `_` that open inside the span on a
-  stack, and a closing run of the same length shuts the innermost first. Taking
-  the first closer made `x *a. *b *c* d` italic from `a` to `c`, where the site
-  draws two literal stars and an italic `c`, and broke `*a **b** c*` at the
-  bold's first star. Strikethrough is left out of it: markdown-it does not
-  nest `~~` that way, and `~~a ~~b~~ c~~` closes on the first. One closing
-  run may shut the inner span and the outer one together — `*a **b c***` — so
-  a run pays off the stack and closes the outer with what is left. An
-  underscore between two letters or digits neither opens nor closes, and a
-  letter is any script's: `/\w/` let `Hà_Nội_ và` turn italic. The scan for
-  a closer starts after an escape at the front of the span, not inside it.
+- Inline text is read the way the site reads it, not by searching forward for
+  a closer. `src/lib/inline.ts` is a port of the inline parser the site runs —
+  markdown-exit, which is markdown-it's rules in markdown-it's order: text,
+  linkify, newline, escape, backticks, strikethrough, emphasis, link, image,
+  the footnote plugin's two, autolink, and `html_inline` as the Vue component
+  plugin rewrites it. A run of `*` or `_` is measured for flanking against
+  Unicode whitespace and punctuation (an emoji or `。` is punctuation, `đ` is a
+  letter), `_` neither opens nor closes inside a word, closers are paired left
+  to right with the nearest opener the rule of three allows, one run is split
+  between the spans it serves, `~~` is paired in the same pass, and the site's
+  `***` swap runs after. Each shortcut tried before — the first closer, then
+  a stack — got one of `**5* hotel**`, `*a.*b*`, `***a* b** c` or
+  `*a **b* c**` wrong. What the parse draws becomes marks; what marks cannot
+  hold is kept as written under a `rawInline` mark, which the writer puts back
+  verbatim: an emphasis inside one of its own kind (`*a *b* c*` is an `<em>`
+  in an `<em>`), two spans that cross (`*a<u>b*</u>c*`, or `~~` and `*`
+  closing out of order), two of one kind side by side (`*a*_b_`,
+  `[a](u)[a](u)`, which the editor would merge), an emphasis around a photo
+  (a photo is a block here) — each written as its own tag, `<em>…</em>`,
+  which draws the same HTML — and every HTML tag but a well-nested `<u>`,
+  `<mark>`, `<sup>` or `<sub>`. Escaped, a `<br>` became text on the page.
+- A line break carries the marks around it, so `*a\nb*` is one span through
+  the editor and is written back as one; split at the break it drew two. A
+  `*`, `**` or `~~` run never starts or ends on a break, where its delimiter
+  could not close.
+- A bare address is linked by the site while the line is read, before any
+  emphasis — `https://x.com/_b_c` has no italic in it — and again afterwards
+  wherever text is preceded by punctuation. The writer leaves such an address
+  unescaped, and the `*` run or bracket right after it: a backslash there is
+  read as part of the address.
 - A fence closes on a run of backticks at least as long as the one that opened
   it, and a block is written with one longer than anything inside it, so a
   ```` ```` ```` block can hold a ``` ``` ``` one. A code span is fenced the
@@ -323,6 +339,12 @@ draws every one of these lines differently:
 
 Things that took a bug to learn, and that a change here can quietly undo:
 
+- A line opening with an inline tag — `<em>`, `<u>`, `<br>`, `<span>` — does
+  not interrupt a paragraph; only a block tag or a component does, as the
+  site's component plugin reads it. Treating every tag as a block split the
+  paragraph there, and the writer put a blank line in.
+- A photo in a heading, a table cell or a section summary is kept raw: the
+  schema has no inline image, and one left there threw the editor out.
 - `<details>` is written without kramdown's `markdown="1"`, which markdown-it
   has no use for: an HTML block ends at the blank line after the `<summary>`,
   so the body is read as Markdown either way. It is read back as raw blocks
@@ -348,6 +370,8 @@ Things that took a bug to learn, and that a change here can quietly undo:
   blog's build measures every image itself and writes nothing into a post, but
   one that carries them keeps them. Display width is a class (`.w-50`, `.w-75`).
 - Code spans are literal: escaping them writes the backslashes into the code.
+  The site strips one space from each end of a span that has one at both, so
+  a span whose text does is written padded.
   What is written around one stays around it: the span is built first and every
   mark the text carries is wrapped over it in the order they sit, so a bolded
   code span keeps its bold and a linked one inside bold keeps both. Writing the
@@ -368,7 +392,10 @@ Things that took a bug to learn, and that a change here can quietly undo:
   `BlockAttributes`, `data-within` in the DOM so a paste keeps it), and
   `nesting` in `markdown.ts` puts those outside the link and everything else
   inside, whatever order the marks arrive in. A link with no `within` — every
-  one made in the editor — wraps its emphasis.
+  one made in the editor — wraps its emphasis. Every other mark carries
+  `within` the same way, because `*__a__*` and `***a***` differ only in which
+  is outside: italic around bold is written `*__…__*`, since the site turns
+  `***…***` into bold around italic.
 - Footnotes are nodes: `[^id]` is a `footnoteRef` and `[^id]: …` a
   `footnoteDef` whose body is the text after the colon plus lines indented
   four spaces — and the unindented line under it, which markdown-it reads as

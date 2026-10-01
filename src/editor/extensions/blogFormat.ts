@@ -135,7 +135,7 @@ export const BlockAttributes = Extension.create({
         },
       },
       {
-        types: ["link"],
+        types: ["link", "bold", "italic", "strike", "underline", "highlight", "superscript", "subscript"],
         attributes: {
           within: {
             default: null,

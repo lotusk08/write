@@ -2,6 +2,7 @@ import type { JSONContent } from "@tiptap/core";
 import type { PostMeta } from "../../shared/types.ts";
 import { EMBED_LIQUID, EMBED_TAG, embedPlatform } from "../editor/extensions/embed.ts";
 import { isGalleryKind } from "../editor/extensions/gallery.ts";
+import { type InlineToken, inlineTokens } from "./inline.ts";
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
 
@@ -399,260 +400,256 @@ function text(value: string, marks: Mark[]): JSONContent {
   return marks.length ? { type: "text", text: value, marks } : { type: "text", text: value };
 }
 
-const IMAGE = /^!\[([^\]]*)\]\(/;
-const LINK = /^\[((?:[^[\]\\]|\\.)*)\]\(/;
-const FOOTNOTE_REF = /^\[\^([^\]\s]+)\]/;
-const TAG = /^<(u|mark|sup|sub)>([\s\S]*?)<\/\1>/;
-const AUTOLINK = /^<([a-zA-Z][\w+.-]{1,31}:[^\s<>]*)>/;
-const ESCAPABLE = /[!-/:-@[-`{-~]/;
-const WORD = /[\p{L}\p{N}]/u;
+const MARKS: Record<string, string> = {
+  em: "italic",
+  strong: "bold",
+  s: "strike",
+  a: "link",
+  u: "underline",
+  mark: "highlight",
+  sup: "superscript",
+  sub: "subscript",
+};
+const PAIRED_TAG = /^<(\/?)(u|mark|sup|sub)>$/;
+const RAW: Mark = { type: "rawInline" };
+const REF_MARKS = new Set(["bold", "italic", "strike", "underline", "highlight"]);
 
-function addressEnd(source: string, from: number): number {
-  let depth = 0;
-  for (let i = from; i < source.length; i++) {
-    const char = source[i];
-    if (char === "\\") {
-      i += 1;
-    } else if (char === "\n") {
-      return -1;
-    } else if (char === "(") {
-      depth += 1;
-    } else if (char === ")") {
-      if (!depth) {
-        return i;
-      }
-      depth -= 1;
+interface Pair {
+  kind: string;
+  html: boolean;
+  open: number;
+  close: number;
+  raw: boolean;
+  covered: boolean;
+  within: string[];
+}
+
+function tagOf(token: InlineToken): { kind: string; html: boolean; opens: boolean } | null {
+  const markdown = /^(em|strong|s)_(open|close)$/.exec(token.type);
+  if (markdown) {
+    return { kind: markdown[1], html: false, opens: token.nesting > 0 };
+  }
+  if (token.type === "link_open" || token.type === "link_close") {
+    return token.markup === "linkify" ? null : { kind: "a", html: false, opens: token.nesting > 0 };
+  }
+  const tag = token.type === "html_inline" ? PAIRED_TAG.exec(token.content) : null;
+  return tag ? { kind: tag[2], html: true, opens: !tag[1] } : null;
+}
+
+function pairsOf(tokens: InlineToken[]): Map<number, Pair> {
+  const found = new Map<number, Pair>();
+  const open: Record<string, Pair[]> = {};
+  tokens.forEach((token, index) => {
+    const tag = tagOf(token);
+    if (!tag) {
+      return;
+    }
+    if (tag.opens) {
+      (open[tag.kind] ??= []).push({ ...tag, open: index, close: -1, raw: false, covered: false, within: [] });
+      return;
+    }
+    const pair = open[tag.kind]?.pop();
+    if (pair) {
+      pair.close = index;
+      found.set(pair.open, pair);
+      found.set(index, pair);
+    }
+  });
+  return found;
+}
+
+function substantive(token: InlineToken): boolean {
+  return (token.type !== "text" && token.type !== "text_special") || token.content !== "";
+}
+
+function conflicts(a: string, b: string): boolean {
+  return a === b || (a === "superscript" && b === "subscript") || (a === "subscript" && b === "superscript");
+}
+
+function follows(tokens: InlineToken[], pairs: Map<number, Pair>, pair: Pair, silent: (index: number) => boolean): boolean {
+  const same = (other: Pair) =>
+    other.kind === pair.kind && JSON.stringify(tokens[other.open].attrs) === JSON.stringify(tokens[pair.open].attrs);
+  for (let index = pair.open - 1; index >= 0 && silent(index); index--) {
+    const other = pairs.get(index);
+    if (other && other.close === index && !other.raw && same(other)) {
+      return true;
     }
   }
-  return -1;
+  return false;
 }
 
-interface Target {
-  href: string;
-  title?: string;
-  end: number;
-}
-
-function linkTarget(rest: string, from: number): Target | null {
-  const close = addressEnd(rest, from);
-  if (close === -1) {
-    return null;
+function settlePairs(tokens: InlineToken[], pairs: Map<number, Pair>, images: boolean): [number, number][] {
+  const all = [...new Set(pairs.values())].sort((a, b) => a.open - b.open);
+  const rawLinks: [number, number][] = [];
+  const empty = (index: number) => tokens[index].type === "text" && !tokens[index].content;
+  for (const pair of all) {
+    const inner = tokens.slice(pair.open + 1, pair.close);
+    if (
+      !inner.some(substantive) ||
+      (images && inner.some((token) => token.type === "image")) ||
+      (!REF_MARKS.has(MARKS[pair.kind]) && pair.kind !== "a" && inner.some((token) => token.type === "footnote_ref")) ||
+      (pair.kind === "a" && follows(tokens, pairs, pair, (index) => empty(index) || pairs.has(index)))
+    ) {
+      pair.raw = true;
+      if (pair.kind === "a") {
+        rawLinks.push([pair.open, pair.close]);
+      }
+    }
   }
-  let inner = rest.slice(from, close);
-  const quoted = /\s+"([^"]*)"\s*$/.exec(inner);
-  const title = quoted?.[1];
-  if (quoted) {
-    inner = inner.slice(0, quoted.index);
+  const inLink = (index: number) => rawLinks.some(([open, close]) => index > open && index < close);
+  for (const pair of all) {
+    if (inLink(pair.open) && inLink(pair.close)) {
+      pair.covered = true;
+    } else if (inLink(pair.open) || inLink(pair.close)) {
+      pair.raw = true;
+    }
   }
-  return { href: inner.trim(), ...(title ? { title } : {}), end: close + 1 };
-}
-
-function emphasisEnd(rest: string, opening: string): number {
-  const char = opening[0];
-  const inner: number[] = [];
-  let i = opening.length;
-  i += rest[i] === "\\" ? 2 : 1;
-  while (i < rest.length) {
-    if (rest[i] === "\\") {
-      i += 2;
+  const active: Pair[] = [];
+  tokens.forEach((_, index) => {
+    const pair = pairs.get(index);
+    if (!pair || pair.raw || pair.covered) {
+      return;
+    }
+    if (index === pair.open) {
+      if (active.some((other) => conflicts(MARKS[other.kind], MARKS[pair.kind]))) {
+        pair.raw = true;
+      } else {
+        active.push(pair);
+      }
+      return;
+    }
+    const above = active.slice(active.indexOf(pair) + 1);
+    const victims = !pair.html && above.length && above.every((other) => other.html) ? above : [pair];
+    if (above.length) {
+      victims.forEach((victim) => (victim.raw = true));
+    }
+    for (const done of new Set([pair, ...victims])) {
+      active.splice(active.indexOf(done), 1);
+    }
+  });
+  for (const pair of all) {
+    const silent = (index: number) => empty(index) || (pairs.has(index) && !pairs.get(index)!.raw && !pairs.get(index)!.covered);
+    if (!pair.raw && !pair.covered && pair.kind !== "a" && follows(tokens, pairs, pair, silent)) {
+      pair.raw = true;
+    }
+  }
+  const significant = (index: number) => !empty(index);
+  for (const pair of all) {
+    if (pair.raw || pair.covered) {
       continue;
     }
-    if (rest[i] === "`") {
-      const code = /^(`+)[\s\S]*?\1(?!`)/.exec(rest.slice(i));
-      if (code) {
-        i += code[0].length;
-        continue;
-      }
+    let first = pair.open + 1;
+    while (first < pair.close && !significant(first)) {
+      first += 1;
     }
-    if (rest[i] === "]" && rest[i + 1] === "(") {
-      const close = addressEnd(rest, i + 2);
-      if (close !== -1) {
-        i = close + 1;
-        continue;
-      }
+    let last = pair.close - 1;
+    while (last > pair.open && !significant(last)) {
+      last -= 1;
     }
-    if (char !== "~" && rest[i] === char && rest[i - 1] !== char) {
-      let run = 1;
-      while (rest[i + run] === char) {
-        run += 1;
-      }
-      const before = rest[i - 1] ?? "";
-      const after = rest[i + run] ?? "";
-      let closes = /\S/.test(before);
-      let opens = /\S/.test(after);
-      if (char === "_") {
-        closes &&= !WORD.test(after);
-        opens &&= !WORD.test(before);
-      }
-      if (closes) {
-        let left = run;
-        while (inner.length && left >= inner.at(-1)!) {
-          left -= inner.pop()!;
-        }
-        if (!inner.length && left >= opening.length) {
-          return i + run - left;
-        }
-        if (left < run) {
-          i += run;
-          continue;
-        }
-      }
-      if (opens && !closes) {
-        inner.push(run);
-      }
-      i += run;
-      continue;
+    const inner = pairs.get(first);
+    if (inner && inner !== pair && !inner.raw && !inner.covered && inner.open === first && inner.close === last) {
+      inner.within = [...pair.within, MARKS[pair.kind]];
     }
-    if (rest.startsWith(opening, i) && /\S/.test(rest[i - 1] ?? "")) {
-      return i;
-    }
-    i += 1;
   }
-  return -1;
+  return rawLinks;
 }
 
-function linkWithin(nodes: JSONContent[], outer: Mark[], added: Mark[]): JSONContent[] {
-  const linkOf = (node: JSONContent) => (node.marks as Mark[] | undefined)?.find((mark) => mark.type === "link");
-  const link = nodes.length ? linkOf(nodes[0]) : undefined;
-  if (!link || outer.includes(link) || !nodes.every((node) => linkOf(node) === link)) {
-    return nodes;
+function markOf(pair: Pair, token: InlineToken): Mark {
+  const within = pair.within.length ? { within: pair.within.join(" ") } : {};
+  if (pair.kind === "a") {
+    return { type: "link", attrs: { ...token.attrs, ...within } };
   }
-  const within = [...added.map((mark) => mark.type), ...String(link.attrs?.within ?? "").split(" ")];
-  const marked = { ...link, attrs: { ...link.attrs, within: within.filter(Boolean).join(" ") } };
-  return nodes.map((node) => ({
-    ...node,
-    marks: (node.marks as Mark[]).map((mark) => (mark === link ? marked : mark)),
-  }));
+  return pair.within.length ? { type: MARKS[pair.kind], attrs: within } : { type: MARKS[pair.kind] };
 }
 
-export function parseInline(source: string, marks: Mark[] = []): JSONContent[] {
+function codeText(content: string): string {
+  return /^[ \n][\s\S]+[ \n]$/.test(content) ? content.slice(1, -1) : content;
+}
+
+export function parseInline(source: string, images = true): JSONContent[] {
+  const tokens = inlineTokens(source);
+  const pairs = pairsOf(tokens);
+  const rawLinks = settlePairs(tokens, pairs, images);
   const out: JSONContent[] = [];
-  let buffer = "";
-
-  const flush = () => {
-    if (buffer) {
-      out.push(text(buffer, marks));
-      buffer = "";
+  const open: { pair: Pair; mark: Mark }[] = [];
+  const marks = () => open.map((entry) => entry.mark);
+  const emit = (value: string, extra: Mark[] = []) => {
+    if (!value) {
+      return;
+    }
+    const last = out[out.length - 1];
+    const node = text(value, [...marks(), ...extra]);
+    if (last?.type === "text" && JSON.stringify(last.marks ?? []) === JSON.stringify(node.marks ?? [])) {
+      last.text += value;
+    } else {
+      out.push(node);
     }
   };
+  const withMarks = (node: JSONContent) => (open.length ? { ...node, marks: marks() } : node);
 
-  let i = 0;
-  while (i < source.length) {
-    const rest = source.slice(i);
-    const char = source[i];
-
-    if (char === "\\" && ESCAPABLE.test(source[i + 1] ?? "")) {
-      buffer += source[i + 1];
-      i += 2;
-      continue;
+  tokens.forEach((token, index) => {
+    const link = rawLinks.find(([start, end]) => index >= start && index <= end);
+    if (link) {
+      if (index === link[0]) {
+        emit(source.slice(token.start, token.end), [RAW]);
+      }
+      return;
     }
-    const wrap = /^[^\S\n]*\n/.exec(rest);
-    if (wrap) {
-      flush();
-      out.push({ type: "hardBreak" });
-      i += wrap[0].length;
-      continue;
+    const pair = pairs.get(index);
+    if (pair && !pair.raw) {
+      if (index === pair.open) {
+        open.push({ pair, mark: markOf(pair, token) });
+      } else {
+        open.splice(
+          open.findIndex((entry) => entry.pair === pair),
+          1,
+        );
+      }
+      return;
     }
-    if (char === "`") {
-      const code = /^(`+)([\s\S]*?)\1(?!`)/.exec(rest);
-      if (code) {
-        flush();
-        const tagged = /^\{:\s*\.filepath\s*\}/.exec(rest.slice(code[0].length));
+    if (pair) {
+      emit(pair.html ? token.content : `<${token.nesting > 0 ? "" : "/"}${pair.kind}>`, [RAW]);
+      return;
+    }
+    switch (token.type) {
+      case "text":
+      case "text_special":
+        emit(token.content);
+        break;
+      case "softbreak":
+      case "hardbreak":
+        out.push(withMarks({ type: "hardBreak" }));
+        emit(token.content);
+        break;
+      case "code_inline":
         out.push(
-          text(code[2].replace(/^ (.*) $/, "$1"), [
-            ...marks,
-            { type: "code", ...(tagged ? { attrs: { filepath: true } } : {}) },
+          text(codeText(token.content), [
+            ...marks(),
+            { type: "code", ...(token.attrs?.filepath ? { attrs: { filepath: true } } : {}) },
           ]),
         );
-        i += code[0].length + (tagged?.[0].length ?? 0);
-        continue;
-      }
-    }
-    if (char === "!") {
-      const image = IMAGE.exec(rest);
-      const target = image ? linkTarget(rest, image[0].length) : null;
-      if (image && target) {
-        flush();
+        break;
+      case "image":
+        if (!images) {
+          emit(source.slice(token.start, token.end), [RAW]);
+          break;
+        }
         out.push({
           type: "image",
-          attrs: { src: target.href, alt: image[1], title: target.title ?? null },
+          attrs: { src: token.attrs?.src, alt: token.attrs?.alt, title: token.attrs?.title ?? null },
         });
-        i += target.end;
-        continue;
-      }
+        break;
+      case "footnote_ref":
+        out.push(withMarks({ type: "footnoteRef", attrs: { label: token.content } }));
+        break;
+      case "footnote_inline":
+      case "html_inline":
+        emit(token.content, [RAW]);
+        break;
+      default:
+        break;
     }
-    if (char === "[") {
-      const footnote = FOOTNOTE_REF.exec(rest);
-      if (footnote) {
-        flush();
-        out.push({
-          type: "footnoteRef",
-          attrs: { label: footnote[1] },
-          ...(marks.length ? { marks } : {}),
-        });
-        i += footnote[0].length;
-        continue;
-      }
-      const link = LINK.exec(rest);
-      const target = link ? linkTarget(rest, link[0].length) : null;
-      if (link && target) {
-        flush();
-        const attrs: Record<string, unknown> = { href: target.href };
-        if (target.title) {
-          attrs.title = target.title;
-        }
-        out.push(...parseInline(link[1], [...marks, { type: "link", attrs }]));
-        i += target.end;
-        continue;
-      }
-    }
-    if (char === "<") {
-      const autolink = AUTOLINK.exec(rest);
-      if (autolink) {
-        flush();
-        out.push(text(autolink[1], [...marks, { type: "link", attrs: { href: autolink[1] } }]));
-        i += autolink[0].length;
-        continue;
-      }
-      const tag = TAG.exec(rest);
-      if (tag) {
-        flush();
-        const mark = { u: "underline", mark: "highlight", sup: "superscript", sub: "subscript" }[tag[1]] as string;
-        out.push(...linkWithin(parseInline(tag[2], [...marks, { type: mark }]), marks, [{ type: mark }]));
-        i += tag[0].length;
-        continue;
-      }
-    }
-    if (char === "*" || char === "_" || char === "~") {
-      const opening =
-        /^(\*\*\*|___)(?=\S)/.exec(rest)?.[1] ??
-        /^(\*\*|__)(?=\S)/.exec(rest)?.[1] ??
-        /^(~~)(?=\S)/.exec(rest)?.[1] ??
-        /^(\*|_)(?=\S)/.exec(rest)?.[1];
-      const close = opening ? emphasisEnd(rest, opening) : -1;
-      const underscore = opening?.startsWith("_");
-      const boundary = !underscore || !WORD.test(source[i - 1] ?? "");
-      if (opening && close > 0 && boundary) {
-        const added =
-          opening === "~~"
-            ? [{ type: "strike" }]
-            : opening.length === 3
-              ? [{ type: "bold" }, { type: "italic" }]
-              : opening.length === 2
-                ? [{ type: "bold" }]
-                : [{ type: "italic" }];
-        flush();
-        out.push(...linkWithin(parseInline(rest.slice(opening.length, close), [...marks, ...added]), marks, added));
-        i += close + opening.length;
-        continue;
-      }
-    }
-
-    buffer += char;
-    i += 1;
-  }
-
-  flush();
+  });
   return out;
 }
 
@@ -694,7 +691,7 @@ function blocksFromInline(nodes: JSONContent[]): JSONContent[] {
       run.push(node);
       continue;
     }
-    const sameLine = run.length > 0 && run[run.length - 1]?.type !== "hardBreak";
+    const sameLine = run.length ? run[run.length - 1]?.type !== "hardBreak" : out.length > 0;
     flush();
     const next = nodes[i + 1];
     const attributes = next?.type === "text" && !next.marks?.length ? IAL.exec(next.text ?? "") : null;
@@ -727,7 +724,7 @@ function blocksFromInline(nodes: JSONContent[]): JSONContent[] {
 }
 
 function paragraph(source: string): JSONContent {
-  const content = parseInline(source.trim());
+  const content = parseInline(source.trim(), false);
   return content.length ? { type: "paragraph", content } : { type: "paragraph" };
 }
 
@@ -777,6 +774,16 @@ const LIQUID = /^\{%[\s\S]*%\}$/;
 const FOOTNOTE_DEF = /^\[\^([^\]\s]+)\]:[^\S\n]*/;
 const DESCRIPTION = /^:\s+\S/;
 const HTML_BLOCK = /^\s*<(?:\/?[a-zA-Z][\w-]*(?:\s[^>]*)?>|!--)/;
+const INLINE_TAGS = new Set(
+  "a abbr acronym audio b bdi bdo big br button canvas cite code data datalist del dfn em embed i iframe img input ins kbd label map mark meter noscript object output picture progress q ruby s samp select small span strong sub sup svg textarea time u tt var video wbr".split(
+    " ",
+  ),
+);
+
+function interrupts(line: string): boolean {
+  const name = HTML_BLOCK.test(line) ? /^\s*<\/?([a-zA-Z][\w-]*)/.exec(line)?.[1] : "";
+  return name !== "" && (!name || /^(?:script|pre|style|iframe)$/i.test(name) || !INLINE_TAGS.has(name));
+}
 const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
 const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const BULLET = /^(\s*)([-*+])\s+(.*)$/;
@@ -795,7 +802,7 @@ function isBlockStart(line: string, except: "" | "table" | "footnote" = ""): boo
     RULE.test(line) ||
     openingFence(line) !== null ||
     MATH.test(line) ||
-    HTML_BLOCK.test(line) ||
+    interrupts(line) ||
     LIQUID.test(line.trim()) ||
     (except !== "footnote" && FOOTNOTE_DEF.test(line)) ||
     LIST_START.test(line) ||
@@ -982,7 +989,7 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
         type: "collapsible",
         attrs: { open },
         content: [
-          { type: "collapsibleSummary", content: parseInline(summary) },
+          { type: "collapsibleSummary", content: parseInline(summary, false) },
           { type: "collapsibleContent", content: blocksOrEmpty(body) },
         ],
       });
@@ -1081,7 +1088,7 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
       out.push({
         type: "heading",
         attrs: { level: heading[1].length },
-        content: parseInline(heading[2]),
+        content: parseInline(heading[2], false),
       });
       i += 1;
       continue;
@@ -1121,7 +1128,7 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
       out.push({
         type: "heading",
         attrs: { level: under[1].startsWith("=") ? 1 : 2 },
-        content: parseInline(trimAscii(buffer.join("\n"))),
+        content: parseInline(trimAscii(buffer.join("\n")), false),
       });
       continue;
     }

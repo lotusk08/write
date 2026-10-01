@@ -2,6 +2,7 @@ import type { JSONContent } from "@tiptap/core";
 import type { PostMeta } from "../../shared/types.ts";
 import { CENTER_ROW } from "../editor/extensions/blogFormat.ts";
 import { embedTag } from "../editor/extensions/embed.ts";
+import { autolinkFor, bareLinks } from "./inline.ts";
 import { topicSlug } from "./topics.ts";
 
 export interface SerializeOptions {
@@ -11,19 +12,21 @@ export interface SerializeOptions {
 type Mark = { type: string; attrs?: Record<string, unknown> };
 
 const REF_MARKS = new Set(["bold", "italic", "strike", "underline", "highlight"]);
+const DELIMITED = new Set(["bold", "italic", "strike"]);
+
+function outside(mark: Mark): string[] {
+  return String(mark.attrs?.within ?? "").split(" ").filter(Boolean);
+}
 
 function nesting(marks: Mark[]): Mark[] {
   const link = marks.find((mark) => mark.type === "link");
-  if (!link) {
-    return marks;
+  const waiting = link ? [link, ...marks.filter((mark) => mark !== link)] : [...marks];
+  const placed: Mark[] = [];
+  while (waiting.length) {
+    const free = waiting.findIndex((mark) => !waiting.some((other) => outside(mark).includes(other.type)));
+    placed.push(...waiting.splice(Math.max(free, 0), 1));
   }
-  const within = String(link.attrs?.within ?? "").split(" ");
-  const others = marks.filter((mark) => mark !== link);
-  return [
-    ...others.filter((mark) => within.includes(mark.type)),
-    link,
-    ...others.filter((mark) => !within.includes(mark.type)),
-  ];
+  return placed;
 }
 
 function marksOf(node: JSONContent): Mark[] {
@@ -31,13 +34,16 @@ function marksOf(node: JSONContent): Mark[] {
   if (node.type === "text") {
     return nesting(marks);
   }
+  if (node.type === "hardBreak") {
+    return nesting(marks.filter((mark) => mark.type !== "code" && mark.type !== "rawInline"));
+  }
   if (node.type === "footnoteRef") {
     return marks.filter((mark) => REF_MARKS.has(mark.type));
   }
   return [];
 }
 
-function escapeText(text: string): string {
+function escapePlain(text: string, follower = ""): string {
   return text
     .split(/(\[\^[^\]\s]+\])/)
     .map((part, index) =>
@@ -46,9 +52,23 @@ function escapeText(text: string): string {
         : part
             .replace(/\\(?=[!-/:-@[-`{-~])/g, "\\\\")
             .replace(/([`*_[\]])/g, "\\$1")
-            .replace(/<(?=[a-zA-Z/!?])/g, "\\<"),
+            .replace(/~{2,}/g, (run) => run.replace(/~/g, "\\~"))
+            .replace(/<(?=([a-zA-Z/!?])?)/g, (bracket, next, at, whole) =>
+              next || (at === whole.length - 1 && /^[a-zA-Z/!?]/.test(follower)) ? "\\<" : bracket,
+            ),
     )
     .join("");
+}
+
+function escapeText(text: string, linked: boolean): string {
+  let out = "";
+  let at = 0;
+  for (const { start, end, inline } of linked ? [] : bareLinks(text)) {
+    const after = inline ? end + /^\**[[\]<]?/.exec(text.slice(end))![0].length : end;
+    out += escapePlain(text.slice(at, start), text[start]) + text.slice(start, after);
+    at = after;
+  }
+  return out + escapePlain(text.slice(at));
 }
 
 function applyMarks(text: string, marks: Mark[] | undefined): string {
@@ -60,18 +80,21 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
   if (code) {
     const longest = Math.max(0, ...[...text.matchAll(/`+/g)].map((run) => run[0].length));
     const fence = "`".repeat(longest + 1);
-    const padding = text.startsWith("`") || text.endsWith("`") ? " " : "";
+    const padding = /^`|`$|^[ \n][\s\S]+[ \n]$/.test(text) ? " " : "";
     const filepath = code.attrs?.filepath ? "{: .filepath}" : "";
     out = `${fence}${padding}${text}${padding}${fence}${filepath}`;
   }
 
+  let unbold = "";
+  let last = "";
   for (const mark of [...marks].reverse()) {
+    const inner = out;
     switch (mark.type) {
       case "bold":
         out = `**${out}**`;
         break;
       case "italic":
-        out = `*${out}*`;
+        out = last === "bold" ? `*__${unbold}__*` : `*${out}*`;
         break;
       case "strike":
         out = `~~${out}~~`;
@@ -96,6 +119,10 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
       }
       default:
         break;
+    }
+    if (mark.type !== "code" && mark.type !== "rawInline") {
+      unbold = inner;
+      last = mark.type;
     }
   }
   return out;
@@ -159,24 +186,28 @@ function wrap(text: string, mark: Mark): string {
   return applyMarks(text, [mark]);
 }
 
-const AUTOLINK = /^[a-zA-Z][\w+.-]{1,31}:[^\s<>]*$/;
-
-function textNode(node: JSONContent): string {
+function textNode(node: JSONContent, linked: boolean): string {
   const marks = marksOf(node);
   const raw = node.text ?? "";
-  const code = marks.some((mark) => mark.type === "code");
+  const verbatim = marks.some((mark) => mark.type === "code" || mark.type === "rawInline");
   const link = marks.length === 1 && marks[0].type === "link" ? marks[0] : null;
-  if (link && !link.attrs?.title && link.attrs?.href === raw && AUTOLINK.test(raw)) {
+  if (link && !link.attrs?.title && autolinkFor(raw, String(link.attrs?.href ?? ""))) {
     return `<${raw}>`;
   }
-  return applyMarks(code ? raw : escapeText(raw), marks);
+  return applyMarks(verbatim ? raw : escapeText(raw, linked || marks.some((mark) => mark.type === "link")), marks);
 }
 
-function inline(nodes: JSONContent[] | undefined, options: SerializeOptions): string {
+function underBold(run: JSONContent[]): Mark | null {
+  const bold = marksOf(run[0]).find((mark) => mark.type === "bold");
+  return bold && run.every((part) => marksOf(part).some((mark) => sameMark(mark, bold))) ? bold : null;
+}
+
+function inline(nodes: JSONContent[] | undefined, options: SerializeOptions, linked = false): string {
   if (!nodes?.length) {
     return "";
   }
   const rendered: string[] = [];
+  const bangs = new Set<number>();
   let index = 0;
   while (index < nodes.length) {
     const node = nodes[index];
@@ -184,12 +215,16 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions): st
     let outer: Mark | null = null;
     let end = index + 1;
     for (const mark of marks) {
-      if (mark.type === "code") {
+      const delimited = DELIMITED.has(mark.type);
+      if (mark.type === "code" || mark.type === "rawInline" || (delimited && node.type === "hardBreak")) {
         continue;
       }
       let reach = index + 1;
       while (reach < nodes.length && marksOf(nodes[reach]).some((other) => sameMark(other, mark))) {
         reach += 1;
+      }
+      while (delimited && nodes[reach - 1].type === "hardBreak") {
+        reach -= 1;
       }
       if (reach > end) {
         outer = mark;
@@ -197,28 +232,37 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions): st
       }
     }
     if (outer) {
+      const wrapper = outer;
+      const bold = wrapper.type === "italic" ? underBold(nodes.slice(index, end)) : null;
       const run = nodes.slice(index, end).map((part) => ({
         ...part,
-        marks: marksOf(part).filter((mark) => !sameMark(mark, outer as Mark)),
+        marks: marksOf(part).filter((mark) => !sameMark(mark, wrapper) && !(bold && sameMark(mark, bold))),
       }));
-      rendered.push(wrap(inline(run, options), outer));
+      const inner = inline(run, options, linked || wrapper.type === "link");
+      rendered.push(bold ? `*__${inner}__*` : wrap(inner, wrapper));
       index = end;
       continue;
     }
     if (node.type === "text") {
-      rendered.push(textNode(node));
+      rendered.push(textNode(node, linked));
+      const raw = node.text ?? "";
+      if (!marksOf(node).length && raw.endsWith("!") && (linked || !bareLinks(`${raw}[`).some(({ end }) => end >= raw.length))) {
+        bangs.add(rendered.length - 1);
+      }
     } else if (node.type === "hardBreak") {
       rendered.push("\n");
     } else if (node.type === "image") {
       rendered.push(image(node, options));
     } else if (node.type === "footnoteRef") {
-      rendered.push(`[^${String(node.attrs?.label ?? "")}]`);
+      rendered.push(applyMarks(`[^${String(node.attrs?.label ?? "")}]`, marks));
     } else {
-      rendered.push(inline(node.content, options));
+      rendered.push(inline(node.content, options, linked));
     }
     index += 1;
   }
-  return rendered.join("");
+  return rendered
+    .map((piece, at) => (bangs.has(at) && rendered[at + 1]?.startsWith("[") ? `${piece.slice(0, -1)}\\!` : piece))
+    .join("");
 }
 
 function image(node: JSONContent, options: SerializeOptions): string {
@@ -372,7 +416,8 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         const before = Boolean(node.attrs?.joinPrevious);
         const content = withoutEdgeBreaks(node.content, before, after);
         const caption = before && nodes[index - 1]?.type === "image";
-        out.push(inline(caption ? captionContent(content) : content, options).replace(/^>/gm, "\\>"));
+        const written = inline(caption ? captionContent(content) : content, options);
+        out.push(before && node.attrs?.sameLine ? written.replace(/\n>/g, "\n\\>") : written.replace(/^>/gm, "\\>"));
         break;
       }
       case "heading": {

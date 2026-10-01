@@ -1,4 +1,4 @@
-import { Node, mergeAttributes } from "@tiptap/core";
+import { Mark, Node, mergeAttributes } from "@tiptap/core";
 import CodeBlock from "@tiptap/extension-code-block";
 import type { Node as ProseMirrorNode } from "@tiptap/pm/model";
 import type { NodeView } from "@tiptap/pm/view";
@@ -118,5 +118,19 @@ export const RawBlock = Node.create({
 
   renderHTML({ HTMLAttributes }) {
     return ["div", mergeAttributes(HTMLAttributes, { "data-raw": "", class: "raw-block" }), 0];
+  },
+});
+
+export const RawInline = Mark.create({
+  name: "rawInline",
+  inclusive: false,
+  excludes: "code",
+
+  parseHTML() {
+    return [{ tag: "span[data-raw-inline]" }];
+  },
+
+  renderHTML({ HTMLAttributes }) {
+    return ["span", mergeAttributes(HTMLAttributes, { "data-raw-inline": "", class: "raw-inline" }), 0];
   },
 });
