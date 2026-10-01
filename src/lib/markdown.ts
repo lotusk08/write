@@ -498,21 +498,34 @@ const YAML_NUMBER = /^[-+]?(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][-+]?\d+)?
 
 const YAML_BOOL_OR_NULL = /^(?:y|Y|yes|Yes|YES|n|N|no|No|NO|true|True|TRUE|false|False|FALSE|on|On|ON|off|Off|OFF|null|Null|NULL|~)$/;
 
+const YAML_CONTROL = /[\x00-\x1f\x7f-\x9f\u2028\u2029\ufeff\ufffe\uffff]/;
+
+const YAML_ESCAPED = /[\\"\x00-\x1f\x7f-\x9f\u2028\u2029\ufeff\ufffe\uffff]/g;
+
+const YAML_ESCAPES: Record<string, string> = { "\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t", "\r": "\\r" };
+
 function yamlString(value: string): string {
-  const text = value.replace(/\s*\n\s*/g, " ").trim();
   const plainIsSafe =
-    text !== "" &&
-    !/^[-?:,[\]{}#&*!|>'"%@`]/.test(text) &&
-    !/:\s|\s#/.test(text) &&
-    !/[\t\n]/.test(text) &&
-    !text.endsWith(":") &&
-    !YAML_TIMESTAMP.test(text) &&
-    !YAML_NUMBER.test(text) &&
-    !YAML_BOOL_OR_NULL.test(text);
-  if (text === "") {
+    value !== "" &&
+    value === value.trim() &&
+    !/^[-?:,[\]{}#&*!|>'"%@`]/.test(value) &&
+    !/:\s|\s#/.test(value) &&
+    !YAML_CONTROL.test(value) &&
+    !value.endsWith(":") &&
+    !YAML_TIMESTAMP.test(value) &&
+    !YAML_NUMBER.test(value) &&
+    !YAML_BOOL_OR_NULL.test(value);
+  if (value === "") {
     return "''";
   }
-  return plainIsSafe ? text : `"${text.replace(/\\/g, "\\\\").replace(/"/g, '\\"')}"`;
+  if (plainIsSafe) {
+    return value;
+  }
+  const escaped = value.replace(
+    YAML_ESCAPED,
+    (char) => YAML_ESCAPES[char] ?? `\\u${char.charCodeAt(0).toString(16).padStart(4, "0")}`,
+  );
+  return `"${escaped}"`;
 }
 
 export function uniqueNames(values: string[]): string[] {
@@ -554,6 +567,9 @@ export function buildFrontMatter(meta: PostMeta): string {
   }
   if (meta.extra?.length) {
     lines.push(...meta.extra);
+    if (meta.extra[meta.extra.length - 1] === "") {
+      lines.push("");
+    }
   }
   lines.push("---");
   return lines.join("\n");
