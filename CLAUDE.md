@@ -329,6 +329,19 @@ Things that took a bug to learn, and that a change here can quietly undo:
 - A bare `null` in front matter is YAML's null, not the word: reading it as
   text put "null" in the description of every post that had none, and writing
   it back quoted made it permanent. Quoted `"null"` is still text.
+- Front matter is read to the value js-yaml's core schema gives — what the
+  blog's `matter.js` reads — not to the line it sits on. A field may run on
+  over indented lines: a block scalar (`|`, `>`, with `+`/`-` and an
+  indentation digit, folded and chomped as YAML does), a quoted string folded
+  across lines, a plain one wrapped, a flow list across lines. Reading
+  the first line alone made `description: >-` the description, and the
+  next publish wrote `">-"` over the text below it. Those lines belong to
+  their key for an unknown key too, kept raw with it. On the way out a value is
+  written exactly — a newline as `\n` inside double quotes, never folded into a
+  space or trimmed — so the file reads differently but js-yaml reads the
+  same string back. `pin` and `toc` are read as the site reads them, not as
+  YAML 1.1 did: `pin` is on only for `true` (or `"true"`), `toc` off only for
+  `false`, so `pin: yes` and `toc: no` stay what the site already draws.
 - `pin` and `toc` are coerced with `Boolean()` before interpolation. A draft
   saved before one of them existed writes `undefined` otherwise, which YAML
   reads back as a string — and a string is true.
