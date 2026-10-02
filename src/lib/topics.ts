@@ -19,9 +19,22 @@ function fold(value: string): string {
     .toLowerCase();
 }
 
-export function existingSpelling(name: string, topics: Topic[]): string {
+const LANGUAGES = new Map([
+  ["vietnamese", "vi"],
+  ["english", "en"],
+]);
+
+export function languageOf(categories: string[]): string {
+  return categories.map((name) => LANGUAGES.get(topicSlug(name))).find(Boolean) ?? "";
+}
+
+export function findTopic(name: string, topics: Topic[]): Topic | undefined {
   const slug = topicSlug(name);
-  return topics.find((topic) => topic.slug === slug)?.title ?? name;
+  return topics.find((topic) => topic.slug === slug || topicSlug(topic.title) === slug);
+}
+
+export function knownTopic(name: string, topics: Topic[]): string {
+  return findTopic(name, topics)?.slug ?? name;
 }
 
 export function suggestTopics(

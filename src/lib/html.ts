@@ -48,7 +48,7 @@ export async function buildHtmlDocument(editorHtml: string, meta: PostMeta): Pro
   const description = meta.description ? `<p class="lede">${escapeHtml(meta.description)}</p>` : "";
 
   return `<!doctype html>
-<html lang="en">
+<html lang="${escapeHtml(meta.lang || "en")}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">

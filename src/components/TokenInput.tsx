@@ -1,13 +1,14 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type KeyboardEvent } from "react";
 import type { Topic } from "../../shared/types.ts";
 import { uniqueNames } from "../lib/markdown.ts";
-import { existingSpelling, suggestTopics } from "../lib/topics.ts";
+import { findTopic, knownTopic, suggestTopics } from "../lib/topics.ts";
 
 interface TokenInputProps {
   id: string;
   values: string[];
   placeholder?: string;
   suggestions?: Topic[];
+  max?: number;
   onChange: (values: string[]) => void;
 }
 
@@ -43,7 +44,7 @@ function changed(next: string[], values: string[]): boolean {
   return next.length !== values.length || next.some((value, index) => value !== values[index]);
 }
 
-export function TokenInput({ id, values, placeholder, suggestions = [], onChange }: TokenInputProps) {
+export function TokenInput({ id, values, placeholder, suggestions = [], max = Infinity, onChange }: TokenInputProps) {
   const [draft, setDraft] = useState("");
   const [focused, setFocused] = useState(false);
   const [dismissed, setDismissed] = useState(false);
@@ -51,9 +52,10 @@ export function TokenInput({ id, values, placeholder, suggestions = [], onChange
   const box = useRef<HTMLDivElement>(null);
   const list = useRef<HTMLDivElement>(null);
 
+  const full = values.length >= max;
   const offered = useMemo(
-    () => (focused && !dismissed ? suggestTopics(suggestions, draft, values) : []),
-    [focused, dismissed, suggestions, draft, values],
+    () => (focused && !dismissed && !full ? suggestTopics(suggestions, draft, values) : []),
+    [focused, dismissed, full, suggestions, draft, values],
   );
   const listId = `${id}-suggestions`;
   const open = offered.length > 0;
@@ -96,8 +98,8 @@ export function TokenInput({ id, values, placeholder, suggestions = [], onChange
         .split(",")
         .map((item) => item.normalize("NFC").trim())
         .filter(Boolean)
-        .map((item) => existingSpelling(item, suggestions)),
-    ]);
+        .map((item) => knownTopic(item, suggestions)),
+    ]).slice(0, Math.max(max, values.length));
     if (changed(next, values)) {
       onChange(next);
     }
@@ -105,7 +107,7 @@ export function TokenInput({ id, values, placeholder, suggestions = [], onChange
   };
 
   const pick = (topic: Topic) => {
-    const next = uniqueNames([...values, topic.title]);
+    const next = uniqueNames([...values, topic.slug]).slice(0, Math.max(max, values.length));
     if (changed(next, values)) {
       onChange(next);
     }
@@ -146,23 +148,32 @@ export function TokenInput({ id, values, placeholder, suggestions = [], onChange
           document.getElementById(id)?.focus();
         }
       }}>
-        {values.map((value) => (
-          <span key={value} className="token">
-            {value}
-            <button
-              type="button"
-              aria-label={`Remove ${value}`}
-              onClick={() => onChange(values.filter((item) => item !== value))}
+        {values.map((value) => {
+          const topic = findTopic(value, suggestions);
+          const fresh = suggestions.length > 0 && !topic;
+          return (
+            <span
+              key={value}
+              className={fresh ? "token is-new" : "token"}
+              title={fresh ? "Not one of the blog's topics yet" : undefined}
             >
-              ×
-            </button>
-          </span>
-        ))}
+              {topic?.title ?? value}
+              <button
+                type="button"
+                aria-label={`Remove ${topic?.title ?? value}`}
+                onClick={() => onChange(values.filter((item) => item !== value))}
+              >
+                ×
+              </button>
+            </span>
+          );
+        })}
         <input
           id={id}
           className="token-input"
           value={draft}
           placeholder={values.length ? "" : placeholder}
+          disabled={full}
           role="combobox"
           aria-autocomplete="list"
           aria-expanded={open}

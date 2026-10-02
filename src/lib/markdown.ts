@@ -597,8 +597,10 @@ export function buildFrontMatter(meta: PostMeta): string {
   if (meta.description.trim()) {
     lines.push(`description: ${yamlString(meta.description)}`);
   }
-  lines.push(`author: ${yamlString(meta.author)}`, `date: ${yamlString(meta.date)}`);
-  lines.push(...yamlList("categories", uniqueNames(meta.categories)));
+  lines.push(`date: ${yamlString(meta.date)}`);
+  if (meta.lang?.trim()) {
+    lines.push(`lang: ${yamlString(meta.lang)}`);
+  }
   lines.push(...yamlList("tags", uniqueNames(meta.tags)));
   lines.push(`pin: ${Boolean(meta.pin)}`, `toc: ${Boolean(meta.toc)}`);
   if (meta.cover?.path) {

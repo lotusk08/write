@@ -249,7 +249,7 @@ function topicList(value: unknown): Topic[] {
 }
 
 async function handleTopics(env: Env): Promise<Response> {
-  const none: Topics = { tags: [], categories: [] };
+  const none: Topics = { tags: [] };
   const site = (env.SITE_URL || "").replace(/\/+$/, "");
   if (!site) {
     return json(none);
@@ -263,7 +263,7 @@ async function handleTopics(env: Env): Promise<Response> {
       return json(none);
     }
     const body = (await response.json()) as Partial<Record<keyof Topics, unknown>>;
-    return json({ tags: topicList(body.tags), categories: topicList(body.categories) });
+    return json({ tags: topicList(body.tags) });
   } catch {
     return json(none);
   }

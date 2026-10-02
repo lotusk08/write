@@ -2,9 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import type { AppConfig, PostMeta, Topics } from "../../../shared/types.ts";
 import { fetchTopics } from "../../lib/api.ts";
 import { isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
+import type { Language } from "../../lib/draft.ts";
 import type { Settings } from "../../lib/settings.ts";
 import { displaySrc } from "../../lib/site.ts";
 import { rememberValue, tidyEdited } from "../../lib/text.ts";
+import { Toggle, type ToggleOption } from "../Toggle.tsx";
 import { TokenInput } from "../TokenInput.tsx";
 import { Section } from "./Section.tsx";
 
@@ -18,14 +20,21 @@ export interface PostPanelProps {
   onSettingsChange: (patch: Partial<Settings>) => void;
 }
 
-const TARGETS: { id: Settings["publishTarget"]; label: string }[] = [
+const TARGETS: ToggleOption<Settings["publishTarget"]>[] = [
   { id: "posts", label: "Post" },
   { id: "drafts", label: "Draft" },
 ];
 
-const OPTIONS: { key: "toc" | "pin"; label: string; hint: string }[] = [
-  { key: "toc", label: "Table of contents", hint: "Sidebar outline on the post page" },
-  { key: "pin", label: "Pin to home", hint: "Keeps the post at the top of the index" },
+const LANGUAGES: ToggleOption<Language>[] = [
+  { id: "vi", label: "Tiếng Việt" },
+  { id: "en", label: "English" },
+];
+
+const MAX_TOPICS = 8;
+
+const OPTIONS: { key: "toc" | "pin"; label: string }[] = [
+  { key: "toc", label: "Table of contents" },
+  { key: "pin", label: "Pin to home" },
 ];
 
 export function PostPanel({
@@ -76,26 +85,21 @@ export function PostPanel({
 
   return (
     <>
-      <Section title="Taxonomy" hint="Comma or Enter adds one.">
+      <Section title="Taxonomy">
         <div className="field">
-          <label htmlFor="meta-categories">Categories</label>
-          <TokenInput
-            id="meta-categories"
-            values={meta.categories}
-            placeholder="Vietnamese"
-            suggestions={topics?.categories}
-            onChange={(categories) => onChange({ categories })}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="meta-tags">Tags</label>
+          <label htmlFor="meta-tags">Topics</label>
           <TokenInput
             id="meta-tags"
             values={meta.tags}
-            placeholder="coffee, morning"
+            placeholder="coffee, travel"
             suggestions={topics?.tags}
+            max={MAX_TOPICS}
             onChange={(tags) => onChange({ tags })}
           />
+        </div>
+        <div className="menu-row">
+          <span className="field-label">Language</span>
+          <Toggle label="Language" options={LANGUAGES} value={meta.lang} onChange={(lang) => onChange({ lang })} />
         </div>
       </Section>
 
@@ -176,7 +180,6 @@ export function PostPanel({
             value={slug}
             onChange={(event) => onSlugChange(event.target.value)}
           />
-          <p className="hint">Names the Markdown file and its images.</p>
         </div>
         <div className="field">
           <label htmlFor="meta-date">Date</label>
@@ -187,27 +190,11 @@ export function PostPanel({
             onChange={(event) => onChange({ date: event.target.value })}
           />
         </div>
-        <div className="field">
-          <label htmlFor="meta-author">Author</label>
-          <input
-            id="meta-author"
-            className="input"
-            value={meta.author}
-            onChange={(event) => onChange({ author: event.target.value })}
-            onFocus={(event) => rememberValue(event.currentTarget)}
-            onBlur={(event) => {
-              const author = tidyEdited(event.currentTarget);
-              if (author !== null) {
-                onChange({ author });
-              }
-            }}
-          />
-        </div>
       </Section>
 
       <Section title="Options">
         <ul className="switch-list">
-          {OPTIONS.map(({ key, label, hint }) => (
+          {OPTIONS.map(({ key, label }) => (
             <li key={key}>
               <label className="switch">
                 <input
@@ -217,39 +204,11 @@ export function PostPanel({
                     onChange({ [key]: event.target.checked } as Partial<PostMeta>)
                   }
                 />
-                <span>
-                  {label}
-                  <em>{hint}</em>
-                </span>
+                <span>{label}</span>
               </label>
             </li>
           ))}
         </ul>
-      </Section>
-      <Section title="Defaults" hint="Used when a new post is made. Not this one.">
-        <div className="row">
-          <div className="field">
-            <label htmlFor="set-author">Default author</label>
-            <input
-              id="set-author"
-              className="input"
-              value={settings.author}
-              onChange={(event) => onSettingsChange({ author: event.target.value })}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="set-tz">UTC offset</label>
-            <input
-              id="set-tz"
-              className="input mono"
-              type="number"
-              step={30}
-              value={settings.timezoneOffset}
-              onChange={(event) => onSettingsChange({ timezoneOffset: Number(event.target.value) })}
-            />
-          </div>
-        </div>
-        <p className="hint">Offset in minutes; +0700 is 420. Stamps the date on a new post.</p>
       </Section>
 
       <Section title="Blog">
@@ -266,25 +225,13 @@ export function PostPanel({
             </div>
             <div className="menu-row">
               <span className="field-label">Publish as</span>
-              <div className="toggle" role="group" aria-label="Publish as">
-                <span className="toggle-knob" data-at={settings.publishTarget} />
-                {TARGETS.map(({ id, label }) => (
-                  <button
-                    key={id}
-                    type="button"
-                    className={settings.publishTarget === id ? "is-on" : undefined}
-                    aria-pressed={settings.publishTarget === id}
-                    onClick={() => onSettingsChange({ publishTarget: id })}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
+              <Toggle
+                label="Publish as"
+                options={TARGETS}
+                value={settings.publishTarget}
+                onChange={(publishTarget) => onSettingsChange({ publishTarget })}
+              />
             </div>
-            <p className="hint">
-              A draft goes to <span className="mono">{config.draftsDir}</span> and is not on the
-              site until it moves. A post goes to <span className="mono">{config.postsDir}</span>.
-            </p>
           </>
         ) : (
           <p className="hint">

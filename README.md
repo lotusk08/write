@@ -33,8 +33,8 @@ browser.
   after you stop typing. Images are kept as blobs so drafts stay small and
   survive reloads. The open draft renames in place on a double-click and carries
   the delete button.
-- **Front matter.** Title, description, slug, date, author, categories, tags,
-  cover image, and the `pin` / `toc` switches the blog uses. It is written the
+- **Front matter.** Title, description, slug (made from the title), date,
+  topics, language, cover image, and the `pin` / `toc` switches the blog uses. It is written the
   way the published posts already are — block sequences, no unnecessary
   quoting, empty fields omitted — so re-publishing a post never moves a line
   of its front matter.

@@ -2,8 +2,6 @@ import type { AppConfig } from "../../shared/types.ts";
 
 export interface Settings {
   theme: "light" | "dark" | "system";
-  author: string;
-  timezoneOffset: number;
   repo: string;
   branch: string;
   siteUrl: string;
@@ -22,8 +20,6 @@ const KEY = "write:settings";
 
 export const defaultSettings: Settings = {
   theme: "system",
-  author: "steve",
-  timezoneOffset: 420,
   repo: "lotusk08/stevehoang.com",
   branch: "blog",
   siteUrl: "https://stevehoang.com",
@@ -51,13 +47,15 @@ export function loadSettings(): Settings {
           githubToken?: string;
           publishToken?: unknown;
           publishPassword?: string;
+          author?: string;
+          timezoneOffset?: number;
         })
       : {};
     const stored = { ...defaultSettings, ...parsed };
     const menuTab: MenuTab =
       stored.menuTab === "export" || stored.menuTab === "share" ? stored.menuTab : "post";
     const settings: Settings = { ...stored, menuTab };
-    const stale = ["githubToken", "publishToken", "publishPassword"] as const;
+    const stale = ["githubToken", "publishToken", "publishPassword", "author", "timezoneOffset"] as const;
     for (const key of stale) {
       delete (settings as Partial<typeof parsed>)[key];
     }

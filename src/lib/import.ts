@@ -3,6 +3,7 @@ import type { PostMeta } from "../../shared/types.ts";
 import { EMBED_LIQUID, EMBED_TAG, embedPlatform } from "../editor/extensions/embed.ts";
 import { isGalleryKind } from "../editor/extensions/gallery.ts";
 import { type InlineToken, inlineTokens } from "./inline.ts";
+import { languageOf } from "./topics.ts";
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
 
@@ -332,19 +333,22 @@ export function parseFrontMatter(yaml: string): Partial<PostMeta> {
     lines.pop();
   }
   let cover: PostMeta["cover"] = null;
+  let categories: string[] = [];
   const extra: string[] = [];
 
   for (const { key, value, body, from, to } of fields(lines, 0)) {
     switch (key) {
       case "title":
       case "description":
-      case "author":
       case "date":
+      case "lang":
         meta[key] = string(scalar(value, body, 0));
         break;
-      case "categories":
       case "tags":
-        meta[key] = sequence(value, body, 0);
+        meta.tags = sequence(value, body, 0);
+        break;
+      case "categories":
+        categories = sequence(value, body, 0);
         break;
       case "pin": {
         const found = scalar(value, body, 0);
@@ -356,6 +360,7 @@ export function parseFrontMatter(yaml: string): Partial<PostMeta> {
         meta.toc = !(found?.plain && /^(?:false|False|FALSE)$/.test(found.text));
         break;
       }
+      case "author":
       case "math":
       case "mermaid":
       case "chart":
@@ -387,6 +392,8 @@ export function parseFrontMatter(yaml: string): Partial<PostMeta> {
     }
   }
 
+  meta.lang = meta.lang ?? languageOf(categories);
+  meta.toc = meta.toc ?? true;
   if (cover) {
     meta.cover = cover;
   }

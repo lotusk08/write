@@ -44,7 +44,7 @@ export async function fetchAppConfig(): Promise<AppConfig | null> {
   }
 }
 
-const NO_TOPICS: Topics = { tags: [], categories: [] };
+const NO_TOPICS: Topics = { tags: [] };
 
 let topics: Promise<Topics> | null = null;
 
@@ -67,8 +67,8 @@ export function fetchTopics(): Promise<Topics> {
         throw new Error("No topics.");
       }
       const body = (await response.json()) as Partial<Record<keyof Topics, unknown>>;
-      const found = { tags: topicList(body.tags), categories: topicList(body.categories) };
-      if (!found.tags.length && !found.categories.length) {
+      const found = { tags: topicList(body.tags) };
+      if (!found.tags.length) {
         throw new Error("No topics.");
       }
       return found;

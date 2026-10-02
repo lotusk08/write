@@ -1655,10 +1655,6 @@ textarea {
   text-transform: uppercase;
 }
 
-.section-hint {
-  margin: -8px 0 12px;
-}
-
 .mono {
   font-family: var(--font-mono);
   font-size: 12px;
@@ -1691,6 +1687,11 @@ textarea {
   background: var(--hover);
   font-size: 12px;
   line-height: 1.5;
+}
+
+.token.is-new {
+  background: none;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
 }
 
 .token button {
@@ -1854,6 +1855,7 @@ textarea {
   min-width: 54px;
   flex: 1;
   padding: 3px 12px;
+  white-space: nowrap;
   border: none;
   border-radius: 999px;
   background: none;
@@ -1881,7 +1883,7 @@ textarea {
   transition: transform 160ms ease;
 }
 
-.toggle-knob[data-at="drafts"] {
+.toggle-knob[data-at="1"] {
   transform: translateX(100%);
 }
 

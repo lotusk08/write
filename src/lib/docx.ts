@@ -344,7 +344,7 @@ export async function docToDocxBlob(doc: JSONContent, meta: PostMeta): Promise<B
   }
 
   const document = new Document({
-    creator: meta.author || "write",
+    creator: "write",
     title: meta.title || "Untitled",
     description: meta.description,
     numbering: {

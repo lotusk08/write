@@ -18,7 +18,7 @@ import {
   shareRoomState,
 } from "./lib/api.ts";
 import { draftStore, resolveLocalSrc, type Draft } from "./lib/db.ts";
-import { createDraft, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
+import { createDraft, currentMeta, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
 import { markdownToDoc, parsePost, postPathFromLink, slugFromPath } from "./lib/import.ts";
 import { mindmapUrl } from "./lib/mindmap.ts";
@@ -78,9 +78,10 @@ function boot() {
       saveSettings(settings);
     }
     if (stored.length) {
-      return { drafts: sortDrafts(stored), settings, config };
+      const drafts = stored.map((draft) => ({ ...draft, meta: currentMeta(draft.meta) }));
+      return { drafts: sortDrafts(drafts), settings, config };
     }
-    const draft = createDraft(settings);
+    const draft = createDraft();
     await draftStore.put(draft);
     return { drafts: [draft], settings, config };
   })();
@@ -256,6 +257,13 @@ export default function App() {
     document.title = current ? draftLabel(current) : "write";
   }, [current]);
 
+  const lang = current?.meta.lang || "en";
+  useEffect(() => {
+    if (editor && !editor.isDestroyed) {
+      editor.view.dom.setAttribute("lang", lang);
+    }
+  }, [editor, lang]);
+
   useEffect(() => {
     if (!editor || !currentId) {
       return;
@@ -316,7 +324,7 @@ export default function App() {
 
   const newDraft = useCallback(async () => {
     await settle();
-    const draft = createDraft(settings);
+    const draft = createDraft();
     await draftStore.put(draft);
     setDrafts((previous) => sortDrafts([draft, ...previous]));
     setCurrentId(draft.id);
@@ -341,7 +349,7 @@ export default function App() {
           title: parsed.meta.title ?? slugFromPath(path),
           slug: slugFromPath(path),
           doc: parsed.doc,
-          meta: { ...newPostMeta(settings), ...parsed.meta },
+          meta: { ...newPostMeta(), ...parsed.meta },
           createdAt: now,
           updatedAt: now,
           publishedPath: path,
@@ -407,7 +415,7 @@ export default function App() {
         setToast({ message: "Could not reach the share — open the link again.", kind: "error" });
         return;
       }
-      const draft: Draft = { ...createDraft(loadSettings()), shareToken: token };
+      const draft: Draft = { ...createDraft(), shareToken: token };
       await draftStore.put(draft);
       setDrafts((previous) => sortDrafts([draft, ...previous]));
       setCurrentId(draft.id);
@@ -465,7 +473,7 @@ export default function App() {
       const remaining = draftsRef.current.filter((item) => item.id !== id);
       setDrafts(remaining);
       if (remaining.length === 0) {
-        const replacement = createDraft(settings);
+        const replacement = createDraft();
         await draftStore.put(replacement);
         setDrafts([replacement]);
         setCurrentId(replacement.id);
@@ -486,7 +494,7 @@ export default function App() {
       const next: Partial<Draft> = { meta };
       if (patch.title !== undefined) {
         next.title = patch.title;
-        if (!draft.slug || draft.slug === slugify(draft.meta.title)) {
+        if (!draft.publishedPath && (!draft.slug || draft.slug === slugify(draft.meta.title))) {
           next.slug = slugify(patch.title);
         }
       }
@@ -499,10 +507,12 @@ export default function App() {
   );
 
   const setSlug = useCallback(
-    (slug: string) => {
-      queueSave({ slug: slugify(slug) });
+    (typed: string) => {
+      const clean = slugify(typed);
+      const slug = clean && /[^\p{L}\p{N}]$/u.test(typed) ? `${clean}-` : clean;
+      queueSave({ slug });
       setDrafts((previous) =>
-        previous.map((item) => (item.id === currentIdRef.current ? { ...item, slug: slugify(slug) } : item)),
+        previous.map((item) => (item.id === currentIdRef.current ? { ...item, slug } : item)),
       );
     },
     [queueSave],

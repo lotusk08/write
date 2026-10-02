@@ -109,7 +109,20 @@ its own npm lockfile.
 Nothing on the blog rewrites front matter any more — sizes and placeholders
 are measured by its build and never written into a post — so what
 `buildFrontMatter` in `src/lib/markdown.ts` writes is what stays in the
-repository. It keeps the conventions the published posts already follow all
+repository: `title`, `description` when there is one, `date`, `lang`, `tags`,
+`pin`, `toc` and `image`, in the order the published posts carry them. There
+is no `author` and no `categories`. The blog never read `author`, and
+categories became topics and a language; both are dropped when a post is read,
+as `math` and `mermaid` are. A new post is dated in the blog's zone, +0700,
+whatever the device's, and starts with its table of contents off; a post read
+without a `toc` line keeps it on, as the blog draws it.
+
+The slug follows the title — letters and digits, every run of anything else
+one dash, so `Chuyện cà phê, sáng nay?` is `chuyen-ca-phe-sang-nay` — until it
+is edited by hand. A post opened from the blog keeps its own whatever its
+title becomes, since its slug is its address. The slug field keeps a
+separator typed at the end until the next letter arrives: cleaned on every
+keystroke, it swallowed the dash, and `my-post` could not be typed. It keeps the conventions the published posts already follow all
 the same: block sequences, plain scalars where they are safe, and no empty
 keys (a bare `description:` reads back as `null`), so a post published before
 the move re-publishes without moving a line.
@@ -176,15 +189,16 @@ nothing is there at all, so the tab that published keeps showing its own copy
 of each photo (`showPublishedAs` in `lib/site.ts`) until it is reloaded; the
 mindmap is handed the site's address (`siteSrc`), never that copy.
 
-## Tags and categories
+## Topics and language
 
-The blog files a topic under its slug — lowercased, every run of anything but
-a letter or digit a dash — so `Em` and `em` are one topic under two names, and
-the post that brought the second spelling is the one that split it. The Tags
-and Categories fields offer what the blog already has instead: the build
-publishes `topics.json` (title, slug and count of every tag and category, the
-title being the most-used spelling), and `GET /api/topics` passes it on from
-`SITE_URL`, cached at Cloudflare for five minutes. It is public, like a
+The blog files its posts under one list of topics — categories are gone —
+each a slug with a title, and a post names its topics under `tags:` by slug.
+A topic is its slug — lowercased, every run of anything but a letter or
+digit a dash — so `Em` and `em` are one topic under two names, and the post
+that brought the second spelling is the one that split it. The Topics field
+offers what the blog already has instead: the build publishes `topics.json`
+(title, slug and count of every topic, under `tags`), and `GET /api/topics`
+passes it on from `SITE_URL`, cached at Cloudflare for five minutes. It is public, like a
 published post, so it asks no password; if the site does not answer it returns
 empty lists with a 200, and the fields simply suggest nothing. The app asks
 once a session, when the post panel opens (`fetchTopics` in `lib/api.ts`).
@@ -199,8 +213,8 @@ pointerdown cancelled so the input keeps focus and its blur does not eat the
 tap. Picking on pointerdown instead would add a tag for every scroll of the
 sheet that happened to start on a chip. Arrow keys move through the row and Enter takes the one lit;
 otherwise Enter and comma commit what was typed, and a name that slugifies
-like an existing topic is written in the blog's spelling. A new name is still
-a new name. `topicSlug` in `lib/topics.ts` is that one rule, also behind
+like an existing topic is written as that topic. A new name is still a new
+name. `topicSlug` in `lib/topics.ts` is that one rule, also behind
 `uniqueNames` when the front matter is written; it composes the text first
 (NFC), since a decomposed `Tết` slugged to `te-t`. Enter is ignored while an
 input method is composing — Vietnamese Telex holds the word open, and Enter
@@ -215,6 +229,26 @@ The row is scrolled into view again whenever the panel it scrolls in changes
 size, a frame later, rather than on the viewport's resize event: that event
 arrives before the sheet has shrunk to the keyboard, and the chips were
 measured against the old height and left under the sheet's footer.
+
+A topic the blog has is stored as its slug and shown as its title, picked or
+typed: `looking back` and `Tet & holidays` go into the post as `looking-back`
+and `tet`, as every published post carries them (`knownTopic` in
+`lib/topics.ts`). A name the blog does not have keeps its spelling and its
+chip is outlined, since publishing it starts a topic of its own. A post takes
+eight topics at most.
+
+The language is a toggle, Tiếng Việt or English, written as `lang: vi` or
+`lang: en`; the blog reads it for the page's language and `og:locale`. A new
+post starts in Vietnamese, as most are. A post or local draft that still
+carries a `Vietnamese` or `English` category is read as that language and the
+category is dropped (`languageOf`, `currentMeta`); one with neither keeps no
+`lang`, which the blog draws in English, rather than taking the new-post
+default. The editor carries the post's language as its own `lang`, so the
+browser spellchecks a Vietnamese post as Vietnamese.
+
+`Toggle` (`src/components/Toggle.tsx`) is the two-way switch behind both this
+and Publish as: its knob covers half and sits by index, and its labels do not
+wrap — `Tiếng Việt` broke over two lines and the switch grew taller.
 
 ## Round-tripping published posts
 
@@ -458,7 +492,7 @@ Things that took a bug to learn, and that a change here can quietly undo:
   written exactly — a newline as `\n` inside double quotes, never folded into a
   space or trimmed — so the file reads differently but js-yaml reads the
   same string back. Tidying belongs to typing, not writing: the title,
-  description, author and alt fields trim themselves and fold their line
+  description and alt fields trim themselves and fold their line
   breaks into spaces on blur (`tidyField`), which is what the writer used to
   do to every value. Left to the writer, a phone keyboard's trailing space
   published `"Title "`; done in the writer, it changed values read from a
@@ -577,8 +611,8 @@ undo is off, content comes from the room rather than `setContent`, and carets
 show who is where. The name above the switch is how a caret is labelled: kept
 per device, prefilled with a random two-word name so nobody has to invent
 one, and applied live through awareness when edited mid-session — not the
-author setting, which defaults the same on every device and once filled a
-room with carets all reading "steve". Clearing the field keeps the last name
+old author setting, which defaulted the same on every device and once filled
+a room with carets all reading "steve". Clearing the field keeps the last name
 rather than rerolling a random one mid-edit, and blur puts it back. Who is in
 the room is read out of awareness into the Share tab, and while a session
 runs the dock shows your own name and caret colour — tapping it opens the

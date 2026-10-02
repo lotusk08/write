@@ -12,9 +12,8 @@ export interface AppConfig {
 export interface PostMeta {
   title: string;
   description: string;
-  author: string;
   date: string;
-  categories: string[];
+  lang: string;
   tags: string[];
   pin: boolean;
   toc: boolean;
@@ -30,7 +29,6 @@ export interface Topic {
 
 export interface Topics {
   tags: Topic[];
-  categories: Topic[];
 }
 
 export interface PublishFile {

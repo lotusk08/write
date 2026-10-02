@@ -38,7 +38,7 @@ function collectImageSrcs(doc: JSONContent): string[] {
 }
 
 export function draftSlug(draft: Draft): string {
-  return draft.slug || slugify(draft.meta.title) || "untitled";
+  return draft.slug.replace(/-+$/, "") || slugify(draft.meta.title) || "untitled";
 }
 
 function publishedNames(doc: JSONContent): Set<string> {
