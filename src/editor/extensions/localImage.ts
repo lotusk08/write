@@ -4,7 +4,7 @@ import { ReplaceAroundStep, ReplaceStep } from "@tiptap/pm/transform";
 import type { NodeView } from "@tiptap/pm/view";
 import { ySyncPluginKey } from "@tiptap/y-tiptap";
 import { LOCAL_PREFIX, imageStore, isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
-import { displaySrc } from "../../lib/site.ts";
+import { convertedSrc, displaySrc } from "../../lib/site.ts";
 import { CENTER_ROW, withRowClasses } from "./blogFormat.ts";
 import { galleryAt } from "./gallery.ts";
 
@@ -222,7 +222,7 @@ export const LocalImage = Image.extend({
           figure.classList.remove("is-missing");
           const published = displaySrc(src);
           img.onerror = () => {
-            const converted = published.replace(/\.(jpe?g|png|tiff?|bmp)$/i, ".webp");
+            const converted = convertedSrc(published);
             img.onerror = null;
             if (converted !== published) {
               img.src = converted;

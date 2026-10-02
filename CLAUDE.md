@@ -192,6 +192,18 @@ nothing is there at all, so the tab that published keeps showing its own copy
 of each photo (`showPublishedAs` in `lib/site.ts`) until it is reloaded; the
 mindmap is handed the site's address (`siteSrc`), never that copy.
 
+A post opened from the blog names its photos as they were committed, so a
+phone's JPEG is still `29-thang-9.jpg` in the repository while the site,
+whose build converted it and dropped the original, serves only
+`29-thang-9.webp`. The post is left saying `.jpg` — the repository has no
+`.webp` to point at, and the next build converts it again. What changes is
+what is shown: an image tries the name as written and, failing that, the
+WebP the build made of it (`convertedSrc`: a JPEG, PNG or TIFF under
+`/assets/img/post/`, the only photos the build converts). The editor's
+images did this already; the cover in the post panel did not, and showed a
+broken image. The mindmap, which cannot try twice, is handed the WebP's
+address outright.
+
 ## Topics and language
 
 The blog files its posts under one list of topics — categories are gone —

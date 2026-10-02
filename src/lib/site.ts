@@ -23,3 +23,7 @@ export function siteSrc(src: string): string {
 export function displaySrc(src: string): string {
   return shown.get(src) ?? siteSrc(src);
 }
+
+export function convertedSrc(src: string): string {
+  return src.replace(/(\/assets\/img\/post\/[^?#]+)\.(?:jpe?g|png|tiff?)$/i, "$1.webp");
+}

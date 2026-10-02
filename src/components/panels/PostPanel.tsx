@@ -3,7 +3,7 @@ import type { PostMeta, Topics } from "../../../shared/types.ts";
 import { fetchTopics } from "../../lib/api.ts";
 import { isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
 import type { Language } from "../../lib/draft.ts";
-import { displaySrc } from "../../lib/site.ts";
+import { convertedSrc, displaySrc } from "../../lib/site.ts";
 import { rememberValue, tidyEdited } from "../../lib/text.ts";
 import { Toggle, type ToggleOption } from "../Toggle.tsx";
 import { TokenInput } from "../TokenInput.tsx";
@@ -90,7 +90,15 @@ export function PostPanel({ meta, slug, onChange, onSlugChange }: PostPanelProps
         <div className="field post-cover">
           {coverUrl ? (
             <figure className="cover-card">
-              <img src={coverUrl} alt={meta.cover?.alt ?? ""} />
+              <img
+                src={coverUrl}
+                alt={meta.cover?.alt ?? ""}
+                onError={() => {
+                  if (!isLocalSrc(meta.cover?.path) && convertedSrc(coverUrl) !== coverUrl) {
+                    setCoverUrl(convertedSrc(coverUrl));
+                  }
+                }}
+              />
               <figcaption>
                 <button
                   type="button"
