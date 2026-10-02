@@ -1842,7 +1842,9 @@ textarea {
 
 .toggle {
   position: relative;
-  display: flex;
+  display: grid;
+  grid-auto-columns: 1fr;
+  grid-auto-flow: column;
   padding: 2px;
   border: 1px solid var(--border);
   border-radius: 999px;
@@ -1853,7 +1855,6 @@ textarea {
   position: relative;
   z-index: 1;
   min-width: 54px;
-  flex: 1;
   padding: 3px 12px;
   white-space: nowrap;
   border: none;
@@ -1891,6 +1892,24 @@ textarea {
   .toggle-knob {
     transition: none;
   }
+}
+
+.password-row {
+  display: flex;
+  gap: 8px;
+}
+
+.password-row .input {
+  min-width: 0;
+  flex: 1;
+}
+
+.save-passkey {
+  justify-self: start;
+}
+
+.publish-as {
+  margin-bottom: 14px;
 }
 
 .publish-target {

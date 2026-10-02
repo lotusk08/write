@@ -1,9 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import type { AppConfig, PostMeta, Topics } from "../../../shared/types.ts";
+import type { PostMeta, Topics } from "../../../shared/types.ts";
 import { fetchTopics } from "../../lib/api.ts";
 import { isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
 import type { Language } from "../../lib/draft.ts";
-import type { Settings } from "../../lib/settings.ts";
 import { displaySrc } from "../../lib/site.ts";
 import { rememberValue, tidyEdited } from "../../lib/text.ts";
 import { Toggle, type ToggleOption } from "../Toggle.tsx";
@@ -13,17 +12,9 @@ import { Section } from "./Section.tsx";
 export interface PostPanelProps {
   meta: PostMeta;
   slug: string;
-  settings: Settings;
-  config: AppConfig | null;
   onChange: (patch: Partial<PostMeta>) => void;
   onSlugChange: (slug: string) => void;
-  onSettingsChange: (patch: Partial<Settings>) => void;
 }
-
-const TARGETS: ToggleOption<Settings["publishTarget"]>[] = [
-  { id: "posts", label: "Post" },
-  { id: "drafts", label: "Draft" },
-];
 
 const LANGUAGES: ToggleOption<Language>[] = [
   { id: "vi", label: "Tiếng Việt" },
@@ -37,15 +28,7 @@ const OPTIONS: { key: "toc" | "pin"; label: string }[] = [
   { key: "pin", label: "Pin to home" },
 ];
 
-export function PostPanel({
-  meta,
-  slug,
-  settings,
-  config,
-  onChange,
-  onSlugChange,
-  onSettingsChange,
-}: PostPanelProps) {
+export function PostPanel({ meta, slug, onChange, onSlugChange }: PostPanelProps) {
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const coverInput = useRef<HTMLInputElement>(null);
   const [topics, setTopics] = useState<Topics | null>(null);
@@ -209,36 +192,6 @@ export function PostPanel({
             </li>
           ))}
         </ul>
-      </Section>
-
-      <Section title="Blog">
-        {config?.problem ? <div className="notice warn">{config.problem}</div> : null}
-        {config ? (
-          <>
-            <div className="menu-row">
-              <span className="field-label">Repository</span>
-              <span className="menu-value mono">{config.repo || "\u2014"}</span>
-            </div>
-            <div className="menu-row">
-              <span className="field-label">Branch</span>
-              <span className="menu-value mono">{config.branch}</span>
-            </div>
-            <div className="menu-row">
-              <span className="field-label">Publish as</span>
-              <Toggle
-                label="Publish as"
-                options={TARGETS}
-                value={settings.publishTarget}
-                onChange={(publishTarget) => onSettingsChange({ publishTarget })}
-              />
-            </div>
-          </>
-        ) : (
-          <p className="hint">
-            This app's own API did not answer, so it does not know where it publishes. Reload; if
-            that lasts, the Worker is not up.
-          </p>
-        )}
       </Section>
     </>
   );

@@ -130,10 +130,8 @@ export interface CommitOptions {
   token: string;
   repo: string;
   branch?: string;
-  baseBranch?: string;
   message: string;
   files: PublishFile[];
-  pullRequest?: { title: string; body?: string } | null;
 }
 
 export async function commitFiles(options: CommitOptions): Promise<PublishResult> {
@@ -142,31 +140,13 @@ export async function commitFiles(options: CommitOptions): Promise<PublishResult
     throw new Error("Nothing to commit.");
   }
 
-  const baseBranch = options.baseBranch || (await getDefaultBranch(token, repo));
-  const branch = options.branch || baseBranch;
+  const branch = options.branch || (await getDefaultBranch(token, repo));
 
-  const baseRef = await gh<{ object: { sha: string } }>(
+  const ref = await gh<{ object: { sha: string } }>(
     token,
-    `/repos/${repo}/git/ref/heads/${encodeRef(baseBranch)}`,
+    `/repos/${repo}/git/ref/heads/${encodeRef(branch)}`,
   );
-  const baseCommitSha = baseRef.object.sha;
-
-  let headCommitSha = baseCommitSha;
-  let branchExists = branch === baseBranch;
-  if (!branchExists) {
-    try {
-      const ref = await gh<{ object: { sha: string } }>(
-        token,
-        `/repos/${repo}/git/ref/heads/${encodeRef(branch)}`,
-      );
-      headCommitSha = ref.object.sha;
-      branchExists = true;
-    } catch (error) {
-      if (!(error instanceof GitHubError && error.status === 404)) {
-        throw error;
-      }
-    }
-  }
+  const headCommitSha = ref.object.sha;
 
   const headCommit = await gh<{ tree: { sha: string } }>(
     token,
@@ -204,38 +184,16 @@ export async function commitFiles(options: CommitOptions): Promise<PublishResult
     },
   );
 
-  if (branchExists) {
-    await gh(token, `/repos/${repo}/git/refs/heads/${encodeRef(branch)}`, {
-      method: "PATCH",
-      body: { sha: commit.sha },
-    });
-  } else {
-    await gh(token, `/repos/${repo}/git/refs`, {
-      method: "POST",
-      body: { ref: `refs/heads/${branch}`, sha: commit.sha },
-    });
-  }
+  await gh(token, `/repos/${repo}/git/refs/heads/${encodeRef(branch)}`, {
+    method: "PATCH",
+    body: { sha: commit.sha },
+  });
 
-  const result: PublishResult = {
+  return {
     repo,
     branch,
     commitSha: commit.sha,
     commitUrl: commit.html_url,
     paths: files.map((f) => f.path),
   };
-
-  if (options.pullRequest && branch !== baseBranch) {
-    const pr = await gh<{ html_url: string }>(token, `/repos/${repo}/pulls`, {
-      method: "POST",
-      body: {
-        title: options.pullRequest.title,
-        body: options.pullRequest.body ?? "",
-        head: branch,
-        base: baseBranch,
-      },
-    });
-    result.pullRequestUrl = pr.html_url;
-  }
-
-  return result;
 }

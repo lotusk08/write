@@ -9,7 +9,6 @@ export interface Settings {
   draftsDir: string;
   imagesDir: string;
   publishTarget: "posts" | "drafts";
-  openPullRequest: boolean;
   menuTab: MenuTab;
   focusMode: boolean;
 }
@@ -27,7 +26,6 @@ export const defaultSettings: Settings = {
   draftsDir: "src/drafts",
   imagesDir: "public/assets/img/post",
   publishTarget: "posts",
-  openPullRequest: false,
   menuTab: "post",
   focusMode: false,
 };
@@ -49,13 +47,14 @@ export function loadSettings(): Settings {
           publishPassword?: string;
           author?: string;
           timezoneOffset?: number;
+          openPullRequest?: boolean;
         })
       : {};
     const stored = { ...defaultSettings, ...parsed };
     const menuTab: MenuTab =
       stored.menuTab === "export" || stored.menuTab === "share" ? stored.menuTab : "post";
     const settings: Settings = { ...stored, menuTab };
-    const stale = ["githubToken", "publishToken", "publishPassword", "author", "timezoneOffset"] as const;
+    const stale = ["githubToken", "publishToken", "publishPassword", "author", "timezoneOffset", "openPullRequest"] as const;
     for (const key of stale) {
       delete (settings as Partial<typeof parsed>)[key];
     }

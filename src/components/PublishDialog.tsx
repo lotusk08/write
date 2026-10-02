@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { AppConfig, PublishResult } from "../../shared/types.ts";
 import { PasswordRejected, publish } from "../lib/api.ts";
-import { rememberPassword, sessionPassword } from "../lib/password.ts";
+import { addPasskey, passkeysAvailable, signInWithPasskey } from "../lib/passkey.ts";
+import { rememberPassword, rememberSession, sessionPassword, sessionToken } from "../lib/password.ts";
 import type { Draft } from "../lib/db.ts";
-import { buildPublishPlan, defaultCommitMessage, publishBranchName, type PublishPlan } from "../lib/publish.ts";
+import { buildPublishPlan, defaultCommitMessage, type PublishPlan } from "../lib/publish.ts";
 import type { Settings } from "../lib/settings.ts";
 import { Dialog } from "./Dialog.tsx";
+import { Toggle, type ToggleOption } from "./Toggle.tsx";
 
 interface PublishDialogProps {
   draft: Draft;
@@ -15,6 +17,11 @@ interface PublishDialogProps {
   onClose: () => void;
   onPublished: (result: PublishResult, plan: PublishPlan) => void;
 }
+
+const TARGETS: ToggleOption<Settings["publishTarget"]>[] = [
+  { id: "posts", label: "Post" },
+  { id: "drafts", label: "Draft" },
+];
 
 export function PublishDialog({
   draft,
@@ -29,9 +36,11 @@ export function PublishDialog({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [password, setPassword] = useState(sessionPassword);
+  const [session, setSession] = useState(sessionToken);
   const [rejected, setRejected] = useState(0);
   const passwordField = useRef<HTMLInputElement>(null);
-  const asking = !sessionPassword() || rejected > 0;
+  const canPasskey = useMemo(passkeysAvailable, []);
+  const asking = (!sessionPassword() && !session) || rejected > 0;
 
   const repo = settings.repo;
   const baseBranch = settings.branch;
@@ -76,6 +85,31 @@ export function PublishDialog({
     [config],
   );
 
+  const forget = () => {
+    setRejected((count) => count + 1);
+    setPassword("");
+    setSession("");
+    rememberPassword("");
+    rememberSession("");
+  };
+
+  const withPasskey = async (ceremony: () => Promise<string | null>) => {
+    setBusy(true);
+    setError(null);
+    try {
+      const token = await ceremony();
+      if (token) {
+        rememberSession(token);
+        setSession(token);
+        setRejected(0);
+      }
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause));
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const run = async () => {
     if (!plan || blocked || (asking && !password)) {
       return;
@@ -83,25 +117,14 @@ export function PublishDialog({
     setBusy(true);
     setError(null);
     try {
-      const branch = settings.openPullRequest ? publishBranchName(plan.slug) : baseBranch;
-      const result = await publish(
-        {
-          message,
-          files: plan.files,
-          branch,
-          pullRequest: settings.openPullRequest
-            ? { title: message, body: `Published from write.\n\n\`${plan.markdownPath}\`` }
-            : null,
-        },
-        password,
-      );
-      rememberPassword(password);
+      const result = await publish({ message, files: plan.files }, asking ? password : sessionPassword());
+      if (asking) {
+        rememberPassword(password);
+      }
       onPublished(result, plan);
     } catch (cause) {
       if (cause instanceof PasswordRejected) {
-        setRejected((count) => count + 1);
-        setPassword("");
-        rememberPassword("");
+        forget();
       }
       setError(cause instanceof Error ? cause.message : String(cause));
     } finally {
@@ -112,7 +135,7 @@ export function PublishDialog({
   return (
     <Dialog
       title="Publish"
-      subtitle={`${repo} · ${settings.openPullRequest ? "pull request" : baseBranch}`}
+      subtitle={`${repo} · ${baseBranch}`}
       onClose={onClose}
       footer={
         <>
@@ -125,7 +148,7 @@ export function PublishDialog({
             disabled={!plan || busy || Boolean(blocked) || (asking && !password)}
             onClick={() => void run()}
           >
-            {busy ? "Publishing…" : settings.openPullRequest ? "Open pull request" : "Commit"}
+            {busy ? "Publishing…" : "Commit"}
           </button>
         </>
       }
@@ -140,44 +163,60 @@ export function PublishDialog({
       ) : null}
       {error ? <div className="notice warn">{error}</div> : null}
 
+      <div className="menu-row publish-as">
+        <span className="field-label">Publish as</span>
+        <Toggle
+          label="Publish as"
+          options={TARGETS}
+          value={settings.publishTarget}
+          onChange={(publishTarget) => onSettingsChange({ publishTarget })}
+        />
+      </div>
+
       {asking ? (
         <div className="field">
           <label htmlFor="publish-password">Password</label>
-          <input
-            ref={passwordField}
-            id="publish-password"
-            className="input"
-            type="password"
-            autoComplete="current-password"
-            autoFocus
-            placeholder="••••••••"
-            value={password}
-            onChange={(event) => setPassword(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") {
-                event.preventDefault();
-                void run();
-              }
-            }}
-          />
-          <p className="hint">
-            Held until this tab closes, then asked for again — one prompt a sitting, not one a
-            post.
-          </p>
+          <div className="password-row">
+            <input
+              ref={passwordField}
+              id="publish-password"
+              className="input"
+              type="password"
+              autoComplete="current-password"
+              autoFocus={!canPasskey}
+              placeholder="••••••••"
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  event.preventDefault();
+                  void run();
+                }
+              }}
+            />
+            {canPasskey ? (
+              <button
+                type="button"
+                className="btn"
+                disabled={busy || Boolean(blocked)}
+                onClick={() => void withPasskey(signInWithPasskey)}
+              >
+                Passkey
+              </button>
+            ) : null}
+          </div>
+          {canPasskey && password ? (
+            <button
+              type="button"
+              className="btn tiny save-passkey"
+              disabled={busy || Boolean(blocked)}
+              onClick={() => void withPasskey(() => addPasskey(password))}
+            >
+              Save a passkey on this device
+            </button>
+          ) : null}
         </div>
       ) : null}
-
-      <div className="field">
-        <span className="field-label">Review</span>
-        <label className="switch">
-          <input
-            type="checkbox"
-            checked={settings.openPullRequest}
-            onChange={(event) => onSettingsChange({ openPullRequest: event.target.checked })}
-          />
-          Open a pull request
-        </label>
-      </div>
 
       <div className="field">
         <label htmlFor="publish-message">Commit message</label>

@@ -5,6 +5,7 @@ import type {
   Topic,
   Topics,
 } from "../../shared/types.ts";
+import { sessionToken } from "./password.ts";
 
 export class PasswordRejected extends Error {
   constructor(message: string) {
@@ -14,9 +15,11 @@ export class PasswordRejected extends Error {
 }
 
 function headers(password: string, extra?: Record<string, string>): Record<string, string> {
+  const session = sessionToken();
   return {
     accept: "application/json",
     ...(password ? { "x-write-password": password } : {}),
+    ...(session ? { "x-write-session": session } : {}),
     ...extra,
   };
 }
@@ -146,4 +149,37 @@ export async function publish(
     body: JSON.stringify(request),
   });
   return readJson<PublishResult>(response, "Publish failed");
+}
+
+export interface PasskeyChallenge {
+  challenge: string;
+  rpId: string;
+  credentials: string[];
+  algorithms: number[];
+}
+
+export async function passkeyChallenge(): Promise<PasskeyChallenge> {
+  const response = await fetch("/api/passkey/challenge", { method: "POST", headers: { accept: "application/json" } });
+  return readJson<PasskeyChallenge>(response, "Could not start the passkey");
+}
+
+async function passkeySession(path: string, body: Record<string, unknown>, password = ""): Promise<string> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: { ...headers(password, { "content-type": "application/json" }) },
+    body: JSON.stringify(body),
+  });
+  const result = await readJson<{ session?: string }>(response, "The passkey did not work");
+  if (!result.session) {
+    throw new Error("The passkey did not work.");
+  }
+  return result.session;
+}
+
+export function passkeyRegister(body: Record<string, unknown>, password: string): Promise<string> {
+  return passkeySession("/api/passkey/register", body, password);
+}
+
+export function passkeyLogin(body: Record<string, unknown>): Promise<string> {
+  return passkeySession("/api/passkey/login", body);
 }

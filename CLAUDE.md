@@ -19,7 +19,8 @@ fine-grained GitHub token (Contents: read and write) and a `WRITE_PASSWORD`. No
 GitHub credential ever reaches the browser. What the browser sends is that
 password, as `x-write-password` on every `/api` call — typed once on a device
 and remembered, so publishing is one button rather than a password prompt per
-post.
+post — or, signed in with a passkey, a session (`x-write-session`) in its
+place.
 
 Reading and writing are not the same privilege, so they are not asked for the
 same way. A published post opens without the password: `src/posts` is on the
@@ -39,9 +40,10 @@ for a literal `..` and then pasting the path into the URL let
 `src/posts/%252e%252e/drafts/x.md` through — the query decoded it to `%2e%2e`,
 GitHub's URL parser to `..` — which read drafts without the password, and with
 `?ref=` or more levels up, any file or repository the token could see.
-Publishing goes to `BLOG_BRANCH`, or — with "open a pull request" on — to
-the app's own `post/<slug>` branch (`PROPOSAL_BRANCH`), and nowhere else: a
-free branch field let a leaked password move tags or commit to `main`.
+Publishing goes to `BLOG_BRANCH` and nowhere else: the Worker takes no branch
+from the request, since a free branch field let a leaked password move tags or
+commit to `main`. Pull requests are gone; Publish as Post or Draft is the only
+choice of where a post goes.
 Request bodies are read through `readCapped`, which counts bytes as they
 stream, so a chunked upload cannot be buffered whole before its size is
 known. Reading a published post is public, so it is rate-limited instead
@@ -100,6 +102,9 @@ its own npm lockfile.
   password, and path validation against the configured directories so a leaked
   password cannot rewrite workflows. `worker/share.ts` is the `ShareRoom`
   Durable Object behind sharing: a y-websocket server, one room per token.
+  `worker/passkeys.ts` is the `Passkeys` Durable Object (`/api/passkey/*`): the
+  registered passkeys and the challenges handed out, with the WebAuthn checks
+  and the session tokens.
 - `shared/` — GitHub calls, base64 and the post types. No DOM in it, so it is
   read by both the app and the Worker; `lib/api.ts` is the browser's only door
   to the network, and it only ever calls `/api`.
@@ -175,9 +180,7 @@ name the post already uses, each one would have added another copy to the
 repository and pointed the post at it. The body is repointed through the
 editor, outside its history, so a shared room carries it to everyone in it and
 undo does not bring the `local:` address back; in the Markdown source view it
-is the text that is repointed. A pull request repoints nothing: its photos are
-on the `post/<slug>` branch until it merges, and a draft pointing at them
-would publish straight to `blog` without them.
+is the text that is repointed.
 
 The site does not serve what was pushed: the host builds `blog` itself, and
 `convert-images.js` writes the WebP, deletes the file it was made from and
@@ -247,8 +250,10 @@ default. The editor carries the post's language as its own `lang`, so the
 browser spellchecks a Vietnamese post as Vietnamese.
 
 `Toggle` (`src/components/Toggle.tsx`) is the two-way switch behind both this
-and Publish as: its knob covers half and sits by index, and its labels do not
-wrap — `Tiếng Việt` broke over two lines and the switch grew taller.
+and Publish as, which sits in the publish dialog. Its halves are equal grid
+columns as wide as the longer label, and the knob covers one of them: as flex
+items the halves split the switch's width while `Tiếng Việt` needed more than
+half, so the label broke over two lines and then ran out from under the knob.
 
 ## Round-tripping published posts
 
@@ -557,8 +562,23 @@ paragraph is the way out of it.
 
 The publish password lives in session storage (`src/lib/password.ts`), never in
 Settings: one prompt per sitting, and closing the tab — or the app going away
-on a phone — is what forgets it. A `401` empties the field and puts the caret
-back in it, so the wrong password is not sent again by a second tap.
+on a phone — is what forgets it. A `401` empties the field, forgets any
+session and puts the caret back in it, so the wrong password is not sent again
+by a second tap.
+
+A passkey stands in for the password. With the password typed, *Save a passkey
+on this device* registers one (`src/lib/passkey.ts`); *Passkey* beside the field
+signs in with it. Registering asks the password itself, never a session, so a
+session that leaked cannot add a passkey of its own. The Worker hands out a
+single-use challenge, five minutes long, and checks every response the way
+WebAuthn says: the ceremony, the origin and the site are its own, the user was
+present and verified on the device, the signature holds for the stored key
+(ES256 or RS256), and the counter moved unless the passkey always reports 0.
+What it answers with is a session, a timestamp signed with a key derived from
+`WRITE_PASSWORD`, good for twelve hours and kept in session storage like the
+password; changing the password ends every session. The site is the Worker's
+own host — under `wrangler dev` that is the route's, `http://write.stevehoang.com`,
+so a browser on `localhost` cannot sign in there, though a scripted response can.
 
 ## Drafts rail and menu
 

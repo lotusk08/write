@@ -678,13 +678,11 @@ export default function App() {
     async (id: string, result: PublishResult, plan: PublishPlan) => {
       setPublishOpen(false);
       setToast({
-        message: result.pullRequestUrl
-          ? `Pull request opened for ${plan.markdownPath}`
-          : `Committed ${plan.markdownPath} to ${result.branch}`,
+        message: `Committed ${plan.markdownPath} to ${result.branch}`,
         kind: "info",
-        href: result.pullRequestUrl ?? result.commitUrl,
+        href: result.commitUrl,
       });
-      const urls = result.pullRequestUrl ? new Map<string, string>() : plan.imageUrls;
+      const urls = plan.imageUrls;
       await Promise.all(
         [...urls].map(async ([local, url]) => {
           const shown = await resolveLocalSrc(local).catch(() => null);
@@ -983,11 +981,8 @@ export default function App() {
         post={{
           meta: current.meta,
           slug: current.slug,
-          settings,
-          config,
           onChange: updateMeta,
           onSlugChange: setSlug,
-          onSettingsChange: updateSettings,
         }}
         settings={{ settings, config, onChange: updateSettings }}
         share={{

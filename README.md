@@ -7,14 +7,14 @@ commit. Posts already on the blog can be opened here and edited in place.
 
 No token to remember. A small Worker holds the one GitHub token and makes the
 commit; the browser sends a password to reach it, typed once on a device and
-remembered after that. Opening a published post asks for nothing at all — the
+remembered after that, or signs in with a passkey saved the first time. Opening a published post asks for nothing at all — the
 password is for sending, not for reading. No GitHub credential ever touches the
 browser.
 
 ```
 .
 ├── src/          the editor app (React + Tiptap 3)
-├── worker/       the three API routes, and the password in front of them
+├── worker/       the API routes, and the password and passkeys in front of them
 ├── shared/       the GitHub commit flow, the post types, base64
 └── wrangler.jsonc
 ```
@@ -62,8 +62,8 @@ browser.
   every image, in one commit. Images are renamed to the blog's flat convention
   (`public/assets/img/post/<slug>.jpg`, `<slug>-1.jpg`, …), the Markdown is
   rewritten to point at the address they are served from, and the site's own
-  build converts them to WebP. Optionally opens a pull request
-  on a `post/<slug>` branch instead of committing to `main`.
+  build converts them to WebP. Publish as Post or Draft; either way it is one
+  commit to the blog's branch.
 
 Drafts sit as vertical tabs along the left edge, Obsidian-style: the draft you
 are editing spells out its title, and the rest tuck behind each other like

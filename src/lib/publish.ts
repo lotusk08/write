@@ -160,7 +160,3 @@ export function defaultCommitMessage(draft: Draft, isUpdate: boolean): string {
   const title = draft.meta.title || draft.title || "untitled";
   return `docs(post): ${isUpdate ? "update" : "add"} ${title}`;
 }
-
-export function publishBranchName(slug: string): string {
-  return `post/${slug || "draft"}`;
-}

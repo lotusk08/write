@@ -15,11 +15,25 @@ import type {
   Topics,
 } from "../shared/types.ts";
 
+import {
+  ALGORITHMS,
+  base64url,
+  checkCeremony,
+  fromBase64url,
+  importKey,
+  issueSession,
+  type Passkeys,
+  validSession,
+  verifySignature,
+} from "./passkeys.ts";
+
 export { ShareRoom } from "./share.ts";
+export { Passkeys } from "./passkeys.ts";
 
 export interface Env {
   ASSETS: Fetcher;
   SHARE: DurableObjectNamespace;
+  PASSKEYS: DurableObjectNamespace<Passkeys>;
   SHARE_RATE?: RateLimit;
   SOURCE_RATE?: RateLimit;
   GITHUB_TOKEN?: string;
@@ -33,7 +47,7 @@ export interface Env {
 }
 
 const MAX_REQUEST_BYTES = 20 * 1024 * 1024;
-const PROPOSAL_BRANCH = /^post\/[a-z0-9][a-z0-9-]{0,99}$/;
+const PASSKEY_BODY_BYTES = 16 * 1024;
 
 function githubToken(env: Env): string {
   return (env.GITHUB_TOKEN ?? "").trim();
@@ -164,10 +178,18 @@ function crossSite(request: Request): boolean {
   }
 }
 
-async function authorize(request: Request, env: Env): Promise<Response | null> {
+async function authorize(
+  request: Request,
+  env: Env,
+  { passwordOnly = false }: { passwordOnly?: boolean } = {},
+): Promise<Response | null> {
   const missing = problem(env);
   if (missing) {
     return json({ error: missing }, env.GITHUB_TOKEN ? 500 : 501);
+  }
+  const session = request.headers.get("x-write-session");
+  if (!passwordOnly && session && (await validSession(session, env.WRITE_PASSWORD!))) {
+    return null;
   }
   const supplied = request.headers.get("x-write-password") ?? "";
   if (!(await sameSecret(supplied, env.WRITE_PASSWORD!))) {
@@ -294,12 +316,6 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
     return json({ error: checked.error }, 400);
   }
 
-  const base = env.BLOG_BRANCH || "main";
-  const proposed = typeof body.branch === "string" && PROPOSAL_BRANCH.test(body.branch);
-  if (body.branch !== undefined && body.branch !== null && body.branch !== base && !proposed) {
-    return json({ error: `Publishing goes to ${base}, or to a post/<slug> branch for a pull request.` }, 400);
-  }
-  const branch = proposed ? (body.branch as string) : base;
 
   const message =
     (typeof body.message === "string" ? body.message : "").trim().slice(0, 500) ||
@@ -309,17 +325,9 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
     const result: PublishResult = await commitFiles({
       token: githubToken(env),
       repo: env.BLOG_REPO!,
-      branch,
-      baseBranch: env.BLOG_BRANCH || undefined,
+      branch: env.BLOG_BRANCH || undefined,
       message,
       files: checked.files,
-      pullRequest:
-        proposed && body.pullRequest && typeof body.pullRequest.title === "string"
-          ? {
-              title: body.pullRequest.title.slice(0, 200),
-              body: typeof body.pullRequest.body === "string" ? body.pullRequest.body.slice(0, 2000) : "",
-            }
-          : null,
     });
     return json(result);
   } catch (error) {
@@ -391,6 +399,122 @@ async function handleSource(request: Request, env: Env): Promise<Response> {
       upstreamStatus(error),
     );
   }
+}
+
+function passkeyStore(env: Env) {
+  return env.PASSKEYS.get(env.PASSKEYS.idFromName("owner"));
+}
+
+async function readPasskeyBody(request: Request): Promise<Record<string, unknown> | null> {
+  const raw = await readCapped(request, PASSKEY_BODY_BYTES);
+  if (!raw) {
+    return null;
+  }
+  try {
+    const body = JSON.parse(new TextDecoder().decode(raw));
+    return body && typeof body === "object" && !Array.isArray(body) ? body : null;
+  } catch {
+    return null;
+  }
+}
+
+async function handlePasskeyChallenge(request: Request, env: Env): Promise<Response> {
+  if (crossSite(request)) {
+    return json({ error: "Passkeys can only be used from the app itself." }, 403);
+  }
+  const missing = problem(env);
+  if (missing) {
+    return json({ error: missing }, env.GITHUB_TOKEN ? 500 : 501);
+  }
+  if (await limited(env.SOURCE_RATE, request, "passkey")) {
+    return json({ error: "Too many requests — wait a minute and try again." }, 429);
+  }
+  const { challenge, credentials } = await passkeyStore(env).challenge();
+  return json({ challenge, rpId: new URL(request.url).hostname, credentials, algorithms: ALGORITHMS });
+}
+
+async function handlePasskeyRegister(request: Request, env: Env): Promise<Response> {
+  if (crossSite(request)) {
+    return json({ error: "Passkeys can only be used from the app itself." }, 403);
+  }
+  const denied = await authorize(request, env, { passwordOnly: true });
+  if (denied) {
+    return denied;
+  }
+  const body = await readPasskeyBody(request);
+  const id = fromBase64url(body?.id, 1024);
+  const clientDataJSON = fromBase64url(body?.clientDataJSON);
+  const authenticatorData = fromBase64url(body?.authenticatorData);
+  const publicKey = fromBase64url(body?.publicKey);
+  const alg = Number(body?.alg);
+  if (!id?.length || !clientDataJSON || !authenticatorData || !publicKey || !ALGORITHMS.includes(alg as -7 | -257)) {
+    return json({ error: "That is not a passkey the app can use." }, 400);
+  }
+  const url = new URL(request.url);
+  const store = passkeyStore(env);
+  const checked = await checkCeremony(clientDataJSON, authenticatorData, {
+    type: "webauthn.create",
+    origin: url.origin,
+    rpId: url.hostname,
+    consume: (challenge) => store.consume(challenge),
+  });
+  if (typeof checked === "string") {
+    return json({ error: checked }, 400);
+  }
+  if (!checked.credentialId || base64url(checked.credentialId) !== base64url(id)) {
+    return json({ error: "The passkey's response does not match it." }, 400);
+  }
+  if (!(await importKey(publicKey, alg))) {
+    return json({ error: "That is not a passkey the app can use." }, 400);
+  }
+  if (!(await store.add(base64url(id), publicKey.slice().buffer, alg))) {
+    return json({ error: "There are already as many passkeys as the app keeps." }, 400);
+  }
+  return json({ session: await issueSession(env.WRITE_PASSWORD!) });
+}
+
+async function handlePasskeyLogin(request: Request, env: Env): Promise<Response> {
+  if (crossSite(request)) {
+    return json({ error: "Passkeys can only be used from the app itself." }, 403);
+  }
+  const missing = problem(env);
+  if (missing) {
+    return json({ error: missing }, env.GITHUB_TOKEN ? 500 : 501);
+  }
+  if (await limited(env.SOURCE_RATE, request, "passkey")) {
+    return json({ error: "Too many requests — wait a minute and try again." }, 429);
+  }
+  const body = await readPasskeyBody(request);
+  const id = typeof body?.id === "string" && fromBase64url(body.id, 1024) ? body.id : null;
+  const clientDataJSON = fromBase64url(body?.clientDataJSON);
+  const authenticatorData = fromBase64url(body?.authenticatorData);
+  const signature = fromBase64url(body?.signature);
+  if (!id || !clientDataJSON || !authenticatorData || !signature) {
+    return json({ error: "That passkey could not be read." }, 400);
+  }
+  const store = passkeyStore(env);
+  const credential = await store.credential(id);
+  if (!credential) {
+    return json({ error: "This passkey is not one the app knows. Sign in with the password and add it again." }, 401);
+  }
+  const url = new URL(request.url);
+  const checked = await checkCeremony(clientDataJSON, authenticatorData, {
+    type: "webauthn.get",
+    origin: url.origin,
+    rpId: url.hostname,
+    consume: (challenge) => store.consume(challenge),
+  });
+  if (typeof checked === "string") {
+    return json({ error: checked }, 401);
+  }
+  if (!(await verifySignature(credential, checked, signature))) {
+    return json({ error: "The passkey's signature did not check out." }, 401);
+  }
+  if ((checked.counter !== 0 || credential.counter !== 0) && checked.counter <= credential.counter) {
+    return json({ error: "This passkey looks copied. Sign in with the password." }, 401);
+  }
+  await store.touch(id, checked.counter);
+  return json({ session: await issueSession(env.WRITE_PASSWORD!) });
 }
 
 const SHARE_SEED_MAX_BYTES = 4 * 1024 * 1024;
@@ -466,6 +590,21 @@ export default {
       return request.method === "GET"
         ? handleSource(request, env)
         : json({ error: "Use GET." }, 405);
+    }
+    if (url.pathname === "/api/passkey/challenge") {
+      return request.method === "POST"
+        ? handlePasskeyChallenge(request, env)
+        : json({ error: "Use POST." }, 405);
+    }
+    if (url.pathname === "/api/passkey/register") {
+      return request.method === "POST"
+        ? handlePasskeyRegister(request, env)
+        : json({ error: "Use POST." }, 405);
+    }
+    if (url.pathname === "/api/passkey/login") {
+      return request.method === "POST"
+        ? handlePasskeyLogin(request, env)
+        : json({ error: "Use POST." }, 405);
     }
     if (url.pathname === "/api/topics") {
       return request.method === "GET" ? handleTopics(env) : json({ error: "Use GET." }, 405);

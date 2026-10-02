@@ -39,8 +39,6 @@ export interface PublishFile {
 export interface PublishRequest {
   message: string;
   files: PublishFile[];
-  branch?: string;
-  pullRequest?: { title: string; body?: string } | null;
 }
 
 export interface PublishResult {
@@ -49,5 +47,4 @@ export interface PublishResult {
   commitSha: string;
   commitUrl: string;
   paths: string[];
-  pullRequestUrl?: string;
 }

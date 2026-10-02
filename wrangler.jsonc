@@ -13,9 +13,15 @@
     "enabled": true
   },
   "durable_objects": {
-    "bindings": [{ "name": "SHARE", "class_name": "ShareRoom" }]
+    "bindings": [
+      { "name": "SHARE", "class_name": "ShareRoom" },
+      { "name": "PASSKEYS", "class_name": "Passkeys" }
+    ]
   },
-  "migrations": [{ "tag": "share-rooms", "new_sqlite_classes": ["ShareRoom"] }],
+  "migrations": [
+    { "tag": "share-rooms", "new_sqlite_classes": ["ShareRoom"] },
+    { "tag": "passkeys", "new_sqlite_classes": ["Passkeys"] }
+  ],
   "unsafe": {
     "bindings": [
       {
