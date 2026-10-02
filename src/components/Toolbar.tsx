@@ -97,6 +97,14 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
       note: (instance.getAttributes("blockquote").note ?? null) as NoteType | null,
       codeBlock: instance.isActive("codeBlock"),
       collapsible: instance.isActive("collapsible"),
+      sections: ((counts) => {
+        instance.state.doc.descendants((node) => {
+          if (node.type.name === "collapsible") {
+            counts[node.attrs.open ? 0 : 1] += 1;
+          }
+        });
+        return counts[0] > 0 ? "open" : counts[1] > 0 ? "closed" : null;
+      })([0, 0]),
     }),
   });
 
@@ -189,8 +197,12 @@ export function Toolbar({ editor, onToggleAllCollapsibles }: ToolbarProps) {
               : editor.chain().focus().setCollapsible().run()
           }
         />
-        <Tool icon="collapseAll" title="Collapse every section" onClick={() => onToggleAllCollapsibles(false)} />
-        <Tool icon="expandAll" title="Expand every section" onClick={() => onToggleAllCollapsibles(true)} />
+        <Tool
+          icon={state.sections === "closed" ? "expandAll" : "collapseAll"}
+          title={state.sections === "closed" ? "Expand every section" : "Collapse every section"}
+          disabled={state.sections === null}
+          onClick={() => onToggleAllCollapsibles(state.sections === "closed")}
+        />
       </div>
 
       <span className="tool-sep" />
