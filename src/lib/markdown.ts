@@ -71,6 +71,11 @@ function escapeText(text: string, linked: boolean): string {
   return out + escapePlain(text.slice(at));
 }
 
+function delimit(text: string, open: string, close = open): string {
+  const [, lead, core, trail] = /^(\s*)([\s\S]*?)(\s*)$/.exec(text)!;
+  return core ? `${lead}${open}${core}${close}${trail}` : text;
+}
+
 function applyMarks(text: string, marks: Mark[] | undefined): string {
   if (!marks?.length || !text) {
     return text;
@@ -91,13 +96,13 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
     const inner = out;
     switch (mark.type) {
       case "bold":
-        out = `**${out}**`;
+        out = delimit(out, "**");
         break;
       case "italic":
-        out = last === "bold" ? `*__${unbold}__*` : `*${out}*`;
+        out = last === "bold" ? delimit(unbold, "*__", "__*") : delimit(out, "*");
         break;
       case "strike":
-        out = `~~${out}~~`;
+        out = delimit(out, "~~");
         break;
       case "underline":
         out = `<u>${out}</u>`;
@@ -239,7 +244,7 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions, lin
         marks: marksOf(part).filter((mark) => !sameMark(mark, wrapper) && !(bold && sameMark(mark, bold))),
       }));
       const inner = inline(run, options, linked || wrapper.type === "link");
-      rendered.push(bold ? `*__${inner}__*` : wrap(inner, wrapper));
+      rendered.push(bold ? delimit(inner, "*__", "__*") : wrap(inner, wrapper));
       index = end;
       continue;
     }

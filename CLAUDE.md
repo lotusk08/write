@@ -365,7 +365,9 @@ draws every one of these lines differently:
 - A line break carries the marks around it, so `*a\nb*` is one span through
   the editor and is written back as one; split at the break it drew two. A
   `*`, `**` or `~~` run never starts or ends on a break, where its delimiter
-  could not close.
+  could not close. Nor on a space: a word picked by a double tap carries the
+  space after it, and `**instructions **hiện tại` printed its asterisks on
+  the site. `delimit` puts the spaces outside the delimiters.
 - A bare address is linked by the site while the line is read, before any
   emphasis — `https://x.com/_b_c` has no italic in it — and again afterwards
   wherever text is preceded by punctuation. The writer leaves such an address
