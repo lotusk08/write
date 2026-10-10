@@ -15,6 +15,3 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return out;
 }
 
-export function textToBase64(text: string): string {
-  return bytesToBase64(new TextEncoder().encode(text));
-}

@@ -44,7 +44,7 @@ export async function addPasskey(password: string): Promise<string | null> {
       return null;
     }
     if (cause instanceof DOMException && cause.name === "InvalidStateError") {
-      throw new Error("This device already has a passkey for write.");
+      throw new Error("This device already has a passkey for write.", { cause });
     }
     throw cause;
   }

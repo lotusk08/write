@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/core";
+import type { JSONContent } from "../editor/doc.ts";
 import {
   AlignmentType,
   BorderStyle,
@@ -40,10 +40,18 @@ interface PreparedImage {
 }
 
 function docxImageType(mime: string): DocxImageType | null {
-  if (mime === "image/png") return "png";
-  if (mime === "image/jpeg" || mime === "image/jpg") return "jpg";
-  if (mime === "image/gif") return "gif";
-  if (mime === "image/bmp") return "bmp";
+  if (mime === "image/png") {
+    return "png";
+  }
+  if (mime === "image/jpeg" || mime === "image/jpg") {
+    return "jpg";
+  }
+  if (mime === "image/gif") {
+    return "gif";
+  }
+  if (mime === "image/bmp") {
+    return "bmp";
+  }
   return null;
 }
 

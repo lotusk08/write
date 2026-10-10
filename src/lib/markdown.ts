@@ -1,7 +1,6 @@
-import type { JSONContent } from "@tiptap/core";
+import type { JSONContent } from "../editor/doc.ts";
 import type { PostMeta } from "../../shared/types.ts";
-import { CENTER_ROW } from "../editor/extensions/blogFormat.ts";
-import { embedTag } from "../editor/extensions/embed.ts";
+import { CENTER_ROW, embedTag } from "../editor/blog.ts";
 import { autolinkFor, bareLinks } from "./inline.ts";
 import { topicSlug } from "./topics.ts";
 
@@ -548,8 +547,10 @@ const YAML_NUMBER = /^[-+]?(?:\d[\d_]*(?:\.[\d_]*)?|\.\d[\d_]*)(?:[eE][-+]?\d+)?
 
 const YAML_BOOL_OR_NULL = /^(?:y|Y|yes|Yes|YES|n|N|no|No|NO|true|True|TRUE|false|False|FALSE|on|On|ON|off|Off|OFF|null|Null|NULL|~)$/;
 
+// eslint-disable-next-line no-control-regex -- control characters are what this matches
 const YAML_CONTROL = /[\x00-\x1f\x7f-\x9f\u2028\u2029\ufeff\ufffe\uffff]/;
 
+// eslint-disable-next-line no-control-regex -- control characters are what this matches
 const YAML_ESCAPED = /[\\"\x00-\x1f\x7f-\x9f\u2028\u2029\ufeff\ufffe\uffff]/g;
 
 const YAML_ESCAPES: Record<string, string> = { "\\": "\\\\", '"': '\\"', "\n": "\\n", "\t": "\\t", "\r": "\\r" };
@@ -597,7 +598,7 @@ function yamlList(key: string, values: string[]): string[] {
   return [`${key}:`, ...values.map((value) => `  - ${yamlString(value)}`)];
 }
 
-export function buildFrontMatter(meta: PostMeta): string {
+function buildFrontMatter(meta: PostMeta): string {
   const lines = ["---", `title: ${yamlString(meta.title)}`];
   if (meta.description.trim()) {
     lines.push(`description: ${yamlString(meta.description)}`);

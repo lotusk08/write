@@ -74,6 +74,7 @@ async function sameSecret(a: string, b: string): Promise<boolean> {
   return differences === 0;
 }
 
+// eslint-disable-next-line no-control-regex -- control characters are what this matches
 const UNSAFE_PATH = /[%?#\\\x00-\x1f\x7f]/;
 
 function repoPath(raw: string): string | null {

@@ -42,6 +42,7 @@ const TERMINATORS = new Set("\n!#$%&*+-:<=>@[\\]^_`{}~".split("").map((char) => 
 const ESCAPABLE = new Set("\\!\"#$%&'()*+,./:;<=>?@[]^_`{|}~-".split("").map((char) => char.charCodeAt(0)));
 const SCHEME = /(?:^|[^a-z0-9.+-])([a-z][a-z0-9.+-]*)$/i;
 const SPACED_LINK = /^\]\(([^()<>\n"']*\s[^()<>\n"']*)\)/;
+// eslint-disable-next-line no-control-regex -- control characters are what this matches
 const AUTOLINK = /^([a-z][a-z0-9+.-]{1,31}):([^<>\x00-\x20]*)$/i;
 const EMAIL =
   /^([a-zA-Z0-9.!#$%&'*+/=?^_`{|}~-]+@[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?(?:\.[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?)*)$/;

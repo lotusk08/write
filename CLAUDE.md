@@ -1,6 +1,7 @@
 # write
 
-A Tiptap-based writing app for [stevehoang.com](https://stevehoang.com): drafts
+A writing app for [stevehoang.com](https://stevehoang.com), built on Vue 3 and
+[text-editor-vue](https://github.com/eramitgupta/text-editor-vue): drafts
 live in the browser and posts are published to the blog repository. Published
 posts can be read back out of the repository and edited here, so the app has to
 be able to write a post it did not create without changing it.
@@ -65,10 +66,14 @@ its own npm lockfile.
 - `npm run dev` — Vite on :5173. The editor only; `/api` is not there, so
   publishing and `?edit=` need `wrangler dev` (which serves `dist`, so build
   first) with a `.dev.vars` holding `GITHUB_TOKEN` and `WRITE_PASSWORD`.
-  StrictMode runs every effect twice here, so the startup is one promise
-  (`boot()` in `App.tsx`) both runs wait on: two runs against an empty store
-  made two drafts.
-- `npm run typecheck` — `tsc -b` across the app, `worker/` and `shared/`.
+  The startup is one promise (`boot()` in `App.vue`) however often it is
+  asked for: two runs against an empty store once made two drafts.
+- `npm run typecheck` — `vue-tsc -b` across the app (`.vue` files included),
+  `worker/`, `shared/` and the tests. `typescript` is aliased to
+  `@typescript/typescript6`: vue-tsc and typescript-eslint need TypeScript's
+  JS API, which the native TypeScript 7 package does not ship.
+- `npm run lint` — ESLint (`eslint.config.js`: typescript-eslint and
+  eslint-plugin-vue). `npm test` — Vitest; `npm run check` runs all three.
 - `npm run build` — emits `dist`, flat. Wrangler bundles `worker/` itself, so
   there is no Cloudflare plugin in the Vite build and nothing nested under
   `dist`.
@@ -81,10 +86,9 @@ its own npm lockfile.
 
 ## Layout
 
-- `src/` — the editor. `src/editor/extensions/` holds the custom Tiptap nodes:
-  collapsible sections, blog callouts (`{: .note-* }`, `{: .author }`),
-  IndexedDB-backed images, `<Embed… />` players, mermaid/chart previews,
-  and the attribute lists the blog lays posts out with.
+- `src/` — the editor, a Vue 3 app. `App.vue` holds the drafts and the save
+  loop; `components/PostEditor.vue` wraps text-editor-vue. `src/editor/` is
+  everything between that editor and a draft — see *The editor* below.
 - `src/lib/` holds storage, export and publishing logic. `markdown.ts` writes a
   post; `import.ts` reads one back and is the inverse of it; `inline.ts` is the
   site's inline parser, ported, which both of them consult. `viewport.ts`
@@ -108,6 +112,65 @@ its own npm lockfile.
 - `shared/` — GitHub calls, base64 and the post types. No DOM in it, so it is
   read by both the app and the Worker; `lib/api.ts` is the browser's only door
   to the network, and it only ever calls `/api`.
+
+## The editor
+
+The editor is text-editor-vue (`@erag/text-editor-vue`), a `contenteditable`
+editor that keeps its content as an HTML string and does its formatting with
+the browser's own commands. Drafts are still the JSON tree the app stored under
+Tiptap, so drafts saved before the change open unchanged and `import.ts` and
+`markdown.ts` did not move a line. `src/editor/` is the layer between:
+
+- `doc.ts` — the draft's JSON type. `blog.ts` — the blog's vocabulary
+  (callouts, row classes, gallery kinds, embed components), pure functions.
+- `bridge.ts` — `docToHtml` and `htmlToDoc`. Every attribute the writer reads
+  rides on the element as a `data-*` attribute, under the names the Tiptap
+  schema rendered, so the stylesheet's selectors held. A block's last `<br>`
+  is the browser's placeholder, so a break that really ends a line is written
+  as two; an empty block holds a lone `<br>`. What the browser types itself —
+  `<b>`, `<i>`, `<div>` lines, a photo dropped into a paragraph — is read too.
+- `config.ts` — the editor's settings and the sanitizer's allowlist. The
+  editor sanitizes every value and every paste, so anything `bridge.ts`
+  writes that is not on the list is gone after one pass.
+- `commands.ts` — every toolbar action, edited straight on the DOM: the
+  browser's own commands for headings, marks, lists and links, and the
+  blog's blocks — callouts, sections, footnotes, photos, rows, galleries,
+  players, tables, centring. Each ends with `notify`, an `input` event that is
+  how the editor learns its content changed under it. The editor's own
+  toolbar, menubar and status bar are off: the app draws its toolbar in the
+  dock as it always did (`Toolbar.vue`, teleported from `PostEditor`), the
+  bubble over selected text (`SelectionBubble.vue`), and the alt-text and
+  caption buttons under each photo. `tools.ts` reads what they light up.
+  Moving a node collapses any selection inside it, since Ranges are live, so
+  `liftLists` puts the caret back from plain offsets.
+- `keys.ts` — Enter, the Markdown shortcuts at the start of a line, and a new
+  block shedding the old one's layout attributes. A `<br>` is placed by hand:
+  WebKit's `insertLineBreak` writes a bare newline into a `pre-wrap` block.
+  The paragraph separator is set to `<p>`, or WebKit opens a `<div>` after a
+  heading.
+- `decorate.ts` — what is shown but not kept: players, section toggles,
+  gallery labels, photo tools, mermaid and chart previews, local photos
+  resolved to blob URLs. Those elements carry `data-transient`, which
+  `htmlToDoc` skips. It runs after every load and edit and only touches what
+  changed.
+
+Nothing of the editor's own naming is used outside `PostEditor.vue`'s import:
+the stylesheet reaches the editor's shell structurally (`.editor-host > div …`)
+to make it invisible, and a task list is the app's own markup
+(`ul[data-task-list]`, `li[data-checked]`, the box drawn by CSS and ticked by
+a click in the item's margin) rather than the editor's checklist with its
+`<input>`.
+
+`bridge.test.ts` renders, sanitizes (with the editor's own `sanitizeHtml`) and
+reads back every post, draft and page in `../stevehoang.com` (or `BLOG_DIR`),
+and checks the Markdown written from the result is the Markdown written from
+the parse. All 89 pass; treat a failure as a regression. Without the blog
+checked out beside this repository that half of the suite is skipped.
+
+Not carried over from Tiptap: remote carets in a shared draft, and Tiptap's
+typography input rules (the site's own
+typographer handles quotes and dashes). The editor's undo is the browser's,
+so a change made by one of the blog's tools is not always undoable.
 
 ## Publishing format
 
@@ -261,7 +324,7 @@ category is dropped (`languageOf`, `currentMeta`); one with neither keeps no
 default. The editor carries the post's language as its own `lang`, so the
 browser spellchecks a Vietnamese post as Vietnamese.
 
-`Toggle` (`src/components/Toggle.tsx`) is the two-way switch behind both this
+`Toggle` (`src/components/Toggle.vue`) is the two-way switch behind both this
 and Publish as, which sits in the publish dialog. Its halves are equal grid
 columns as wide as the longer label, and the knob covers one of them: as flex
 items the halves split the switch's width while `Tiếng Việt` needed more than
@@ -321,7 +384,8 @@ draws every one of these lines differently:
   way is carried into the block as lazy and written back flush against the
   margin: indenting it to the item's column is what would turn it into the
   table it was not. `lazy` rides on the block like `sameLine`, and like every
-  block attribute it must be declared in `BlockAttributes`.
+  block attribute it must be carried by `bridge.ts` (`BLOCK_ATTRS`) and allowed
+  in `config.ts`.
 - A component or a Liquid tag is a block of its own only where it stands
   alone. With a line hard against it, the two are one HTML block on the site,
   so they are kept as one raw block rather than parted by a blank line that
@@ -442,7 +506,7 @@ Things that took a bug to learn, and that a change here can quietly undo:
   `<em>` inside the link instead of around it. Reach cannot settle it when the
   spans are equal, so the link carries it: a `within` attribute naming the
   marks written around it over the same span (declared on `link` in
-  `BlockAttributes`, `data-within` in the DOM so a paste keeps it), and
+  `bridge.ts`, `data-within` in the DOM so a paste keeps it), and
   `nesting` in `markdown.ts` puts those outside the link and everything else
   inside, whatever order the marks arrive in. A link with no `within` — every
   one made in the editor — wraps its emphasis. Every other mark carries
@@ -460,7 +524,7 @@ Things that took a bug to learn, and that a change here can quietly undo:
   paragraph. A phone keyboard has no Shift+Enter, so that was the only way to
   say `<br>` and every line of a poem became its own paragraph — a `>` gap
   between each one, and an attribution several gaps below the quote it belonged
-  to. `lineBreak.ts`, and only where a paragraph flows: a list item and a
+  to. `keys.ts`, and only where a paragraph flows: a list item and a
   section summary keep their own Enter, and a table cell has the one below.
 - A table cell is one line. `markdown.ts` writes each row on one line of
   pipes, so a second paragraph or a break typed into a cell showed as two
@@ -469,9 +533,9 @@ Things that took a bug to learn, and that a change here can quietly undo:
   across; Shift+Enter there does nothing.
 - A line that is nothing but a fence opener — ```` ```mermaid ````, ```` ``` ````,
   `~~~py` — becomes a code block on Enter, with the rest of the line as its
-  language. Tiptap runs its fence rule on Enter too, but the line-break flow
-  takes Enter first, so the line got a `<br>` after it and the whole thing
-  published as a paragraph. markdown-it opens a fence even straight after
+  language. The line-break flow must look for it first: under Tiptap it took
+  Enter before the fence rule, the line got a `<br>` after it and the whole
+  thing published as a paragraph. markdown-it opens a fence even straight after
   other text, so a fence line under a break parts the paragraph there.
 - Every newline inside a paragraph is a `<br>`: the site sets `breaks: true`,
   as kramdown's `hard_wrap` did. Reading one as a wrap and joining the lines
@@ -481,9 +545,9 @@ Things that took a bug to learn, and that a change here can quietly undo:
 - A caption written beside its image and one written under it are the same
   paragraph but not the same rendering — the second has a `<br>` before it. Which
   side it was on rides on the block as `sameLine`, and like every block
-  attribute it must be declared in `BlockAttributes` — the schema strips what
-  it does not know the first time a document passes through the editor, which
-  is a silent way to lose exactly this kind of fact.
+  attribute it must be written by `bridge.ts` and allowed in `config.ts` — the
+  editor's sanitizer strips what it does not know the first time a document
+  passes through it, which is a silent way to lose exactly this kind of fact.
 - The break that ends the line an image sits on is layout, not text. Left in the
   run it becomes a paragraph between two images, which is a blank line on the way
   out, and a blank line is the end of the row.
@@ -525,27 +589,22 @@ Things that took a bug to learn, and that a change here can quietly undo:
   kept as unknown keys: the site renders no maths at all now, turns a
   `mermaid` or `chart` fence into its component wherever it finds one, and there
   is no Liquid left to switch off. Anything genuinely unknown is still kept.
-- `BLOCKS` in `blogFormat.ts` must list every node type `parseBlocks` can push:
-  an attribute list under a block is attached to whatever block came last, with
-  no type filter. `horizontalRule` and `collapsible` were missing, so
+- `bridge.ts` must carry every node type `parseBlocks` can push, with every
+  attribute on it: an attribute list under a block is attached to whatever
+  block came last, with no type filter. Under Tiptap `horizontalRule` and
+  `collapsible` were missing from the list that declared them, so
   `{: .divider }` under a rule and `{: .collapse }` under a `<details>` were
-  stripped the first time the post passed through the editor and deleted from
-  the repository on re-publish. `gallery` is on the list for the same reason.
-- A command may run inside `can()`, which hands it the live transaction with
-  `dispatch` off — whatever it does to `tr` there is dispatched anyway.
-  `setCollapsible` probes the fit on a throwaway `Transform` and touches `tr`
-  only when it will dispatch; doing the replace first and returning early on
-  `!dispatch` inserted the section twice from the `>>>` input rule.
+  stripped the first time the post passed through the editor. The corpus test
+  in `bridge.test.ts` is what catches this now.
 - Storing an image is async (the 1760px redraw takes a moment on a phone), and
-  the insert that follows lands in whatever the editor holds by then. The
-  local-image plugin counts document swaps — a step replacing the whole doc,
-  which is what `setContent` does on a draft switch, but not y-tiptap's remote
-  updates, which replace the whole doc on every keystroke and carry
-  `ySyncPluginKey` meta — and an insert that started before a swap is dropped,
-  its blobs removed, rather than landing in the other draft.
-- An insert hands the cursor on. ProseMirror leaves a node selection on a
-  photo or a player it has just placed, and the next key typed replaced it —
-  two embeds in a row left one. `insertBlocks` puts the cursor in the
+  the insert that follows lands in whatever the editor holds by then.
+  `PostEditor` counts content swaps (`setDoc`: a repoint, a change from the
+  shared room; a draft switch remounts the editor outright), and an insert
+  that started before one is dropped, its blobs removed, rather than landing
+  in another draft.
+- An insert hands the cursor on. Left on a photo or a player it has just
+  placed, the next key typed replaced it — two embeds in a row left one.
+  `insertBlocks` in `commands.ts` puts the cursor in the
   paragraph after what it inserted, making one when none follows, and the
   divider, a new gallery and a separated one do the same. Over a selected
   block the insert lands after it and after whatever joins it — its caption,
@@ -553,17 +612,14 @@ Things that took a bug to learn, and that a change here can quietly undo:
   photo join the gallery, and the cursor leaves it. A table keeps the cursor
   in its first cell, with a paragraph made under it to leave by.
 - `#` types an H2, as `##` does: the title is the page's only H1 and the
-  contents start at H2. Level 1 stays in the schema, so a post that has an
-  H1 opens with it and writes it back.
+  contents start at H2. A post that has an H1 (or an H5) opens with it and
+  writes it back.
 - A `local:` address never reaches an `<img src>`: the browser fetches an image
   the moment one is made, even off the page, and the scheme fails once per
-  photo. The node view resolves it to a blob URL first, but `renderHTML` is
-  what the view draws with while `EditorContent` is unmounted for the
-  Markdown source, and what `getHTML` and the clipboard serialise. It renders
-  as `data-local-src`, is read back from there, and the HTML export inlines
-  it from there.
-- The formatting bubble shows over selected text only. Over a selected photo
-  or gallery it had nothing to format and ran off the right edge of a phone.
+  photo. `docToHtml` writes it as `data-local-src` beside a blank GIF, the
+  decorator swaps in a blob URL, it is read back from `data-local-src`, and
+  the HTML export inlines it from there. A published photo is shown from the
+  site (`data-src` keeps the address as written).
 - The file-path button takes `code.filepath` off on its second press; it used
   to flip the attribute and leave plain `code` behind.
 
@@ -620,7 +676,7 @@ seed is capped at ~4 MB, and a room deletes itself after 14 idle days through
 a Durable Object alarm (open sockets and fresh edits push the expiry out, and
 the alarm re-arms itself), so neither an abandoned link nor a stranger
 POSTing rooms at `/api/share` grows storage forever. The name plays no part
-in any of this — nothing checks it, it exists so carets can be told apart;
+in any of this — nothing checks it, it exists so people can be told apart;
 what stands between the endpoint and bots is the rest: share creation
 refuses cross-site calls (a page's script cannot forge its own `Origin`
 header, which stops other sites conscripting their visitors' browsers), a
@@ -640,17 +696,24 @@ tab was closed never got to send 4404, so joining a stored token also asks
 the room whether it is still live and drops the token only on a definite
 "ended" — an unreachable network must not be read as one, or going through a
 tunnel would detach every phone from a live room. While a draft carries a
-`shareToken` the editor runs on Yjs (`src/lib/share.ts` client-side): its own
-undo is off, content comes from the room rather than `setContent`, and carets
-show who is where. The name above the switch is how a caret is labelled: kept
+`shareToken` the body syncs through Yjs (`src/lib/share.ts` client-side): one
+`Y.Text` holding the draft as canonical HTML — `docToHtml` with every address
+as written, so no device's blob URLs or site prefix travel — which each local
+edit changes by the smallest splice between the old text and the new, so two
+people typing in different places merge. A remote change is read back to a
+draft and handed to the editor, which keeps the caret where it was. There are
+no remote carets: text-editor-vue has no collaboration layer to draw them, so
+who is here is the Share tab's list. A room created before the editor changed
+held a ProseMirror fragment instead; joining one finds the text empty and
+writes the local draft into it. The name above the switch is how you are listed: kept
 per device, prefilled with a random two-word name so nobody has to invent
 one, and applied live through awareness when edited mid-session — not the
 old author setting, which defaulted the same on every device and once filled
-a room with carets all reading "steve". Clearing the field keeps the last name
+a room with names all reading "steve". Clearing the field keeps the last name
 rather than rerolling a random one mid-edit, and blur puts it back. Who is in
 the room is read out of awareness into the Share tab, and while a session
-runs the dock shows your own name and caret colour — tapping it opens the
-Share tab, because your own caret label is the one thing you never see.
+runs the dock shows your own name and colour — tapping it opens the
+Share tab.
 
 The switch does not mean the same thing on every device. The draft that
 turned sharing on carries `shareOwner`, and only there does switching off
@@ -681,7 +744,7 @@ ArrayBuffer production hands over, so the room reads both.
 
 ## Contents column
 
-`src/components/Toc.tsx` follows the blog's tocbot layout: from 1200px a
+`src/components/useOutline.ts` (with `TocBar.vue` and `TocAside.vue`) follows the blog's tocbot layout: from 1200px a
 sticky column in the right margin — the card stays exactly where it sits
 without one — and below that a bar naming the current section that opens a
 popup list. It shows while the post's `toc` switch is on. Text is

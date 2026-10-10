@@ -1,6 +1,6 @@
 import type { Topic } from "../../shared/types.ts";
 
-export const SUGGESTION_LIMIT = 8;
+const SUGGESTION_LIMIT = 8;
 
 export function topicSlug(value: string): string {
   return value

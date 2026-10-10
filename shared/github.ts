@@ -60,26 +60,6 @@ export async function getDefaultBranch(token: string, repo: string): Promise<str
   return info.default_branch;
 }
 
-export async function listDirectory(
-  token: string,
-  repo: string,
-  branch: string,
-  dir: string,
-): Promise<{ name: string; path: string; size: number }[]> {
-  try {
-    const entries = await gh<{ name: string; path: string; size: number; type: string }[]>(
-      token,
-      `/repos/${repo}/contents/${encodeURIComponent(dir).replace(/%2F/g, "/")}?ref=${encodeURIComponent(branch)}`,
-    );
-    return entries.filter((e) => e.type === "file").map(({ name, path, size }) => ({ name, path, size }));
-  } catch (error) {
-    if (error instanceof GitHubError && error.status === 404) {
-      return [];
-    }
-    throw error;
-  }
-}
-
 export async function tokenLogin(token: string): Promise<string | null> {
   try {
     const user = await gh<{ login: string }>(token, "/user");

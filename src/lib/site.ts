@@ -5,10 +5,6 @@ export function setSiteUrl(url: string): void {
   site = url.trim().replace(/\/+$/, "");
 }
 
-export function siteUrl(): string {
-  return site;
-}
-
 export function showPublishedAs(src: string, url: string): void {
   shown.set(src, url);
 }

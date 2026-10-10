@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/core";
+import type { JSONContent } from "../editor/doc.ts";
 import type { PostMeta } from "../../shared/types.ts";
 import { shrinkImage } from "./images.ts";
 

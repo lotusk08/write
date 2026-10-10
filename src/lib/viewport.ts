@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { onBeforeUnmount, onMounted, ref, type Ref } from "vue";
 
 export const PHONE_QUERY = "(width <= 640px)";
 
@@ -23,45 +23,42 @@ export function viewportBand(): ViewportBand {
 }
 
 export function usePinnedViewport(): void {
-  useEffect(() => {
-    const view = window.visualViewport;
+  const root = document.documentElement;
+  const view = window.visualViewport;
+  const sync = () => {
     if (!view) {
       return;
     }
-    const root = document.documentElement;
-    const sync = () => {
-      const covered = window.innerHeight - view.height;
-      const inset = view.scale <= 1.01 && covered > KEYBOARD_INSET;
-      root.style.setProperty("--app-top", inset ? `${Math.round(view.offsetTop)}px` : "");
-      root.style.setProperty("--app-height", inset ? `${Math.round(view.height)}px` : "");
-      root.style.setProperty(
-        "--app-bottom",
-        inset ? `${Math.max(0, Math.round(covered - view.offsetTop))}px` : "",
-      );
-    };
+    const covered = window.innerHeight - view.height;
+    const inset = view.scale <= 1.01 && covered > KEYBOARD_INSET;
+    root.style.setProperty("--app-top", inset ? `${Math.round(view.offsetTop)}px` : "");
+    root.style.setProperty("--app-height", inset ? `${Math.round(view.height)}px` : "");
+    root.style.setProperty(
+      "--app-bottom",
+      inset ? `${Math.max(0, Math.round(covered - view.offsetTop))}px` : "",
+    );
+  };
+  onMounted(() => {
     sync();
-    view.addEventListener("resize", sync);
-    view.addEventListener("scroll", sync);
-    return () => {
-      view.removeEventListener("resize", sync);
-      view.removeEventListener("scroll", sync);
-      root.style.removeProperty("--app-top");
-      root.style.removeProperty("--app-height");
-      root.style.removeProperty("--app-bottom");
-    };
-  }, []);
+    view?.addEventListener("resize", sync);
+    view?.addEventListener("scroll", sync);
+  });
+  onBeforeUnmount(() => {
+    view?.removeEventListener("resize", sync);
+    view?.removeEventListener("scroll", sync);
+    root.style.removeProperty("--app-top");
+    root.style.removeProperty("--app-height");
+    root.style.removeProperty("--app-bottom");
+  });
 }
 
-export function useMediaQuery(query: string): boolean {
-  const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
-
-  useEffect(() => {
-    const media = window.matchMedia(query);
-    const sync = () => setMatches(media.matches);
-    sync();
-    media.addEventListener("change", sync);
-    return () => media.removeEventListener("change", sync);
-  }, [query]);
-
+export function useMediaQuery(query: string): Ref<boolean> {
+  const media = window.matchMedia(query);
+  const matches = ref(media.matches);
+  const sync = () => {
+    matches.value = media.matches;
+  };
+  onMounted(() => media.addEventListener("change", sync));
+  onBeforeUnmount(() => media.removeEventListener("change", sync));
   return matches;
 }

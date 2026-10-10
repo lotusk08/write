@@ -37,31 +37,7 @@ export function countWords(text: string): number {
   return trimmed ? trimmed.split(/\s+/).length : 0;
 }
 
-export function relativeTime(timestamp: number): string {
-  const seconds = Math.round((Date.now() - timestamp) / 1000);
-  if (seconds < 45) {
-    return "just now";
-  }
-  const units: [number, Intl.RelativeTimeFormatUnit][] = [
-    [60, "second"],
-    [3600, "minute"],
-    [86400, "hour"],
-    [604800, "day"],
-    [2629800, "week"],
-    [31557600, "month"],
-  ];
-  const formatter = new Intl.RelativeTimeFormat(undefined, { numeric: "auto" });
-  let previous = 1;
-  for (const [limit, unit] of units) {
-    if (seconds < limit) {
-      return formatter.format(-Math.round(seconds / previous), unit);
-    }
-    previous = limit;
-  }
-  return formatter.format(-Math.round(seconds / 31557600), "year");
-}
-
-export function tidyField(input: string): string {
+function tidyField(input: string): string {
   return input.replace(/\s*\n\s*/g, " ").trim();
 }
 

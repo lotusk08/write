@@ -17,7 +17,7 @@ export type MenuTab = "post" | "export" | "share";
 
 const KEY = "write:settings";
 
-export const defaultSettings: Settings = {
+const defaultSettings: Settings = {
   theme: "system",
   repo: "lotusk08/stevehoang.com",
   branch: "blog",

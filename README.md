@@ -1,6 +1,6 @@
 # write
 
-A quiet, Tiptap-based writing app for [stevehoang.com](https://stevehoang.com):
+A quiet writing app for [stevehoang.com](https://stevehoang.com):
 draft in the browser, fold sections away while you work, export to Markdown or
 Word, and publish straight to the blog repository — text and images in a single
 commit. Posts already on the blog can be opened here and edited in place.
@@ -13,7 +13,7 @@ browser.
 
 ```
 .
-├── src/          the editor app (React + Tiptap 3)
+├── src/          the editor app (Vue 3 + text-editor-vue)
 ├── worker/       the API routes, and the password and passkeys in front of them
 ├── shared/       the GitHub commit flow, the post types, base64
 └── wrangler.jsonc
@@ -25,7 +25,7 @@ browser.
 ## What it does
 
 - **Collapsible sections.** Type `>>> ` (or `::: `) at the start of a line, or
-  press `⌘⇧D`. Each section folds with the caret in the margin, and the toolbar
+  press `⌘⇧D`. Each section folds with the toggle in the margin, and the toolbar
   has *Collapse all* / *Expand all*. They export as `<details>…</details>`,
   which the blog renders as a real disclosure widget with its body still read
   as Markdown.
@@ -83,7 +83,10 @@ Shortcuts: `⌘S` save now · `⌘⇧N` new draft · `⌘\` open/close the menu 
 ```bash
 npm install
 npm run dev          # http://localhost:5173 — the editor, without /api
-npm run typecheck    # tsc across the app, worker and shared
+npm run typecheck    # vue-tsc across the app, worker, shared and tests
+npm run lint         # ESLint
+npm test             # Vitest — round-trips the blog's posts if ../stevehoang.com is there
+npm run check        # all three
 npm run build        # dist
 npx wrangler dev     # the whole thing, /api included (serves dist — build first)
 ```

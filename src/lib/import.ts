@@ -1,7 +1,6 @@
-import type { JSONContent } from "@tiptap/core";
+import type { JSONContent } from "../editor/doc.ts";
 import type { PostMeta } from "../../shared/types.ts";
-import { EMBED_LIQUID, EMBED_TAG, embedPlatform } from "../editor/extensions/embed.ts";
-import { isGalleryKind } from "../editor/extensions/gallery.ts";
+import { EMBED_LIQUID, EMBED_TAG, embedPlatform, isGalleryKind } from "../editor/blog.ts";
 import { type InlineToken, inlineTokens } from "./inline.ts";
 import { languageOf } from "./topics.ts";
 
@@ -45,8 +44,8 @@ const ESCAPES: Record<string, string> = {
   "\\": "\\",
   N: "\x85",
   _: "\xa0",
-  L: " ",
-  P: " ",
+  L: "\u2028",
+  P: "\u2029",
 };
 
 const HEX_ESCAPES: Record<string, number> = { x: 2, u: 4, U: 8 };
@@ -326,7 +325,7 @@ function sequence(value: string, body: string[], indent: number): string[] {
   return items.map(string).filter(Boolean);
 }
 
-export function parseFrontMatter(yaml: string): Partial<PostMeta> {
+function parseFrontMatter(yaml: string): Partial<PostMeta> {
   const meta: Partial<PostMeta> = {};
   const lines = yaml.split(/\r?\n/);
   if (blank(lines[lines.length - 1])) {
@@ -573,7 +572,7 @@ function codeText(content: string): string {
   return /^[ \n][\s\S]+[ \n]$/.test(content) ? content.slice(1, -1) : content;
 }
 
-export function parseInline(source: string, images = true): JSONContent[] {
+function parseInline(source: string, images = true): JSONContent[] {
   const tokens = inlineTokens(source);
   const pairs = pairsOf(tokens);
   const rawLinks = settlePairs(tokens, pairs, images);
@@ -1304,7 +1303,7 @@ export interface ImportedPost {
 }
 
 export function parsePost(source: string): ImportedPost {
-  const normalized = source.replace(/^﻿/, "").replace(/\r\n/g, "\n");
+  const normalized = source.replace(/^\ufeff/, "").replace(/\r\n/g, "\n");
   const front = FRONT_MATTER.exec(normalized);
   return {
     meta: front ? parseFrontMatter(front[1]) : {},

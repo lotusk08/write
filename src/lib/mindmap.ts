@@ -1,9 +1,9 @@
-import type { JSONContent } from "@tiptap/core";
+import type { JSONContent } from "../editor/doc.ts";
 import { isLocalSrc } from "./db.ts";
 import { docToMarkdown } from "./markdown.ts";
 import { convertedSrc, siteSrc } from "./site.ts";
 
-export const THINK_URL = "https://think.stevehoang.com";
+const THINK_URL = "https://think.stevehoang.com";
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
 

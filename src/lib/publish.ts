@@ -1,4 +1,4 @@
-import type { JSONContent } from "@tiptap/core";
+import type { JSONContent } from "../editor/doc.ts";
 import type { PostMeta, PublishFile } from "../../shared/types.ts";
 import type { Draft, StoredImage } from "./db.ts";
 import { imageStore, isLocalSrc, localId } from "./db.ts";
@@ -89,7 +89,7 @@ function imagePaths(settings: Settings): { dir: string; url: string } {
   return { dir, url: dir.replace(/^public\//, "") };
 }
 
-export function markdownPathFor(draft: Draft, settings: Settings, slug: string): string {
+function markdownPathFor(draft: Draft, settings: Settings, slug: string): string {
   const dir = (settings.publishTarget === "drafts" ? settings.draftsDir : settings.postsDir).replace(
     /^\/+|\/+$/g,
     "",

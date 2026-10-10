@@ -1,18 +1,18 @@
-import { useCallback, useEffect, useLayoutEffect, type RefObject } from "react";
+import { nextTick, onBeforeUnmount, watch, type Ref } from "vue";
 import { viewportBand } from "../lib/viewport.ts";
 
 const GAP = 6;
 const EDGE = 8;
 
+/** Places a pop-up menu beside its button inside the visible band, and closes it on Escape or a tap outside. */
 export function useFloatingMenu(
-  open: boolean,
-  close: () => void,
-  button: RefObject<HTMLButtonElement | null>,
-  menu: RefObject<HTMLDivElement | null>,
+  open: Ref<boolean>,
+  button: Ref<HTMLElement | null>,
+  menu: Ref<HTMLElement | null>,
 ): void {
-  const place = useCallback(() => {
-    const element = menu.current;
-    const anchor = button.current?.getBoundingClientRect();
+  const place = () => {
+    const element = menu.value;
+    const anchor = button.value?.getBoundingClientRect();
     if (!element || !anchor) {
       return;
     }
@@ -30,50 +30,51 @@ export function useFloatingMenu(
     const left = Math.max(band.left + EDGE, Math.min(anchor.left - GAP, band.right - EDGE - box.width));
     element.style.top = `${Math.round(top)}px`;
     element.style.left = `${Math.round(left)}px`;
-  }, [button, menu]);
+  };
 
-  useLayoutEffect(() => {
-    if (open) {
-      place();
+  const onKey = (event: KeyboardEvent) => {
+    if (event.key === "Escape") {
+      event.stopPropagation();
+      open.value = false;
+      button.value?.focus();
     }
-  }, [open, place]);
+  };
+  const onDown = (event: PointerEvent) => {
+    const target = event.target as Node;
+    if (!menu.value?.contains(target) && !button.value?.contains(target)) {
+      open.value = false;
+    }
+  };
+  let frame = 0;
+  const follow = () => {
+    window.cancelAnimationFrame(frame);
+    frame = window.requestAnimationFrame(place);
+  };
 
-  useEffect(() => {
-    if (!open) {
-      return;
-    }
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        event.stopPropagation();
-        close();
-        button.current?.focus();
-      }
-    };
-    const onDown = (event: PointerEvent) => {
-      const target = event.target as globalThis.Node;
-      if (!menu.current?.contains(target) && !button.current?.contains(target)) {
-        close();
-      }
-    };
-    let frame = 0;
-    const follow = () => {
-      window.cancelAnimationFrame(frame);
-      frame = window.requestAnimationFrame(place);
-    };
+  const listen = () => {
     document.addEventListener("keydown", onKey, true);
     document.addEventListener("pointerdown", onDown);
     window.addEventListener("resize", follow);
     window.addEventListener("scroll", follow, true);
     window.visualViewport?.addEventListener("resize", follow);
     window.visualViewport?.addEventListener("scroll", follow);
-    return () => {
-      window.cancelAnimationFrame(frame);
-      document.removeEventListener("keydown", onKey, true);
-      document.removeEventListener("pointerdown", onDown);
-      window.removeEventListener("resize", follow);
-      window.removeEventListener("scroll", follow, true);
-      window.visualViewport?.removeEventListener("resize", follow);
-      window.visualViewport?.removeEventListener("scroll", follow);
-    };
-  }, [open, close, place, button, menu]);
+  };
+  const unlisten = () => {
+    window.cancelAnimationFrame(frame);
+    document.removeEventListener("keydown", onKey, true);
+    document.removeEventListener("pointerdown", onDown);
+    window.removeEventListener("resize", follow);
+    window.removeEventListener("scroll", follow, true);
+    window.visualViewport?.removeEventListener("resize", follow);
+    window.visualViewport?.removeEventListener("scroll", follow);
+  };
+
+  watch(open, (value) => {
+    unlisten();
+    if (value) {
+      listen();
+      void nextTick(place);
+    }
+  });
+  onBeforeUnmount(unlisten);
 }

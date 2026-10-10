@@ -1,6 +1,6 @@
 import type { PostMeta } from "../../shared/types.ts";
 import type { Draft } from "./db.ts";
-import { emptyDoc } from "../editor/extensions.ts";
+import { emptyDoc } from "../editor/doc.ts";
 import { formatPostDate, slugify } from "./text.ts";
 import { languageOf } from "./topics.ts";
 
