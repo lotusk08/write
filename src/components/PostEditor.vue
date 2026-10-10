@@ -4,6 +4,7 @@ import "@erag/text-editor-vue/style.css";
 import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { docToHtml, htmlToDoc } from "../editor/bridge.ts";
 import {
+  askLink,
   editCaption,
   insertImages,
   notify,
@@ -103,7 +104,26 @@ function onReady(element: HTMLElement): void {
   element.addEventListener("paste", onPaste, true);
   element.addEventListener("drop", onDrop, true);
   element.addEventListener("mousedown", onMousedown);
+  element.addEventListener("keydown", onShortcut, true);
   decorate(element, previews, props.dark);
+}
+
+/**
+ * ⌘K is the app's link prompt. ⌘F and ⌘⇧P would open the editor's own find and preview dialogs, which the app does
+ * not use: they are kept from it, so ⌘F reaches the browser's find.
+ */
+function onShortcut(event: KeyboardEvent): void {
+  if (!(event.metaKey || event.ctrlKey) || !root.value) {
+    return;
+  }
+  const key = event.key.toLowerCase();
+  if (key === "k") {
+    event.preventDefault();
+    event.stopPropagation();
+    run(askLink);
+  } else if (key === "f" || (key === "p" && event.shiftKey)) {
+    event.stopPropagation();
+  }
 }
 
 function onKeydown(event: KeyboardEvent): void {

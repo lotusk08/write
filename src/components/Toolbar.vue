@@ -2,6 +2,7 @@
 import { onBeforeUnmount, onMounted, ref } from "vue";
 import { embedFromUrl } from "../editor/blog.ts";
 import {
+  askLink,
   format,
   insertEmbed,
   insertFootnote,
@@ -10,7 +11,6 @@ import {
   setAllCollapsibles,
   setCollapsible,
   setGallery,
-  setLink,
   setNote,
   toggleCenter,
   toggleCodeBlock,
@@ -60,13 +60,6 @@ onBeforeUnmount(() => {
   row.value?.removeEventListener("scroll", sync);
   observer?.disconnect();
 });
-
-const link = () => {
-  const href = window.prompt("Link URL (empty to remove)", props.tools.link ? "" : "https://");
-  if (href !== null) {
-    props.run((root) => setLink(root, href.trim()));
-  }
-};
 
 const embed = () => {
   const url = window.prompt(
@@ -125,7 +118,7 @@ const pickFiles = (event: Event) => {
         @press="run((root) => toggleInline(root, 'code'))"
       />
       <ToolButton icon="file" title="File path — the blog's {: .filepath}" :active="tools.filepath" @press="run(toggleFilepath)" />
-      <ToolButton icon="link" title="Link" :active="tools.link" @press="link" />
+      <ToolButton icon="link" title="Link" :active="tools.link" @press="run(askLink)" />
       <ToolButton icon="footnote" title="Footnote — marker here, note at the end" @press="run(insertFootnote)" />
     </div>
 

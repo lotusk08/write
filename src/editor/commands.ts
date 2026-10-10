@@ -720,6 +720,14 @@ export function setLink(root: HTMLElement, href: string): void {
 }
 
 /** A table with a header row; the caret goes to its first cell, with a paragraph under it to leave by. */
+/** The link prompt, shared by the toolbar and ⌘K: the address the caret's link has, or a blank https://. */
+export function askLink(root: HTMLElement): void {
+  const href = window.prompt("Link URL (empty to remove)", linkAt(root)?.getAttribute("href") ?? "https://");
+  if (href !== null) {
+    setLink(root, href.trim());
+  }
+}
+
 export function insertTable(root: HTMLElement, rows = 3, cols = 3): void {
   const row = (tag: string) => `<tr>${`<${tag}><br></${tag}>`.repeat(cols)}</tr>`;
   insertBlocks(root, `<table><tbody>${row("th")}${row("td").repeat(rows - 1)}</tbody></table>`);
