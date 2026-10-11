@@ -220,11 +220,11 @@ function failed(error: unknown, fallback: string): Response {
 }
 
 function misconfigured(missing: string, env: Env): Response {
-  return misconfigured(missing, env);
+  return json({ error: missing }, env.GITHUB_TOKEN ? 500 : 501);
 }
 
 function tooMany(): Response {
-  return tooMany();
+  return json({ error: "Too many requests — wait a minute and try again." }, 429);
 }
 
 function validateFiles(files: unknown, env: Env): { files: PublishFile[] } | { error: string } {

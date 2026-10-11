@@ -23,6 +23,14 @@ const post = { path: "src/posts/2026-10-11-trip.md", contentBase64: "aGk=" };
 afterEach(() => vi.unstubAllGlobals());
 
 describe("worker", () => {
+  it("answers a missing setting and a spent rate limit instead of crashing", async () => {
+    const bare = await worker.fetch(new Request("https://write.test/api/drafts", { headers: { "x-write-password": "pw" } }), {} as never);
+    expect([500, 501]).toContain(bare.status);
+    const spent = { ...(env as object), SOURCE_RATE: { limit: async () => ({ success: false }) } } as never;
+    const limitedResponse = await worker.fetch(new Request("https://write.test/api/images"), spent);
+    expect(limitedResponse.status).toBe(429);
+  });
+
   it("asks for the password on every writing or draft-reading endpoint", async () => {
     for (const [path, method] of [
       ["/api/publish", "POST"],
