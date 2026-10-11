@@ -380,8 +380,9 @@ const FILEPATH = /^\{:\s*\.filepath\s*\}$/;
 const COMMANDS: Record<string, string> = { strong: "bold", em: "italic", s: "strikeThrough" };
 
 /**
- * A mark made by hand, and the text it was made with. The browser carries the formatting at a mark's end into
- * what is typed next, so `` `x` y `` went on in code; whatever lands inside it after the shortcut is moved out.
+ * A mark just made, and the text it was made with. The browser carries the formatting at a mark's end into
+ * what is typed next, so `` `x` y `` went on in code, and WebKit kept typing into a bold the commands made;
+ * whatever lands inside it after the shortcut is moved out.
  */
 const made = new WeakMap<HTMLElement, { mark: Element; text: string }>();
 
@@ -470,9 +471,14 @@ function markShortcut(root: HTMLElement): boolean {
   const command = typed.tag === "a" ? "createLink" : COMMANDS[typed.tag];
   if (command) {
     document.execCommand(command, false, typed.href);
+    const focus = window.getSelection()?.focusNode;
+    const mark = (focus?.nodeType === 1 ? (focus as Element) : focus?.parentElement)?.closest("b, strong, i, em, s, strike, del");
     window.getSelection()?.collapseToEnd();
-    if (typed.tag !== "a") {
+    if (typed.tag !== "a" && document.queryCommandState(command)) {
       document.execCommand(command);
+    }
+    if (mark && root.contains(mark)) {
+      made.set(root, { mark, text: mark.textContent ?? "" });
     }
     return true;
   }

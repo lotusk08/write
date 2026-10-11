@@ -97,7 +97,7 @@ function execCommand(command: string, _ui?: boolean, value?: string): boolean {
 beforeEach(() => {
   document.body.innerHTML = '<div contenteditable="true"></div>';
   root = document.body.firstElementChild as HTMLElement;
-  Object.assign(document, { execCommand });
+  Object.assign(document, { execCommand, queryCommandState: () => false });
 });
 
 describe("quotes", () => {
@@ -141,6 +141,16 @@ describe("marks typed in Markdown", () => {
       expect(markdown()).toContain(tag === "i" ? "*soft*" : tag === "mark" ? "<mark>bright</mark>" : written);
     });
   }
+
+  it("types on outside a bold WebKit keeps typing into", () => {
+    raw("say **b**");
+    caretAfter("**b**");
+    typed("*");
+    const bold = root.querySelector("b") as HTMLElement;
+    bold.append(" c");
+    typed("c");
+    expect(markdown()).toBe("say **b** c");
+  });
 
   it("types on outside a code or highlight it just made", () => {
     raw("say `x`");
