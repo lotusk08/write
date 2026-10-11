@@ -17,7 +17,7 @@ import {
   toggleTask,
 } from "../editor/commands.ts";
 import { editorInit } from "../editor/config.ts";
-import { decorate, Previews } from "../editor/decorate.ts";
+import { decorate, Previews, releasePhotos } from "../editor/decorate.ts";
 import type { JSONContent } from "../editor/doc.ts";
 import { handleInput, handleKeydown } from "../editor/keys.ts";
 import { emptyTools, readTools, type ToolState } from "../editor/tools.ts";
@@ -41,11 +41,15 @@ let epoch = 0;
 let timer: number | undefined;
 let frame = 0;
 let pending: string | null = null;
+let toolsFrame = 0;
 
 function refreshTools(): void {
-  if (root.value) {
-    tools.value = readTools(root.value);
-  }
+  window.cancelAnimationFrame(toolsFrame);
+  toolsFrame = window.requestAnimationFrame(() => {
+    if (root.value) {
+      tools.value = readTools(root.value);
+    }
+  });
 }
 
 function redecorate(): void {
@@ -88,7 +92,6 @@ function onHtml(value: string): void {
   window.clearTimeout(timer);
   timer = window.setTimeout(flush, EMIT_DEBOUNCE_MS);
   redecorate();
-  refreshTools();
 }
 
 /** Replaces the content without it counting as an edit: a repointed photo, a change from the shared room. */
@@ -316,6 +319,8 @@ onMounted(() => document.addEventListener("selectionchange", refreshTools));
 onBeforeUnmount(() => {
   document.removeEventListener("selectionchange", refreshTools);
   window.cancelAnimationFrame(frame);
+  window.cancelAnimationFrame(toolsFrame);
+  queueMicrotask(releasePhotos);
   if (pending !== null) {
     flush();
   }

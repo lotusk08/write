@@ -1,4 +1,4 @@
-import { isLocalSrc, resolveLocalSrc } from "../lib/db.ts";
+import { isLocalSrc, localId, releaseDisplays, resolveDisplaySrc } from "../lib/db.ts";
 import { convertedSrc, fullSrc } from "../lib/site.ts";
 import { embedTag, embedUrl } from "./blog.ts";
 import { BLANK_SRC, TRANSIENT } from "./bridge.ts";
@@ -107,7 +107,7 @@ function images(root: HTMLElement): void {
     const local = img.getAttribute("data-local-src");
     if (local && isLocalSrc(local)) {
       if (img.getAttribute("src") === BLANK_SRC) {
-        void resolveLocalSrc(local)
+        void resolveDisplaySrc(local)
           .catch(() => null)
           .then((url) => {
             if (url && img.getAttribute("data-local-src") === local) {
@@ -285,4 +285,10 @@ export function decorate(root: HTMLElement, previews: Previews, dark: boolean): 
   embeds(root);
   sections(root);
   previews.sync(root, dark);
+}
+
+/** Frees the shown copies of stored photos once no editor on the page shows them. */
+export function releasePhotos(): void {
+  const shown = document.querySelectorAll("img[data-local-src]");
+  releaseDisplays(new Set([...shown].map((img) => localId(img.getAttribute("data-local-src") ?? ""))));
 }

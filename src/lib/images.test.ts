@@ -4,9 +4,11 @@ import { shrinkImage } from "./images.ts";
 const MB = 1024 * 1024;
 let natural = { width: 0, height: 0 };
 let draws: { width: number; height: number; quality: number }[] = [];
+let paints = 0;
 
 beforeEach(() => {
   draws = [];
+  paints = 0;
   vi.stubGlobal("URL", { createObjectURL: () => "blob:x", revokeObjectURL: () => {} });
   vi.stubGlobal(
     "Image",
@@ -28,7 +30,7 @@ beforeEach(() => {
       const canvas = {
         width: 0,
         height: 0,
-        getContext: () => ({ drawImage: () => {} }),
+        getContext: () => ({ drawImage: () => (paints += 1) }),
         toBlob: (done: (blob: Blob) => void, type: string, quality: number) => {
           draws.push({ width: canvas.width, height: canvas.height, quality });
           const bytes = canvas.width * canvas.height * (type === "image/png" ? 3 : quality * 1.2);
@@ -58,6 +60,7 @@ describe("shrinkImage", () => {
     expect(shrunk.size).toBeLessThanOrEqual(4 * MB);
     expect(draws[0]).toMatchObject({ width: 3840, quality: 0.95 });
     expect(draws.map((draw) => draw.quality).every((quality) => quality >= 0.7 - 1e-9)).toBe(true);
+    expect(paints).toBe(new Set(draws.map((draw) => draw.width)).size);
   });
 
   it("narrows a 48 MP portrait within the canvas area a phone allows", async () => {

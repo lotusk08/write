@@ -1,0 +1,49 @@
+diff --git a/node_modules/@erag/text-editor-vue/dist/text-editor-vue.js b/node_modules/@erag/text-editor-vue/dist/text-editor-vue.js
+index 4a763e7..f219c39 100644
+--- a/node_modules/@erag/text-editor-vue/dist/text-editor-vue.js
++++ b/node_modules/@erag/text-editor-vue/dist/text-editor-vue.js
+@@ -1564,7 +1564,7 @@ function Wn(e, t, n, r) {
+ }
+ //#endregion
+ //#region src/composables/useEditorSelection.ts
+-function Gn(e) {
++function Gn(e, wanted = () => !0) {
+ 	let t = T(null), n = T({
+ 		path: "p",
+ 		commands: {},
+@@ -1585,7 +1585,7 @@ function Gn(e) {
+ 			n.value = {
+ 				path: Ge(e.value),
+ 				insideTable: !!t?.closest("table"),
+-				commands: Object.fromEntries([
++				commands: wanted() ? Object.fromEntries([
+ 					"bold",
+ 					"italic",
+ 					"underline",
+@@ -1599,7 +1599,7 @@ function Gn(e) {
+ 					"bullist",
+ 					"numlist",
+ 					"checklist"
+-				].map((e) => [e, mn(e)]))
++				].map((e) => [e, mn(e)])) : {}
+ 			}, i();
+ 		});
+ 	}
+@@ -7165,7 +7165,7 @@ var cl = /* @__PURE__ */ d({
+ 		"image-remove"
+ 	],
+ 	setup(t, { expose: l, emit: d }) {
+-		let p = t, x = d, S = Fn(() => p.init), w = Cn(S, p.modelValue), { execute: E } = Kn(), D = Ln(w.root), O = Gn(w.root), A = j("shell"), M = j("contentWrap"), N = T(null), P = T(null), L = T(p.modelValue), ee = T(p.modelValue), { toggle: R } = qn(A), z = r(() => p.disabled || p.readonly || S.value.readonly), te = r(() => S.value.sourceCodeEditable && !z.value), B = cr(w.root, S, z, J), ne = Wn(A, S, z, (e) => x("resize", { height: e })), re = r(() => z.value || !S.value.imageResize), V = Xn(w.root, M, re, J, (e) => x("image-remove", e)), H = nr(w.root, M, z, J), U = r(() => S.value.menubar), ie = r(() => S.value.toolbar), ae = r(() => S.value.statusbar), oe = r(() => S.value.mentions), se = r(() => S.value.mergeTags), W = yr({
++		let p = t, x = d, S = Fn(() => p.init), w = Cn(S, p.modelValue), { execute: E } = Kn(), D = Ln(w.root), O = Gn(w.root, () => !!(S.value.toolbar || S.value.menubar)), A = j("shell"), M = j("contentWrap"), N = T(null), P = T(null), L = T(p.modelValue), ee = T(p.modelValue), { toggle: R } = qn(A), z = r(() => p.disabled || p.readonly || S.value.readonly), te = r(() => S.value.sourceCodeEditable && !z.value), B = cr(w.root, S, z, J), ne = Wn(A, S, z, (e) => x("resize", { height: e })), re = r(() => z.value || !S.value.imageResize), V = Xn(w.root, M, re, J, (e) => x("image-remove", e)), H = nr(w.root, M, z, J), U = r(() => S.value.menubar), ie = r(() => S.value.toolbar), ae = r(() => S.value.statusbar), oe = r(() => S.value.mentions), se = r(() => S.value.mergeTags), W = yr({
+ 			root: w.root,
+ 			config: oe,
+ 			locked: z,
+@@ -7676,7 +7676,7 @@ var cl = /* @__PURE__ */ d({
+ 			config: k(S),
+ 			"link-initial": k(he),
+ 			html: k(w).html.value,
+-			"preview-html": k(w).clean(k(w).html.value),
++			"preview-html": N.value === "preview" ? k(w).clean(k(w).html.value) : "",
+ 			"source-code-editable": te.value,
+ 			root: k(w).root.value,
+ 			"word-count-data": k(de),

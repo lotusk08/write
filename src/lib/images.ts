@@ -49,11 +49,15 @@ export async function shrinkImage(blob: Blob): Promise<Blob> {
     let width = Math.min(naturalWidth, MAX_WIDTH, Math.floor(Math.sqrt((MAX_PIXELS * naturalWidth) / naturalHeight)));
     let quality = 95;
     let best: Blob | null = null;
+    let drawnWidth = 0;
     for (let tries = 0; tries < 20; tries++) {
-      canvas.width = width;
-      canvas.height = Math.max(1, Math.round((naturalHeight / naturalWidth) * width));
-      context.imageSmoothingQuality = "high";
-      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      if (drawnWidth !== width) {
+        drawnWidth = width;
+        canvas.width = width;
+        canvas.height = Math.max(1, Math.round((naturalHeight / naturalWidth) * width));
+        context.imageSmoothingQuality = "high";
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      }
       const drawn = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, blob.type, quality / 100));
       if (!drawn || drawn.type !== blob.type) {
         break;
