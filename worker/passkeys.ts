@@ -4,6 +4,8 @@ const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const MAX_CHALLENGES = 50;
 const MAX_CREDENTIALS = 20;
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
+const FAILURE_WINDOW_MS = 15 * 60 * 1000;
+const MAX_FAILURES = 10;
 export const ALGORITHMS = [-7, -257] as const;
 
 const FLAG_USER_PRESENT = 0x01;
@@ -26,9 +28,29 @@ export class Passkeys extends DurableObject {
         "CREATE TABLE IF NOT EXISTS credentials (id TEXT PRIMARY KEY, key BLOB NOT NULL, alg INTEGER NOT NULL, counter INTEGER NOT NULL, created INTEGER NOT NULL)",
       );
       sql.exec("CREATE TABLE IF NOT EXISTS challenges (value TEXT PRIMARY KEY, expires INTEGER NOT NULL)");
+      sql.exec("CREATE TABLE IF NOT EXISTS failures (key TEXT PRIMARY KEY, count INTEGER NOT NULL, since INTEGER NOT NULL)");
       this.ready = true;
     }
     return sql;
+  }
+
+  attempt(key: string, ok: boolean): "ok" | "wrong" | "blocked" {
+    const sql = this.sql;
+    const now = Date.now();
+    sql.exec("DELETE FROM failures WHERE since <= ?", now - FAILURE_WINDOW_MS);
+    const failures = sql.exec<{ count: number }>("SELECT count FROM failures WHERE key = ?", key).toArray()[0]?.count ?? 0;
+    if (failures >= MAX_FAILURES) {
+      return "blocked";
+    }
+    if (ok) {
+      return "ok";
+    }
+    sql.exec(
+      "INSERT INTO failures (key, count, since) VALUES (?, 1, ?) ON CONFLICT(key) DO UPDATE SET count = count + 1",
+      key,
+      now,
+    );
+    return "wrong";
   }
 
   challenge(): { challenge: string; credentials: string[] } {

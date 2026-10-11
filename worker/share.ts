@@ -11,6 +11,14 @@ const SAVE_DELAY_MS = 900;
 const CLOSE_ENDED = 4404;
 const ROOM_TTL_MS = 14 * 24 * 60 * 60 * 1000;
 const CHUNK_BYTES = 1024 * 1024;
+const MAX_MESSAGE_BYTES = 1024 * 1024;
+const MAX_DOC_BYTES = 8 * 1024 * 1024;
+const CLOSE_TOO_BIG = 1009;
+
+async function ownerHash(secret: string): Promise<string> {
+  const bytes = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(secret)));
+  return [...bytes].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
 
 function bytesOf(value: unknown): Uint8Array | null {
   if (value instanceof Uint8Array) {
@@ -106,8 +114,11 @@ export class ShareRoom {
     return doc;
   }
 
-  private async saveDoc(extra: Record<string, unknown>): Promise<void> {
+  private async saveDoc(extra: Record<string, unknown>): Promise<boolean> {
     const update = Y.encodeStateAsUpdate(this.doc);
+    if (update.byteLength > MAX_DOC_BYTES) {
+      return false;
+    }
     const count = Math.max(1, Math.ceil(update.byteLength / CHUNK_BYTES));
     const previous = await this.state.storage.get("chunks");
     const entries: Record<string, unknown> = { ...extra, chunks: count };
@@ -120,6 +131,7 @@ export class ShareRoom {
       stale.push(`doc:${index}`);
     }
     await this.state.storage.delete(stale);
+    return true;
   }
 
   private queueSave(): void {
@@ -128,9 +140,15 @@ export class ShareRoom {
     }
     this.saveTimer = setTimeout(() => {
       this.saveTimer = null;
-      this.saveDoc({ touched: Date.now() }).catch((error) => {
-        console.error("share room: save failed", error);
-      });
+      this.saveDoc({ touched: Date.now() })
+        .then((saved) => {
+          if (!saved) {
+            this.reset(CLOSE_TOO_BIG, "This shared draft grew too large.");
+          }
+        })
+        .catch((error) => {
+          console.error("share room: save failed", error);
+        });
     }, SAVE_DELAY_MS);
   }
 
@@ -199,6 +217,10 @@ export class ShareRoom {
     if (!bytes) {
       return;
     }
+    if (bytes.byteLength > MAX_MESSAGE_BYTES) {
+      socket.close(CLOSE_TOO_BIG, "Too large.");
+      return;
+    }
     try {
       const decoder = decoding.createDecoder(bytes);
       const type = decoding.readVarUint(decoder);
@@ -229,6 +251,23 @@ export class ShareRoom {
     } catch {
       socket.close(1003, "Bad message.");
     }
+  }
+
+  private reset(code: number, reason: string): void {
+    for (const socket of this.sockets.keys()) {
+      try {
+        socket.close(code, reason);
+      } catch {
+      }
+    }
+    this.sockets.clear();
+    if (this.saveTimer !== null) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    this.doc.destroy();
+    this.loaded = false;
+    this.bind();
   }
 
   private drop(socket: WebSocket): void {
@@ -283,29 +322,25 @@ export class ShareRoom {
         }
         Y.applyUpdate(this.doc, body);
       }
-      await this.saveDoc({ live: true });
+      const owner = request.headers.get("x-share-owner");
+      if (!(await this.saveDoc({ live: true, ...(owner ? { owner: await ownerHash(owner) } : {}) }))) {
+        return new Response("Too large.", { status: 400 });
+      }
       await this.keepAlive();
       return new Response(null, { status: 204 });
     }
 
     if (request.method === "DELETE") {
-      for (const socket of this.sockets.keys()) {
-        try {
-          socket.close(CLOSE_ENDED, "Sharing ended.");
-        } catch {
-          this.sockets.delete(socket);
-        }
+      const owner = await this.state.storage.get("owner");
+      if (typeof owner === "string" && owner !== (await ownerHash(request.headers.get("x-share-owner") ?? ""))) {
+        return new Response(JSON.stringify({ error: "Only the person who started sharing can end it." }), {
+          status: 403,
+          headers: { "content-type": "application/json; charset=utf-8" },
+        });
       }
-      this.sockets.clear();
-      if (this.saveTimer !== null) {
-        clearTimeout(this.saveTimer);
-        this.saveTimer = null;
-      }
+      this.reset(CLOSE_ENDED, "Sharing ended.");
       await this.state.storage.deleteAll();
       await this.state.storage.deleteAlarm();
-      this.doc.destroy();
-      this.loaded = false;
-      this.bind();
       return new Response(null, { status: 204 });
     }
 

@@ -4,7 +4,23 @@ vi.mock("cloudflare:workers", () => ({ DurableObject: class {} }));
 
 const { default: worker, yamlScalar } = await import("./index.ts");
 
-const env = { GITHUB_TOKEN: "t", WRITE_PASSWORD: "pw", BLOG_REPO: "o/r", BLOG_BRANCH: "blog" } as never;
+const failures = new Map<string, number>();
+const passkeys = {
+  idFromName: () => "owner",
+  get: () => ({
+    attempt: async (key: string, ok: boolean) => {
+      const count = failures.get(key) ?? 0;
+      if (count >= 10) {
+        return "blocked";
+      }
+      if (!ok) {
+        failures.set(key, count + 1);
+      }
+      return ok ? "ok" : "wrong";
+    },
+  }),
+};
+const env = { GITHUB_TOKEN: "t", WRITE_PASSWORD: "pw", BLOG_REPO: "o/r", BLOG_BRANCH: "blog", PASSKEYS: passkeys } as never;
 
 function call(path: string, init: RequestInit & { password?: string } = {}) {
   const headers = new Headers(init.headers);
@@ -20,7 +36,10 @@ function publish(body: unknown) {
 
 const post = { path: "src/posts/2026-10-11-trip.md", contentBase64: "aGk=" };
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  failures.clear();
+});
 
 describe("worker", () => {
   it("answers a missing setting and a spent rate limit instead of crashing", async () => {
@@ -73,8 +92,13 @@ describe("worker", () => {
   });
 
   it("tells which photos another file still uses, without naming the drafts", async () => {
-    vi.stubGlobal("fetch", async (input: string) => {
+    vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
       const url = new URL(input);
+      if (url.pathname === "/graphql" && String(init?.body).includes("oid")) {
+        return Response.json({
+          data: { repository: { files: { entries: ["a.webp", "b c.webp"].map((name) => ({ name, oid: name, type: "blob" })) } } },
+        });
+      }
       if (url.pathname === "/graphql") {
         return Response.json({
           data: {
@@ -85,9 +109,6 @@ describe("worker", () => {
             },
           },
         });
-      }
-      if (url.pathname.endsWith("/contents/public/assets/img/post")) {
-        return Response.json(["a.webp", "b c.webp"].map((name) => ({ name, sha: name, type: "file" })));
       }
       return Response.json({ message: "Not Found" }, { status: 404 });
     });
@@ -101,6 +122,57 @@ describe("worker", () => {
       redirected: [],
     });
     expect(body).not.toContain("secret");
+  });
+});
+
+describe("worker hardening", () => {
+  const from = (ip: string, password: string) =>
+    worker.fetch(new Request("https://write.test/api/drafts", { headers: { "x-write-password": password, "cf-connecting-ip": ip } }), env);
+
+  it("stops guessing the password after ten misses from one connection, the right one included", async () => {
+    vi.stubGlobal("fetch", async () => Response.json({ data: { repository: { d0: null } } }));
+    for (let miss = 0; miss < 10; miss++) {
+      expect((await from("1.1.1.1", `guess-${miss}`)).status).toBe(401);
+    }
+    expect((await from("1.1.1.1", "guess")).status).toBe(429);
+    expect((await from("1.1.1.1", "pw")).status).toBe(429);
+    expect((await from("2.2.2.2", "pw")).status).toBe(200);
+  });
+
+  it("sends the security headers on pages and answers alike", async () => {
+    const page = await worker.fetch(new Request("https://write.test/"), {
+      ...(env as object),
+      ASSETS: { fetch: async () => new Response("<!doctype html>", { headers: { "content-type": "text/html" } }) },
+    } as never);
+    const answer = await worker.fetch(new Request("https://write.test/api/config"), env);
+    for (const response of [page, answer]) {
+      expect(response.headers.get("content-security-policy")).toContain("frame-ancestors 'none'");
+      expect(response.headers.get("content-security-policy")).toContain("script-src 'self'");
+      expect(response.headers.get("x-content-type-options")).toBe("nosniff");
+      expect(response.headers.get("referrer-policy")).toBe("strict-origin-when-cross-origin");
+      expect(response.headers.get("x-robots-tag")).toBe("noindex");
+    }
+  });
+
+  it("hands the share's owner a key and passes it on when the share ends", async () => {
+    const seen: Request[] = [];
+    const share = {
+      idFromName: (name: string) => name,
+      get: () => ({
+        fetch: async (input: string, init?: RequestInit) => {
+          seen.push(new Request(input, init));
+          return new Response(null, { status: 204 });
+        },
+      }),
+    };
+    const shareEnv = { ...(env as object), SHARE: share } as never;
+    const created = await worker.fetch(new Request("https://write.test/api/share", { method: "POST", body: new Uint8Array([0, 0]) }), shareEnv);
+    const { token, owner } = (await created.json()) as { token: string; owner: string };
+    expect(owner).toMatch(/^[0-9a-f]{32}$/);
+    expect(seen[0].headers.get("x-share-owner")).toBe(owner);
+    await worker.fetch(new Request(`https://write.test/api/share/${token}`, { method: "DELETE", headers: { "x-share-owner": owner } }), shareEnv);
+    expect(seen[1].method).toBe("DELETE");
+    expect(seen[1].headers.get("x-share-owner")).toBe(owner);
   });
 });
 

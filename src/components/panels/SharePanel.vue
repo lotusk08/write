@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { participantName } from "../../lib/share.ts";
+import { participantName } from "../../lib/participants.ts";
 import type { ShareState } from "../types.ts";
 
 const props = defineProps<{ state: ShareState }>();

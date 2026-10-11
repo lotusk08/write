@@ -14,7 +14,7 @@ export interface Draft {
   publishedSha?: string;
   publishedPrint?: string;
   shareToken?: string;
-  shareOwner?: boolean;
+  shareOwner?: string | boolean;
   shareSeed?: Uint8Array;
 }
 

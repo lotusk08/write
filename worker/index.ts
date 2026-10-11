@@ -127,12 +127,36 @@ async function readCapped(request: Request, max: number): Promise<Uint8Array | n
   return body;
 }
 
-function noindex(response: Response): Response {
+const SECURITY_HEADERS: Record<string, string> = {
+  "content-security-policy": [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' https: data: blob:",
+    "media-src 'self' https: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self' https: blob: data:",
+    "frame-src 'self' https://www.youtube-nocookie.com",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'none'",
+    "form-action 'self'",
+    "frame-ancestors 'none'",
+  ].join("; "),
+  "referrer-policy": "strict-origin-when-cross-origin",
+  "x-content-type-options": "nosniff",
+  "x-frame-options": "DENY",
+  "x-robots-tag": "noindex",
+};
+
+function secured(response: Response): Response {
   if (response.status === 101) {
     return response;
   }
   const marked = new Response(response.body, response);
-  marked.headers.set("x-robots-tag", "noindex");
+  for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
+    marked.headers.set(name, value);
+  }
   return marked;
 }
 
@@ -202,10 +226,16 @@ async function authorize(
     return null;
   }
   const supplied = request.headers.get("x-write-password") ?? "";
-  if (!(await sameSecret(supplied, env.WRITE_PASSWORD!))) {
-    return json({ error: supplied ? "Wrong password." : "This needs the publish password." }, 401);
+  if (!supplied) {
+    return json({ error: "This needs the publish password." }, 401);
   }
-  return null;
+  const ok = await sameSecret(supplied, env.WRITE_PASSWORD!);
+  const ip = request.headers.get("cf-connecting-ip") ?? "";
+  const verdict = await passkeyStore(env).attempt(`password:${ip}`, ok);
+  if (verdict === "blocked") {
+    return json({ error: "Too many wrong passwords from this connection — wait 15 minutes and try again." }, 429);
+  }
+  return verdict === "ok" ? null : json({ error: "Wrong password." }, 401);
 }
 
 function upstreamStatus(error: unknown): number {
@@ -671,6 +701,10 @@ async function handlePasskeyLogin(request: Request, env: Env): Promise<Response>
   return json({ session: await issueSession(env.WRITE_PASSWORD!) });
 }
 
+function randomHex(): string {
+  return [...crypto.getRandomValues(new Uint8Array(16))].map((byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+
 const SHARE_SEED_MAX_BYTES = 4 * 1024 * 1024;
 const SHARE_PATH = /^\/api\/share\/([0-9a-f]{32})$/;
 
@@ -688,99 +722,99 @@ async function handleShareCreate(request: Request, env: Env): Promise<Response> 
   if (!seed) {
     return json({ error: "Draft is too large to share (max ~4 MB)." }, 400);
   }
-  const token = [...crypto.getRandomValues(new Uint8Array(16))]
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
+  const token = randomHex();
+  const owner = randomHex();
   const room = env.SHARE.get(env.SHARE.idFromName(token));
-  const seeded = await room.fetch("https://share/seed", { method: "POST", body: seed });
+  const seeded = await room.fetch("https://share/seed", { method: "POST", body: seed, headers: { "x-share-owner": owner } });
   if (seeded.status === 400) {
     return json({ error: "That is not a draft the app can share." }, 400);
   }
   if (!seeded.ok) {
     return json({ error: "Could not start the share." }, 500);
   }
-  return json({ token });
+  return json({ token, owner });
 }
 
 async function handleShareRoom(request: Request, env: Env, token: string): Promise<Response> {
   const room = env.SHARE.get(env.SHARE.idFromName(token));
   if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-    return noindex(await room.fetch(request));
+    return room.fetch(request);
   }
   if (request.method === "DELETE") {
     if (crossSite(request)) {
       return json({ error: "Shares can only be managed from the app itself." }, 403);
     }
-    return noindex(await room.fetch("https://share/", { method: "DELETE" }));
+    return room.fetch("https://share/", { method: "DELETE", headers: { "x-share-owner": request.headers.get("x-share-owner") ?? "" } });
   }
   if (request.method === "GET") {
-    return noindex(await room.fetch("https://share/", { method: "GET" }));
+    return room.fetch("https://share/", { method: "GET" });
   }
   return json({ error: "Use GET, DELETE, or a WebSocket." }, 405);
 }
 
+async function route(request: Request, env: Env): Promise<Response> {
+  const url = new URL(request.url);
+
+  if (url.pathname === "/api/config") {
+    return request.method === "GET" ? handleConfig(env) : json({ error: "Use GET." }, 405);
+  }
+  if (url.pathname === "/api/share") {
+    return request.method === "POST"
+      ? handleShareCreate(request, env)
+      : json({ error: "Use POST." }, 405);
+  }
+  const share = SHARE_PATH.exec(url.pathname);
+  if (share) {
+    return handleShareRoom(request, env, share[1]);
+  }
+  if (url.pathname === "/api/publish") {
+    return request.method === "POST"
+      ? handlePublish(request, env)
+      : json({ error: "Use POST." }, 405);
+  }
+  if (url.pathname === "/api/publish/photo") {
+    return request.method === "POST"
+      ? handlePhoto(request, env)
+      : json({ error: "Use POST." }, 405);
+  }
+  if (url.pathname === "/api/images") {
+    return request.method === "GET" ? handleImages(request, env) : json({ error: "Use GET." }, 405);
+  }
+  if (url.pathname === "/api/drafts") {
+    return request.method === "GET" ? handleDrafts(request, env) : json({ error: "Use GET." }, 405);
+  }
+  if (url.pathname === "/api/source") {
+    return request.method === "GET"
+      ? handleSource(request, env)
+      : json({ error: "Use GET." }, 405);
+  }
+  if (url.pathname === "/api/passkey/challenge") {
+    return request.method === "POST"
+      ? handlePasskeyChallenge(request, env)
+      : json({ error: "Use POST." }, 405);
+  }
+  if (url.pathname === "/api/passkey/register") {
+    return request.method === "POST"
+      ? handlePasskeyRegister(request, env)
+      : json({ error: "Use POST." }, 405);
+  }
+  if (url.pathname === "/api/passkey/login") {
+    return request.method === "POST"
+      ? handlePasskeyLogin(request, env)
+      : json({ error: "Use POST." }, 405);
+  }
+  if (url.pathname === "/api/topics") {
+    return request.method === "GET" ? handleTopics(env) : json({ error: "Use GET." }, 405);
+  }
+  if (url.pathname.startsWith("/api/")) {
+    return json({ error: "Not found." }, 404);
+  }
+
+  return env.ASSETS.fetch(request);
+}
+
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const url = new URL(request.url);
-
-    if (url.pathname === "/api/config") {
-      return request.method === "GET" ? handleConfig(env) : json({ error: "Use GET." }, 405);
-    }
-    if (url.pathname === "/api/share") {
-      return request.method === "POST"
-        ? handleShareCreate(request, env)
-        : json({ error: "Use POST." }, 405);
-    }
-    const share = SHARE_PATH.exec(url.pathname);
-    if (share) {
-      return handleShareRoom(request, env, share[1]);
-    }
-    if (url.pathname === "/api/publish") {
-      return request.method === "POST"
-        ? handlePublish(request, env)
-        : json({ error: "Use POST." }, 405);
-    }
-    if (url.pathname === "/api/publish/photo") {
-      return request.method === "POST"
-        ? handlePhoto(request, env)
-        : json({ error: "Use POST." }, 405);
-    }
-    if (url.pathname === "/api/images") {
-      return request.method === "GET" ? handleImages(request, env) : json({ error: "Use GET." }, 405);
-    }
-    if (url.pathname === "/api/drafts") {
-      return request.method === "GET" ? handleDrafts(request, env) : json({ error: "Use GET." }, 405);
-    }
-    if (url.pathname === "/api/source") {
-      return request.method === "GET"
-        ? handleSource(request, env)
-        : json({ error: "Use GET." }, 405);
-    }
-    if (url.pathname === "/api/passkey/challenge") {
-      return request.method === "POST"
-        ? handlePasskeyChallenge(request, env)
-        : json({ error: "Use POST." }, 405);
-    }
-    if (url.pathname === "/api/passkey/register") {
-      return request.method === "POST"
-        ? handlePasskeyRegister(request, env)
-        : json({ error: "Use POST." }, 405);
-    }
-    if (url.pathname === "/api/passkey/login") {
-      return request.method === "POST"
-        ? handlePasskeyLogin(request, env)
-        : json({ error: "Use POST." }, 405);
-    }
-    if (url.pathname === "/api/topics") {
-      return request.method === "GET" ? handleTopics(env) : json({ error: "Use GET." }, 405);
-    }
-    if (url.pathname.startsWith("/api/")) {
-      return json({ error: "Not found." }, 404);
-    }
-
-    const asset = await env.ASSETS.fetch(request);
-    const page = new Response(asset.body, asset);
-    page.headers.set("x-robots-tag", "noindex");
-    return page;
+    return secured(await route(request, env));
   },
 } satisfies ExportedHandler<Env>;

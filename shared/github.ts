@@ -124,21 +124,26 @@ export interface RepoFile {
   sha: string;
 }
 
-export async function listFiles(token: string, repo: string, ref: string, dir: string): Promise<RepoFile[]> {
-  try {
-    const entries = await gh<{ name: string; sha: string; type: string }[]>(
-      token,
-      `/repos/${repo}/contents/${encodePath(dir)}?ref=${encodeURIComponent(ref)}`,
-    );
-    return Array.isArray(entries)
-      ? entries.filter((entry) => entry.type === "file").map(({ name, sha }) => ({ name, sha }))
-      : [];
-  } catch (error) {
-    if (error instanceof GitHubError && error.status === 404) {
-      return [];
-    }
-    throw error;
+async function graphql<T>(token: string, repo: string, query: string, variables: Record<string, string>): Promise<T> {
+  const [owner, name] = repo.split("/");
+  const result = await gh<{ data?: { repository: T }; errors?: { message: string }[] }>(token, "/graphql", {
+    method: "POST",
+    body: { query: `query($owner: String!, $name: String!, ${Object.keys(variables).map((key) => `$${key}: String!`).join(", ")}) { repository(owner: $owner, name: $name) { ${query} } }`, variables: { owner, name, ...variables } },
+  });
+  if (!result.data) {
+    throw new GitHubError(result.errors?.[0]?.message ?? "GitHub did not answer.", 502);
   }
+  return result.data.repository;
+}
+
+export async function listFiles(token: string, repo: string, ref: string, dir: string): Promise<RepoFile[]> {
+  const found = await graphql<{ files: { entries: { name: string; oid: string; type: string }[] } | null }>(
+    token,
+    repo,
+    "files: object(expression: $dir) { ... on Tree { entries { name oid type } } }",
+    { dir: `${ref}:${dir}` },
+  );
+  return (found.files?.entries ?? []).filter((entry) => entry.type === "blob").map(({ name, oid }) => ({ name, sha: oid }));
 }
 
 export async function readTexts(
@@ -147,24 +152,14 @@ export async function readTexts(
   branch: string,
   dirs: string[],
 ): Promise<{ path: string; text: string }[]> {
-  const [owner, name] = repo.split("/");
-  const fields = dirs.map((_, index) => `d${index}: object(expression: $d${index}) { ...T }`).join(" ");
-  const params = dirs.map((_, index) => `$d${index}: String!`).join(", ");
-  const result = await gh<{
-    data?: { repository: Record<string, { entries: { name: string; object: { text?: string | null } }[] } | null> };
-    errors?: { message: string }[];
-  }>(token, "/graphql", {
-    method: "POST",
-    body: {
-      query: `query($owner: String!, $name: String!, ${params}) { repository(owner: $owner, name: $name) { ${fields} } } fragment T on Tree { entries { name object { ... on Blob { text } } } }`,
-      variables: { owner, name, ...Object.fromEntries(dirs.map((dir, index) => [`d${index}`, `${branch}:${dir}`])) },
-    },
-  });
-  if (!result.data) {
-    throw new GitHubError(result.errors?.[0]?.message ?? "GitHub did not answer.", 502);
-  }
+  const found = await graphql<Record<string, { entries: { name: string; object: { text?: string | null } }[] } | null>>(
+    token,
+    repo,
+    `${dirs.map((_, index) => `d${index}: object(expression: $d${index}) { ... on Tree { entries { name object { ... on Blob { text } } } } }`).join(" ")}`,
+    Object.fromEntries(dirs.map((dir, index) => [`d${index}`, `${branch}:${dir}`])),
+  );
   return dirs.flatMap((dir, index) =>
-    (result.data!.repository[`d${index}`]?.entries ?? []).flatMap((entry) =>
+    (found[`d${index}`]?.entries ?? []).flatMap((entry) =>
       typeof entry.object.text === "string" ? [{ path: `${dir}/${entry.name}`, text: entry.object.text }] : [],
     ),
   );
@@ -203,10 +198,17 @@ export async function commitFiles(options: CommitOptions): Promise<PublishResult
     `/repos/${repo}/git/ref/heads/${encodeRef(branch)}`,
   );
   const headCommitSha = ref.object.sha;
+  const { redirects, fresh } = options;
 
-  for (const { path, sha } of options.expect ?? []) {
-    const current = await readFile(token, repo, headCommitSha, path);
-    if ((current?.sha ?? "") !== sha) {
+  const [current, existing, headCommit, redirectsFile] = await Promise.all([
+    Promise.all((options.expect ?? []).map(({ path }) => readFile(token, repo, headCommitSha, path))),
+    fresh?.names.length ? listFiles(token, repo, headCommitSha, fresh.dir) : [],
+    gh<{ tree: { sha: string } }>(token, `/repos/${repo}/git/commits/${headCommitSha}`),
+    redirects ? readTextFile(token, repo, headCommitSha, redirects.path) : null,
+  ]);
+
+  (options.expect ?? []).forEach(({ path, sha }, index) => {
+    if ((current[index]?.sha ?? "") !== sha) {
       throw new GitHubError(
         sha
           ? "This post changed on the site since you opened it. Open it again from the site, then publish."
@@ -214,27 +216,19 @@ export async function commitFiles(options: CommitOptions): Promise<PublishResult
         409,
       );
     }
+  });
+  const taken = new Set(existing.map((file) => stem(file.name)));
+  const clash = fresh?.names.find((name) => taken.has(stem(name)));
+  if (clash) {
+    throw new GitHubError(`A photo called ${clash} is already on the site. Close this and publish again.`, 409);
   }
-  if (options.fresh?.names.length) {
-    const existing = new Set((await listFiles(token, repo, headCommitSha, options.fresh.dir)).map((file) => stem(file.name)));
-    const clash = options.fresh.names.find((name) => existing.has(stem(name)));
-    if (clash) {
-      throw new GitHubError(`A photo called ${clash} is already on the site. Close this and publish again.`, 409);
-    }
-  }
-
-  const headCommit = await gh<{ tree: { sha: string } }>(
-    token,
-    `/repos/${repo}/git/commits/${headCommitSha}`,
-  );
 
   const all = [...files];
-  if (options.redirects) {
-    const { path, moves, created } = options.redirects;
-    const current = (await readTextFile(token, repo, headCommitSha, path))?.markdown ?? "";
-    const next = mergeRedirects(current, moves, created);
-    if (next !== current) {
-      all.push({ path, contentBase64: bytesToBase64(new TextEncoder().encode(next)) });
+  if (redirects) {
+    const before = redirectsFile?.markdown ?? "";
+    const next = mergeRedirects(before, redirects.moves, redirects.created);
+    if (next !== before) {
+      all.push({ path: redirects.path, contentBase64: bytesToBase64(new TextEncoder().encode(next)) });
     }
   }
 

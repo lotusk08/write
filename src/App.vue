@@ -32,23 +32,15 @@ import {
 } from "./lib/publish.ts";
 import { applyConfig, loadSettings, saveSettings, type Settings } from "./lib/settings.ts";
 import {
-  applyParticipantName,
-  joinShare,
-  leaveShare,
-  onRemoteChange,
   participantColor,
   participantName,
-  pushDoc,
-  readPeers,
   samePeers,
   saveParticipantName,
-  seedUpdate,
-  sessionSnapshot,
   SHARE_TOKEN,
   shareLink,
   type SharePeer,
-  type ShareSession,
-} from "./lib/share.ts";
+} from "./lib/participants.ts";
+import type { ShareSession } from "./lib/share.ts";
 import { previewSrc, setSiteUrl, showPublishedAs } from "./lib/site.ts";
 import { countWords, datePrefix, rememberValue, slugify, tidyEdited } from "./lib/text.ts";
 import { usePinnedViewport } from "./lib/viewport.ts";
@@ -103,6 +95,8 @@ const exporting = ref(false);
 const ready = ref(false);
 const source = ref<string | null>(null);
 const session = shallowRef<ShareSession | null>(null);
+let shareRoom: typeof import("./lib/share.ts") | null = null;
+const loadShare = async () => (shareRoom ??= await import("./lib/share.ts"));
 const shareTarget = ref<boolean | null>(null);
 const shareError = ref<string | null>(null);
 const shareName = ref(participantName());
@@ -160,8 +154,8 @@ async function flush() {
   if (!id || Object.keys(patch).length === 0) {
     return;
   }
-  if (patch.doc !== undefined && session.value && !("shareToken" in patch)) {
-    patch.shareSeed = sessionSnapshot(session.value);
+  if (patch.doc !== undefined && session.value && shareRoom && !("shareToken" in patch)) {
+    patch.shareSeed = shareRoom.sessionSnapshot(session.value);
   }
   const base = findDraft(id);
   if (!base) {
@@ -199,8 +193,8 @@ async function settle() {
 function onEditorChange(doc: JSONContent) {
   contentVersion.value += 1;
   queueSave({ doc });
-  if (session.value) {
-    pushDoc(session.value, doc);
+  if (session.value && shareRoom) {
+    shareRoom.pushDoc(session.value, doc);
   }
 }
 
@@ -228,45 +222,54 @@ watch(
       peers.value = [];
       return;
     }
-    const draft = findDraft(currentId.value);
-    const joined = joinShare(token, endedShare, draft?.shareToken === token ? draft.shareSeed : undefined);
-    applyParticipantName(joined, shareName.value);
-    session.value = joined;
-
     let stale = false;
-    void shareRoomState(token).then((state) => {
-      if (!stale && state === "ended") {
-        endedShare();
-      }
-    });
-
-    const stopRemote = onRemoteChange(joined, () => postEditor.value?.takeUnsent() ?? null, replaceDoc);
-    const onSync = (synced: boolean) => {
-      const local = findDraft(currentId.value)?.doc;
-      if (synced && joined.text.length === 0 && local) {
-        pushDoc(joined, local);
-      }
-    };
-    joined.provider.on("sync", onSync);
-
-    const awareness = joined.provider.awareness;
-    const read = () => {
-      const next = readPeers(joined);
-      if (!samePeers(peers.value, next)) {
-        peers.value = next;
-      }
-    };
-    read();
-    awareness.on("change", read);
-
+    let stop = () => {};
     onCleanup(() => {
       stale = true;
-      stopRemote();
-      awareness.off("change", read);
-      joined.provider.off("sync", onSync);
-      leaveShare(joined);
-      session.value = null;
-      peers.value = [];
+      stop();
+    });
+    void loadShare().then(({ joinShare, applyParticipantName, onRemoteChange, pushDoc, readPeers, leaveShare }) => {
+      if (stale) {
+        return;
+      }
+      const draft = findDraft(currentId.value);
+      const joined = joinShare(token, endedShare, draft?.shareToken === token ? draft.shareSeed : undefined);
+      applyParticipantName(joined, shareName.value);
+      session.value = joined;
+
+      void shareRoomState(token).then((state) => {
+        if (!stale && state === "ended") {
+          endedShare();
+        }
+      });
+
+      const stopRemote = onRemoteChange(joined, () => postEditor.value?.takeUnsent() ?? null, replaceDoc);
+      const onSync = (synced: boolean) => {
+        const local = findDraft(currentId.value)?.doc;
+        if (synced && joined.text.length === 0 && local) {
+          pushDoc(joined, local);
+        }
+      };
+      joined.provider.on("sync", onSync);
+
+      const awareness = joined.provider.awareness;
+      const read = () => {
+        const next = readPeers(joined);
+        if (!samePeers(peers.value, next)) {
+          peers.value = next;
+        }
+      };
+      read();
+      awareness.on("change", read);
+
+      stop = () => {
+        stopRemote();
+        awareness.off("change", read);
+        joined.provider.off("sync", onSync);
+        leaveShare(joined);
+        session.value = null;
+        peers.value = [];
+      };
     });
   },
   { immediate: true },
@@ -460,7 +463,7 @@ async function deleteDraft(id: string) {
   }
   pending = {};
   if (draft.shareToken && draft.shareOwner) {
-    void endShareRoom(draft.shareToken).catch(() => undefined);
+    void endShareRoom(draft.shareToken, draft.shareOwner).catch(() => undefined);
   }
   await draftStore.remove(id);
   const remaining = drafts.value.filter((item) => item.id !== id);
@@ -580,12 +583,12 @@ async function enableShare() {
     if (!draft) {
       return;
     }
-    const update = seedUpdate(draft.doc);
-    const token = await createShareRoom(update);
+    const update = (await loadShare()).seedUpdate(draft.doc);
+    const { token, owner } = await createShareRoom(update);
     if (source.value !== null) {
       await editRich();
     }
-    queueSave({ shareToken: token, shareOwner: true, shareSeed: update });
+    queueSave({ shareToken: token, shareOwner: owner, shareSeed: update });
     await flush();
   } catch (cause) {
     shareError.value = errorText(cause);
@@ -595,14 +598,15 @@ async function enableShare() {
 }
 
 async function disableShare() {
-  const token = findDraft(currentId.value)?.shareToken;
+  const draft = findDraft(currentId.value);
+  const token = draft?.shareToken;
   if (!token) {
     return;
   }
   shareTarget.value = false;
   shareError.value = null;
   try {
-    await endShareRoom(token);
+    await endShareRoom(token, draft.shareOwner);
     queueSave({ shareToken: undefined, shareOwner: undefined, shareSeed: undefined });
     await flush();
   } catch (cause) {
@@ -627,8 +631,8 @@ async function leaveSharedDraft() {
 function renameShare(name: string) {
   shareName.value = name;
   saveParticipantName(name);
-  if (session.value) {
-    applyParticipantName(session.value, name);
+  if (session.value && shareRoom) {
+    shareRoom.applyParticipantName(session.value, name);
   }
 }
 
@@ -742,8 +746,8 @@ async function onPublished(id: string, result: PublishResult, plan: PublishPlan)
     const repointed = doc ? repointDoc(doc, urls) : null;
     if (repointed && doc && JSON.stringify(repointed) !== JSON.stringify(doc)) {
       replaceDoc(repointed);
-      if (session.value) {
-        pushDoc(session.value, repointed);
+      if (session.value && shareRoom) {
+        shareRoom.pushDoc(session.value, repointed);
       }
     }
   }

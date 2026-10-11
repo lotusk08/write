@@ -4,24 +4,42 @@ import { commitFiles } from "./github.ts";
 
 type Tree = { path: string; sha: string | null }[];
 
+let inFlight = 0;
+let mostInFlight = 0;
+
 function fakeGitHub(repo: Record<string, string>, { push = 200 }: { push?: number } = {}) {
   const trees: Tree[] = [];
   const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+  inFlight = 0;
+  mostInFlight = 0;
   vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
+    inFlight += 1;
+    mostInFlight = Math.max(mostInFlight, inFlight);
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    inFlight -= 1;
     const url = new URL(input);
     const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+    if (url.pathname === "/graphql") {
+      const dir = String(body.variables.dir).replace(/^[^:]*:/, "");
+      const listing = Object.keys(repo).filter((file) => file.startsWith(`${dir}/`));
+      return reply({
+        data: {
+          repository: {
+            files: listing.length
+              ? { entries: listing.map((file) => ({ name: file.slice(dir.length + 1), oid: `sha:${file}`, type: "blob" })) }
+              : null,
+          },
+        },
+      });
+    }
     const contents = /\/contents\/(.+)$/.exec(url.pathname)?.[1];
     if (url.pathname.endsWith("/git/ref/heads/blog")) {
       return reply({ object: { sha: "head" } });
     }
     if (contents) {
       const path = decodeURIComponent(contents);
-      if (path in repo) {
-        return reply({ content: bytesToBase64(new TextEncoder().encode(repo[path])), encoding: "base64", sha: `sha:${path}` });
-      }
-      const listing = Object.keys(repo).filter((file) => file.startsWith(`${path}/`));
-      return listing.length
-        ? reply(listing.map((file) => ({ name: file.slice(path.length + 1), sha: `sha:${file}`, type: "file" })))
+      return path in repo
+        ? reply({ content: bytesToBase64(new TextEncoder().encode(repo[path])), encoding: "base64", sha: `sha:${path}` })
         : reply({ message: "Not Found" }, 404);
     }
     if (url.pathname.endsWith("/git/commits/head")) {
@@ -70,6 +88,7 @@ describe("commitFiles", () => {
       },
     });
     expect(trees).toHaveLength(1);
+    expect(mostInFlight).toBeGreaterThanOrEqual(4);
     expect(trees[0].map((entry) => [entry.path, entry.sha])).toEqual([
       [markdown.path, `blob:${markdown.contentBase64.length}`],
       ["public/assets/img/post/trip-sea.webp", "sha:public/assets/img/post/old.webp"],
@@ -106,6 +125,16 @@ describe("commitFiles", () => {
     await expect(
       commitFiles({ ...base, files: [markdown], fresh: { dir: "public/assets/img/post", names: ["trip-sea.jpg"] } }),
     ).rejects.toMatchObject({ status: 409, message: expect.stringContaining("trip-sea.jpg") });
+  });
+
+  it("finds a clash past the thousandth photo in the folder", async () => {
+    const folder = Object.fromEntries(
+      Array.from({ length: 1500 }, (_, index) => [`public/assets/img/post/photo-${index}.webp`, "x"]),
+    );
+    fakeGitHub(folder);
+    await expect(
+      commitFiles({ ...base, files: [markdown], fresh: { dir: "public/assets/img/post", names: ["photo-1400.jpg"] } }),
+    ).rejects.toMatchObject({ status: 409, message: expect.stringContaining("photo-1400.jpg") });
   });
 
   it("explains a push that lost the race instead of passing on GitHub's 422", async () => {

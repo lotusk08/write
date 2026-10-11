@@ -1,4 +1,4 @@
-import type { SharePeer } from "../lib/share.ts";
+import type { SharePeer } from "../lib/participants.ts";
 
 export type ExportFormat = "markdown" | "docx" | "html" | "pdf" | "copy";
 

@@ -149,23 +149,23 @@ export async function uploadPhoto(contentBase64: string, password: string, signa
   });
 }
 
-export async function createShareRoom(seed: Uint8Array): Promise<string> {
+export async function createShareRoom(seed: Uint8Array): Promise<{ token: string; owner: string }> {
   const response = await fetch("/api/share", {
     method: "POST",
     headers: { accept: "application/json", "content-type": "application/octet-stream" },
     body: seed as unknown as BodyInit,
   });
-  const result = await readJson<{ token?: string }>(response, "Could not start sharing");
-  if (!result.token) {
+  const result = await readJson<{ token?: string; owner?: string }>(response, "Could not start sharing");
+  if (!result.token || !result.owner) {
     throw new Error("Could not start sharing.");
   }
-  return result.token;
+  return { token: result.token, owner: result.owner };
 }
 
-export async function endShareRoom(token: string): Promise<void> {
+export async function endShareRoom(token: string, owner: string | boolean | undefined): Promise<void> {
   const response = await fetch(`/api/share/${encodeURIComponent(token)}`, {
     method: "DELETE",
-    headers: { accept: "application/json" },
+    headers: { accept: "application/json", ...(typeof owner === "string" ? { "x-share-owner": owner } : {}) },
   });
   if (!response.ok && response.status !== 404) {
     await readJson(response, "Could not stop sharing");
