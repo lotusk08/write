@@ -3,13 +3,13 @@ import { computed, nextTick, ref, watch } from "vue";
 import type { AppConfig, PublishResult } from "../../shared/types.ts";
 import { PasswordRejected } from "../lib/api.ts";
 import type { Draft } from "../lib/db.ts";
-import { addPasskey, passkeysAvailable, signInWithPasskey } from "../lib/passkey.ts";
-import { rememberPassword, rememberSession, sessionPassword, sessionToken } from "../lib/password.ts";
 import { buildPublishPlan, defaultCommitMessage, sendPlan, type PublishPlan } from "../lib/publish.ts";
 import type { Settings } from "../lib/settings.ts";
 import Dialog from "./Dialog.vue";
+import SignIn from "./SignIn.vue";
 import Toggle from "./Toggle.vue";
 import type { ToggleOption } from "./types.ts";
+import { useSignIn } from "./useSignIn.ts";
 
 const props = defineProps<{ draft: Draft; settings: Settings; config: AppConfig | null }>();
 const emit = defineEmits<{
@@ -28,13 +28,8 @@ const message = ref(defaultCommitMessage(props.draft, Boolean(props.draft.publis
 const busy = ref(false);
 const sent = ref(0);
 const error = ref<string | null>(null);
-const password = ref(sessionPassword());
-const session = ref(sessionToken());
-const rejected = ref(0);
-const passwordField = ref<HTMLInputElement | null>(null);
-const canPasskey = passkeysAvailable();
-
-const asking = computed(() => (!sessionPassword() && !session.value) || rejected.value > 0);
+const { password, rejected, asking, credential, accepted, signedIn, forget } = useSignIn();
+const signIn = ref<InstanceType<typeof SignIn> | null>(null);
 
 let generation = 0;
 watch(
@@ -60,7 +55,7 @@ watch(
 watch(rejected, async (count) => {
   if (count) {
     await nextTick();
-    passwordField.value?.focus();
+    signIn.value?.focus();
   }
 });
 
@@ -78,32 +73,6 @@ const blocked = computed(() =>
       : (props.config.problem ?? "This deployment is not configured to publish."),
 );
 
-/** A 401: forget the password and any session, and put the caret back in the field. */
-const forget = () => {
-  rejected.value += 1;
-  password.value = "";
-  session.value = "";
-  rememberPassword("");
-  rememberSession("");
-};
-
-const withPasskey = async (ceremony: () => Promise<string | null>) => {
-  busy.value = true;
-  error.value = null;
-  try {
-    const token = await ceremony();
-    if (token) {
-      rememberSession(token);
-      session.value = token;
-      rejected.value = 0;
-    }
-  } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause);
-  } finally {
-    busy.value = false;
-  }
-};
-
 const run = async () => {
   if (!plan.value || blocked.value || (asking.value && !password.value)) {
     return;
@@ -114,12 +83,10 @@ const run = async () => {
     const result = await sendPlan(
       plan.value,
       message.value,
-      asking.value ? password.value : sessionPassword(),
+      credential(),
       (done) => (sent.value = done),
     );
-    if (asking.value) {
-      rememberPassword(password.value);
-    }
+    accepted();
     emit("published", result, plan.value);
   } catch (cause) {
     if (cause instanceof PasswordRejected) {
@@ -154,40 +121,16 @@ const run = async () => {
       />
     </div>
 
-    <div v-if="asking" class="field">
-      <label for="publish-password">Password</label>
-      <div class="password-row">
-        <input
-          id="publish-password"
-          ref="passwordField"
-          v-model="password"
-          class="input"
-          type="password"
-          autocomplete="current-password"
-          :autofocus="!canPasskey"
-          placeholder="••••••••"
-          @keydown.enter.prevent="run"
-        />
-        <button
-          v-if="canPasskey"
-          type="button"
-          class="btn"
-          :disabled="busy || Boolean(blocked)"
-          @click="withPasskey(signInWithPasskey)"
-        >
-          Passkey
-        </button>
-      </div>
-      <button
-        v-if="canPasskey && password"
-        type="button"
-        class="btn tiny save-passkey"
-        :disabled="busy || Boolean(blocked)"
-        @click="withPasskey(() => addPasskey(password))"
-      >
-        Save a passkey on this device
-      </button>
-    </div>
+    <SignIn
+      v-if="asking"
+      id="publish-password"
+      ref="signIn"
+      v-model="password"
+      :disabled="busy || Boolean(blocked)"
+      @submit="run"
+      @session="(token) => (signedIn(token), (error = null))"
+      @error="(message) => (error = message)"
+    />
 
     <div class="field">
       <label for="publish-message">Commit message</label>

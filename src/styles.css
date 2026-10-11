@@ -414,7 +414,7 @@ textarea {
   width: min(300px, calc(100vw - 16px));
 }
 
-.draft-list button {
+.draft-list button:not(.btn) {
   min-height: 44px;
   gap: 10px;
 }
@@ -1710,9 +1710,18 @@ textarea {
   gap: 8px;
 }
 
+.password-row > * {
+  height: 44px;
+}
+
 .password-row .input {
   min-width: 0;
   flex: 1;
+}
+
+.draft-list .sign-in {
+  padding: 6px;
+  margin-bottom: 0;
 }
 
 .save-passkey {
@@ -1841,7 +1850,7 @@ textarea {
   box-shadow: var(--shadow-pop);
 }
 
-.menu button {
+.menu button:not(.btn) {
   display: flex;
   width: 100%;
   align-items: center;
@@ -1863,7 +1872,7 @@ textarea {
   overscroll-behavior: contain;
 }
 
-.menu button:hover {
+.menu button:not(.btn):hover {
   background: var(--hover);
 }
 
