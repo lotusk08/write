@@ -13,7 +13,7 @@ import { useOutline } from "./components/useOutline.ts";
 import { docToHtml } from "./editor/bridge.ts";
 import type { JSONContent } from "./editor/doc.ts";
 import { createShareRoom, endShareRoom, fetchAppConfig, fetchPostSource, shareRoomState } from "./lib/api.ts";
-import { draftStore, isLocalSrc, resolveLocalSrc, type Draft } from "./lib/db.ts";
+import { draftStore, isLocalSrc, keepSnapshot, NOTICE, resolveLocalSrc, restoreSnapshots, type Draft } from "./lib/db.ts";
 import { createDraft, currentMeta, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
 import { buildHtmlDocument } from "./lib/html.ts";
@@ -65,7 +65,8 @@ let booting: Promise<{ drafts: Draft[]; settings: Settings; config: AppConfig | 
 /** One startup, however many times it is asked for: two runs against an empty store made two drafts. */
 function boot() {
   booting ??= (async () => {
-    const [stored, config] = await Promise.all([draftStore.all(), fetchAppConfig()]);
+    const [kept, config] = await Promise.all([draftStore.all(), fetchAppConfig()]);
+    const stored = await restoreSnapshots(kept);
     const settings = config ? applyConfig(loadSettings(), config) : loadSettings();
     if (config) {
       saveSettings(settings);
@@ -112,6 +113,7 @@ const mainRegion = ref<HTMLDivElement | null>(null);
 const scrollRegion = ref<HTMLDivElement | null>(null);
 
 let pending: Partial<Draft> = {};
+let writing: Partial<Draft> = {};
 let saveTimer: number | undefined;
 let parseTimer: number | undefined;
 let toastTimer: number | undefined;
@@ -162,7 +164,9 @@ async function flush() {
     return;
   }
   const next: Draft = { ...base, ...patch, updatedAt: Date.now() };
+  writing = { ...writing, ...patch };
   await draftStore.put(next);
+  writing = {};
   drafts.value = sortDrafts(drafts.value.map((draft) => (draft.id === id ? next : draft)));
   saveState.value = "saved";
 }
@@ -181,13 +185,17 @@ function updateSettings(patch: Partial<Settings>) {
 
 /** Everything typed so far, written to the store: the editor's waiting change, or the Markdown source's. */
 async function settle() {
+  gather();
+  await flush();
+}
+
+function gather() {
   window.clearTimeout(parseTimer);
   if (source.value !== null) {
     queueSave({ doc: markdownToDoc(source.value) });
   } else {
     postEditor.value?.flush();
   }
-  await flush();
 }
 
 function onEditorChange(doc: JSONContent) {
@@ -800,14 +808,20 @@ const onScheme = () => {
 };
 const onLeave = (event: Event) => {
   if (event.type === "pagehide" || document.visibilityState === "hidden") {
-    void settle();
+    gather();
+    if (currentId.value) {
+      keepSnapshot(currentId.value, { ...writing, ...pending });
+    }
+    void flush();
   }
 };
+const onNotice = (event: Event) => showToast((event as CustomEvent<string>).detail, "error");
 
 onMounted(() => {
   document.addEventListener("keydown", onKey);
   document.addEventListener("visibilitychange", onLeave);
   window.addEventListener("pagehide", onLeave);
+  window.addEventListener(NOTICE, onNotice);
   scheme.addEventListener("change", onScheme);
   void boot().then(({ drafts: stored, settings: active, config: remote }) => {
     if (remote) {
@@ -826,6 +840,7 @@ onBeforeUnmount(() => {
   document.removeEventListener("keydown", onKey);
   document.removeEventListener("visibilitychange", onLeave);
   window.removeEventListener("pagehide", onLeave);
+  window.removeEventListener(NOTICE, onNotice);
   scheme.removeEventListener("change", onScheme);
 });
 

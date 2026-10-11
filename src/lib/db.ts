@@ -68,6 +68,7 @@ async function tx<T>(
     const request = run(transaction.objectStore(store));
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
+    transaction.onabort = () => reject(transaction.error ?? request.error);
     transaction.commit?.();
   });
 }
@@ -86,8 +87,11 @@ export const draftStore = {
   },
 };
 
+const unstored = new Map<string, StoredImage>();
+
 export const imageStore = {
-  get: (id: string) => tx<StoredImage | undefined>(IMAGES, "readonly", (s) => s.get(id) as IDBRequest<StoredImage | undefined>),
+  get: async (id: string) =>
+    unstored.get(id) ?? tx<StoredImage | undefined>(IMAGES, "readonly", (s) => s.get(id) as IDBRequest<StoredImage | undefined>),
   put: (image: StoredImage) => tx(IMAGES, "readwrite", (s) => s.put(image) as IDBRequest<IDBValidKey>),
   remove: (id: string) => tx(IMAGES, "readwrite", (s) => s.delete(id) as IDBRequest<undefined>),
   all: () => tx<StoredImage[]>(IMAGES, "readonly", (s) => s.getAll() as IDBRequest<StoredImage[]>),
@@ -232,6 +236,76 @@ export async function storeImageFile(file: File | Blob, name?: string): Promise<
     blob: file,
     addedAt: Date.now(),
   };
-  await imageStore.put(image);
+  try {
+    await imageStore.put(image);
+  } catch (cause) {
+    console.error(`Could not store ${image.name}`, cause);
+    unstored.set(image.id, image);
+    notice(
+      `This browser would not keep ${image.name} (private browsing cannot store photos). It stays in this tab only: publish before closing it, or use a normal window.`,
+    );
+  }
   return image;
+}
+
+export const NOTICE = "write:notice";
+
+function notice(message: string): void {
+  globalThis.dispatchEvent?.(new CustomEvent(NOTICE, { detail: message }));
+}
+
+const SNAPSHOT = "write:unsaved:";
+
+type Snapshot = Partial<Pick<Draft, "title" | "slug" | "doc" | "meta">> & { at: number };
+
+/**
+ * A draft's last edits, written to localStorage at once when the page is left: WebKit drops an IndexedDB write still
+ * running when the page unloads, and lost what was typed in the last moment before a reload.
+ */
+export function keepSnapshot(id: string, patch: Partial<Draft>, at = Date.now()): void {
+  const { title, slug, doc, meta } = patch;
+  if (doc === undefined && meta === undefined && title === undefined && slug === undefined) {
+    return;
+  }
+  try {
+    localStorage.setItem(SNAPSHOT + id, JSON.stringify({ title, slug, doc, meta, at } satisfies Snapshot));
+  } catch {
+    return;
+  }
+}
+
+function forget(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    return;
+  }
+}
+
+/** Folds every snapshot newer than its stored draft back into the store, then forgets them all. */
+export async function restoreSnapshots(drafts: Draft[], put = draftStore.put): Promise<Draft[]> {
+  let keys: string[];
+  try {
+    keys = Object.keys(localStorage).filter((key) => key.startsWith(SNAPSHOT));
+  } catch {
+    return drafts;
+  }
+  let restored = drafts;
+  for (const key of keys) {
+    try {
+      const snapshot = JSON.parse(localStorage.getItem(key) ?? "null") as Snapshot | null;
+      const draft = restored.find((item) => item.id === key.slice(SNAPSHOT.length));
+      if (snapshot && draft && snapshot.at > draft.updatedAt) {
+        const { at, ...patch } = snapshot;
+        const next: Draft = { ...draft, ...Object.fromEntries(Object.entries(patch).filter(([, value]) => value !== undefined)), updatedAt: at };
+        await put(next);
+        restored = restored.map((item) => (item.id === next.id ? next : item));
+      }
+    } catch {
+      continue;
+    } finally {
+      forget(key);
+    }
+  }
+  return restored;
 }
