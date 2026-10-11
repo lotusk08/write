@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("cloudflare:workers", () => ({ DurableObject: class {} }));
 
-const { default: worker } = await import("./index.ts");
+const { default: worker, yamlScalar } = await import("./index.ts");
 
 const env = { GITHUB_TOKEN: "t", WRITE_PASSWORD: "pw", BLOG_REPO: "o/r", BLOG_BRANCH: "blog" } as never;
 
@@ -54,8 +54,8 @@ describe("worker", () => {
       { files: [post], remove: ["src/posts/2026-10-11-trip.md"] },
       { files: [post], remove: ["src/drafts/notes.txt"] },
       { files: [post], remove: ["public/assets/img/post/../../index.html"] },
-      { files: [post], expect: { path: ".github/x.md", sha: "a".repeat(40) } },
-      { files: [post], expect: { path: post.path, sha: "nope" } },
+      { files: [post], expect: [{ path: ".github/x.md", sha: "a".repeat(40) }] },
+      { files: [post], expect: [{ path: post.path, sha: "nope" }] },
       { files: [post], redirects: [["/assets/img/post/a.webp", "/assets/img/post/sub/b.webp"]] },
       { files: [post], redirects: [["/elsewhere/a.webp", "/assets/img/post/b.webp"]] },
       { files: [post], redirects: [["/assets/img/post/a.webp"]] },
@@ -101,5 +101,13 @@ describe("worker", () => {
       redirected: [],
     });
     expect(body).not.toContain("secret");
+  });
+});
+
+describe("yamlScalar", () => {
+  it("reads a draft title as YAML does", () => {
+    expect(yamlScalar('"He said \\"x\\""')).toBe('He said "x"');
+    expect(yamlScalar("'It''s here'")).toBe("It's here");
+    expect(yamlScalar("Chuyện cà phê")).toBe("Chuyện cà phê");
   });
 });

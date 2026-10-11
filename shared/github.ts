@@ -184,7 +184,7 @@ export interface CommitOptions {
   branch?: string;
   message: string;
   files: PublishFile[];
-  expect?: { path: string; sha: string };
+  expect?: { path: string; sha: string }[];
   fresh?: { dir: string; names: string[] };
   remove?: string[];
   redirects?: { path: string; moves: [string, string][]; created: string[] };
@@ -204,8 +204,7 @@ export async function commitFiles(options: CommitOptions): Promise<PublishResult
   );
   const headCommitSha = ref.object.sha;
 
-  if (options.expect) {
-    const { path, sha } = options.expect;
+  for (const { path, sha } of options.expect ?? []) {
     const current = await readFile(token, repo, headCommitSha, path);
     if ((current?.sha ?? "") !== sha) {
       throw new GitHubError(

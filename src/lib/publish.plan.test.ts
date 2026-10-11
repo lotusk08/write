@@ -5,7 +5,7 @@ import type { Settings } from "./settings.ts";
 const sitePhotos = vi.hoisted(() => vi.fn());
 vi.mock("./api.ts", () => ({ fetchSitePhotos: sitePhotos }));
 
-const { buildPublishPlan } = await import("./publish.ts");
+const { buildPublishPlan, sendPlan } = await import("./publish.ts");
 
 const settings = {
   imagesDir: "public/assets/img/post",
@@ -25,7 +25,7 @@ const draft = (extra: Partial<Draft>, photos: [string, string][] = []) =>
 describe("buildPublishPlan", () => {
   it("guards a new post against landing on an existing one", async () => {
     const plan = await buildPublishPlan(draft({}), settings);
-    expect(plan.expect).toEqual({ path: "src/posts/2026-10-11-trip.md", sha: "" });
+    expect(plan.expect).toEqual([{ path: "src/posts/2026-10-11-trip.md", sha: "" }]);
   });
 
   it("redirects a renamed JPEG at the WebP the site serves, and keeps a file another post uses", async () => {
@@ -51,7 +51,7 @@ describe("buildPublishPlan", () => {
     expect(plan.remove).toEqual(["public/assets/img/post/IMG 1.jpg"]);
     expect(plan.redirects).toEqual([["/assets/img/post/IMG%201.webp", "/assets/img/post/trip-bien.webp"]]);
     expect(plan.markdown).toContain("/assets/img/post/trip-bien.jpg");
-    expect(plan.expect).toEqual({ path: "src/posts/2026-10-11-trip.md", sha: "c".repeat(40) });
+    expect(plan.expect).toEqual([{ path: "src/posts/2026-10-11-trip.md", sha: "c".repeat(40) }]);
   });
 
   it("counts a post moved to a new address as still using its photos", async () => {
@@ -61,5 +61,30 @@ describe("buildPublishPlan", () => {
     sitePhotos.mockResolvedValueOnce({ files: [], redirected: [] });
     await buildPublishPlan(draft({ publishedPath: "src/drafts/2026-10-11-trip.md" }, [["/assets/img/post/a.webp", "A"]]), settings);
     expect(sitePhotos).toHaveBeenLastCalledWith(["src/posts/2026-10-11-trip.md", "src/drafts/2026-10-11-trip.md"]);
+  });
+
+  it("guards the new address too when a post moves, and keeps the old one checked", async () => {
+    const plan = await buildPublishPlan(
+      draft({ publishedPath: "src/drafts/2026-10-11-old.md", publishedSha: "d".repeat(40) }),
+      settings,
+    );
+    expect(plan.expect).toEqual([
+      { path: "src/posts/2026-10-11-trip.md", sha: "" },
+      { path: "src/drafts/2026-10-11-old.md", sha: "d".repeat(40) },
+    ]);
+  });
+
+  it("warns about a photo with no caption and a missing description", async () => {
+    const plan = await buildPublishPlan(draft({}), settings);
+    expect(plan.warnings.map((warning) => warning.kind)).toContain("description");
+  });
+
+  it("refuses a photo too big to send before uploading any", async () => {
+    const gif = new Blob([new Uint8Array(9 * 1024 * 1024)], { type: "image/gif" });
+    const plan = {
+      ...(await buildPublishPlan(draft({}), settings)),
+      photos: [{ path: "public/assets/img/post/trip-1.gif", blob: gif, src: "local:1", alt: "" }],
+    };
+    await expect(sendPlan(plan, "m", "pw", () => {})).rejects.toThrow("trip-1.gif is 9.0 MB");
   });
 });

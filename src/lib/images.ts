@@ -28,6 +28,13 @@ const MAX_BYTES = 4 * 1024 * 1024;
 const MAX_PIXELS = 16_777_216;
 const SHRINKABLE = new Set(["image/jpeg", "image/png"]);
 
+export const MAX_UPLOAD_BYTES = 8 * 1024 * 1024;
+
+export const shrinks = (blob: Blob, width = 0): boolean =>
+  SHRINKABLE.has(blob.type) && (blob.size > MAX_BYTES || width > MAX_WIDTH);
+
+export const tooBig = (blob: Blob): boolean => !SHRINKABLE.has(blob.type) && blob.size > MAX_UPLOAD_BYTES;
+
 export async function shrinkImage(blob: Blob): Promise<Blob> {
   if (!SHRINKABLE.has(blob.type)) {
     return blob;

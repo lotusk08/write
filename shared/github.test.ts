@@ -60,7 +60,7 @@ describe("commitFiles", () => {
     await commitFiles({
       ...base,
       files: [markdown, { path: "public/assets/img/post/trip-sea.webp", sha: "sha:public/assets/img/post/old.webp" }],
-      expect: { path: markdown.path, sha: `sha:${markdown.path}` },
+      expect: [{ path: markdown.path, sha: `sha:${markdown.path}` }],
       fresh: { dir: "public/assets/img/post", names: ["trip-sea.webp"] },
       remove: ["public/assets/img/post/old.webp"],
       redirects: {
@@ -80,11 +80,11 @@ describe("commitFiles", () => {
 
   it("refuses a post that changed since it was opened, and a new post over an existing one", async () => {
     fakeGitHub({ "src/posts/2026-10-11-trip.md": "newer" });
-    await expect(commitFiles({ ...base, files: [markdown], expect: { path: markdown.path, sha: "stale" } })).rejects.toMatchObject({
+    await expect(commitFiles({ ...base, files: [markdown], expect: [{ path: markdown.path, sha: "stale" }] })).rejects.toMatchObject({
       status: 409,
       message: expect.stringContaining("changed on the site"),
     });
-    await expect(commitFiles({ ...base, files: [markdown], expect: { path: markdown.path, sha: "" } })).rejects.toMatchObject({
+    await expect(commitFiles({ ...base, files: [markdown], expect: [{ path: markdown.path, sha: "" }] })).rejects.toMatchObject({
       status: 409,
       message: expect.stringContaining("already has a post"),
     });
@@ -95,7 +95,7 @@ describe("commitFiles", () => {
     await commitFiles({
       ...base,
       files: [markdown],
-      expect: { path: markdown.path, sha: "" },
+      expect: [{ path: markdown.path, sha: "" }],
       redirects: { path: "src/redirects.txt", moves: [], created: [] },
     });
     expect(trees[0].map((entry) => entry.path)).toEqual([markdown.path]);

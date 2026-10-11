@@ -1,28 +1,34 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted } from "vue";
+import { onBeforeUnmount, onMounted, ref } from "vue";
 
-defineProps<{ title: string; subtitle?: string }>();
+const props = defineProps<{ title: string; subtitle?: string; locked?: boolean }>();
 const emit = defineEmits<{ close: [] }>();
 
-const onKey = (event: KeyboardEvent) => {
-  if (event.key === "Escape") {
+const dialog = ref<HTMLDialogElement | null>(null);
+
+const dismiss = () => {
+  if (!props.locked) {
     emit("close");
   }
 };
 
-onMounted(() => document.addEventListener("keydown", onKey));
-onBeforeUnmount(() => document.removeEventListener("keydown", onKey));
+onMounted(() => dialog.value?.showModal());
+onBeforeUnmount(() => dialog.value?.close());
 </script>
 
 <template>
-  <div class="scrim" role="presentation" @mousedown.self="emit('close')">
-    <div class="dialog" role="dialog" aria-modal="true" :aria-label="title">
-      <header class="dialog-head">
-        <h2>{{ title }}</h2>
-        <p v-if="subtitle" class="hint">{{ subtitle }}</p>
-      </header>
-      <div class="dialog-body"><slot /></div>
-      <div v-if="$slots.footer" class="dialog-actions"><slot name="footer" /></div>
-    </div>
-  </div>
+  <dialog
+    ref="dialog"
+    class="dialog"
+    :aria-label="title"
+    @cancel.prevent="dismiss"
+    @mousedown.self="dismiss"
+  >
+    <header class="dialog-head">
+      <h2>{{ title }}</h2>
+      <p v-if="subtitle" class="hint">{{ subtitle }}</p>
+    </header>
+    <div class="dialog-body"><slot /></div>
+    <div v-if="$slots.footer" class="dialog-actions"><slot name="footer" /></div>
+  </dialog>
 </template>

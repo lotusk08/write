@@ -3,29 +3,75 @@ import type { PostMeta, PublishResult, SitePhoto } from "../../shared/types.ts";
 import { fetchSitePhotos, publish, uploadPhoto } from "./api.ts";
 import type { Draft, StoredImage } from "./db.ts";
 import { imageStore, isLocalSrc, localId } from "./db.ts";
-import { blobToBase64, extensionFor, shrinkImage } from "./images.ts";
+import { blobToBase64, extensionFor, MAX_UPLOAD_BYTES, shrinkImage, tooBig } from "./images.ts";
 import { buildPostFile } from "./markdown.ts";
 import { decoded, servedName, stem, trimSlashes } from "../../shared/paths.ts";
 import type { Settings } from "./settings.ts";
 import { datePrefix, slugify } from "./text.ts";
 
+export interface PlannedPhoto {
+  path: string;
+  blob: Blob;
+  src: string;
+  alt: string;
+}
+
+export interface PublishWarning {
+  kind: "alt" | "description" | "missing" | "unguarded" | "size" | "stale" | "existing" | "retry";
+  text: string;
+  src?: string;
+  blocks?: boolean;
+}
+
 export interface PublishPlan {
   slug: string;
   markdownPath: string;
   markdown: string;
-  photos: { path: string; blob: Blob }[];
+  photos: PlannedPhoto[];
   renames: { path: string; sha: string }[];
   remove: string[];
   redirects: [string, string][];
-  paths: string[];
+  moved: [string, string][];
   imageUrls: Map<string, string>;
   skippedImages: string[];
-  expect?: { path: string; sha: string };
+  warnings: PublishWarning[];
+  expect?: { path: string; sha: string }[];
+}
+
+const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
+
+function warningsFor(draft: Draft, photos: PlannedPhoto[], skipped: string[], guarded: boolean): PublishWarning[] {
+  return [
+    ...photos
+      .filter((photo) => tooBig(photo.blob))
+      .map((photo): PublishWarning => ({
+        kind: "size",
+        src: photo.src,
+        blocks: true,
+        text: `${fileName(photo.path)} is ${megabytes(photo.blob.size)}; one photo can be ${megabytes(MAX_UPLOAD_BYTES)} at most, and this format is not reduced.`,
+      })),
+    ...photos
+      .filter((photo) => !photo.alt.trim())
+      .map((photo): PublishWarning => ({
+        kind: "alt",
+        src: photo.src,
+        text: `A photo has no caption, so it is named ${fileName(photo.path)}. Add one to name it.`,
+      })),
+    ...(skipped.length
+      ? [{ kind: "missing" as const, text: `${skipped.length} photo(s) are missing from this browser's storage and will not be uploaded.` }]
+      : []),
+    ...(draft.meta.description?.trim() ? [] : [{ kind: "description" as const, text: "The post has no description." }]),
+    ...(guarded
+      ? []
+      : [{ kind: "unguarded" as const, text: "This copy cannot tell whether the post changed on the site since it was opened. Open it again from the site to be safe." }]),
+  ];
 }
 
 interface PlannedImage {
   src: string;
   baseName: string;
+  alt?: string;
   stored?: StoredImage;
   site?: SitePhoto;
 }
@@ -117,7 +163,7 @@ export async function planImages(
   const planned = renames;
   for (const [src, alt] of photos) {
     if (isLocalSrc(src)) {
-      planned.push({ src, baseName: photoName(slug, alt, taken), stored: await imageStore.get(localId(src)) });
+      planned.push({ src, alt, baseName: photoName(slug, alt, taken), stored: await imageStore.get(localId(src)) });
     }
   }
   return planned;
@@ -170,7 +216,7 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
   const renames: PublishPlan["renames"] = [];
   const remove: string[] = [];
   const redirects: [string, string][] = [];
-  const moved: string[] = [];
+  const moved: [string, string][] = [];
   const imageUrls = new Map<string, string>();
   const skippedImages: string[] = [];
   const markdownPath = markdownPathFor(draft, settings, slug);
@@ -187,7 +233,7 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
         remove.push(`${images.dir}/${image.site.name}`);
         redirects.push([image.site.name, file].map((name) => `/${images.url}/${encodeURIComponent(servedName(name))}`) as [string, string]);
       }
-      moved.push(`${image.site.name} → ${file}`);
+      moved.push([image.site.name, file]);
       imageUrls.set(image.src, `/${images.url}/${file}`);
       continue;
     }
@@ -196,7 +242,7 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
       continue;
     }
     const file = `${image.baseName}.${extensionFor(image.stored.type, image.stored.name)}`;
-    photos.push({ path: `${images.dir}/${file}`, blob: image.stored.blob });
+    photos.push({ path: `${images.dir}/${file}`, blob: image.stored.blob, src: image.src, alt: image.alt ?? "" });
     imageUrls.set(image.src, `/${images.url}/${file}`);
   }
 
@@ -206,13 +252,25 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
   if (leaves) {
     remove.push(draft.publishedPath!);
   }
-  const expect = !draft.publishedPath
-    ? { path: markdownPath, sha: "" }
-    : draft.publishedSha && (draft.publishedPath === markdownPath || leaves)
-      ? { path: draft.publishedPath, sha: draft.publishedSha }
-      : undefined;
-  const paths = [markdownPath, ...photos.map((photo) => photo.path), ...moved];
-  return { slug, markdownPath, markdown, photos, renames, remove, redirects, paths, imageUrls, skippedImages, expect };
+  const source = draft.publishedPath && draft.publishedSha && (draft.publishedPath === markdownPath || leaves)
+    ? [{ path: draft.publishedPath, sha: draft.publishedSha }]
+    : [];
+  const expect = [...(draft.publishedPath === markdownPath ? [] : [{ path: markdownPath, sha: "" }]), ...source];
+  const warnings = warningsFor(draft, photos, skippedImages, !draft.publishedPath || source.length > 0);
+  return {
+    slug,
+    markdownPath,
+    markdown,
+    photos,
+    renames,
+    remove,
+    redirects,
+    moved,
+    imageUrls,
+    skippedImages,
+    warnings,
+    expect: expect.length ? expect : undefined,
+  };
 }
 
 export async function sendPlan(
@@ -220,14 +278,21 @@ export async function sendPlan(
   message: string,
   password: string,
   progress: (done: number) => void,
+  signal?: AbortSignal,
 ): Promise<PublishResult> {
+  const big = plan.photos.find((photo) => tooBig(photo.blob));
+  if (big) {
+    throw new Error(`${fileName(big.path)} is ${megabytes(big.blob.size)}; one photo can be ${megabytes(MAX_UPLOAD_BYTES)} at most.`);
+  }
   const uploaded = [];
   for (const photo of plan.photos) {
     progress(uploaded.length);
-    const sha = await uploadPhoto(await blobToBase64(await shrinkImage(photo.blob)), password);
+    signal?.throwIfAborted();
+    const sha = await uploadPhoto(await blobToBase64(await shrinkImage(photo.blob)), password, signal);
     uploaded.push({ path: photo.path, sha });
   }
   progress(uploaded.length);
+  signal?.throwIfAborted();
   const markdown = { path: plan.markdownPath, contentBase64: await blobToBase64(new Blob([plan.markdown])) };
   return publish(
     {

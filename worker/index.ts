@@ -317,6 +317,17 @@ function servedDir(env: Env): string {
   return `/${dirs(env).imagesDir.replace(/^public\//, "")}/`;
 }
 
+export function yamlScalar(value: string): string {
+  if (value.startsWith('"')) {
+    try {
+      return JSON.parse(value) as string;
+    } catch {
+      return value.slice(1, -1);
+    }
+  }
+  return value.startsWith("'") ? value.slice(1, -1).replace(/''/g, "'") : value;
+}
+
 function validList<T>(value: unknown, valid: (item: unknown) => item is T): value is T[] {
   return Array.isArray(value) && value.length <= 50 && value.every(valid);
 }
@@ -352,7 +363,10 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
     (path.startsWith(`${postsDir}/`) || path.startsWith(`${draftsDir}/`)) &&
     /\.(md|markdown)$/i.test(path);
   const expect = body.expect;
-  if (expect !== undefined && !(markdownPath(expect?.path) && typeof expect.sha === "string" && (expect.sha === "" || SHA.test(expect.sha)))) {
+  const guard = (entry: unknown): entry is { path: string; sha: string } =>
+    typeof entry === "object" && entry !== null && markdownPath((entry as { path?: unknown }).path) &&
+    typeof (entry as { sha?: unknown }).sha === "string" && ((entry as { sha: string }).sha === "" || SHA.test((entry as { sha: string }).sha));
+  if (expect !== undefined && !(validList(expect, guard) && expect.length <= 2)) {
     return json({ error: "Malformed expect entry." }, 400);
   }
   const remove = body.remove ?? [];
@@ -471,7 +485,7 @@ async function handleDrafts(request: Request, env: Env): Promise<Response> {
       .filter(({ path }) => /\.(md|markdown)$/i.test(path))
       .map(({ path, text }) => ({
         path,
-        title: /^title:\s*["']?(.*?)["']?\s*$/m.exec(text.split(/^---\s*$/m, 2).join(""))?.[1] || "",
+        title: yamlScalar(/^title:[ \t]*(.*?)\s*$/m.exec(text.split(/^---\s*$/m, 2).join(""))?.[1] ?? ""),
         date: /(\d{4}-\d{2}-\d{2})-[^/]*$/.exec(path)?.[1] ?? "",
       }))
       .sort((a, b) => b.date.localeCompare(a.date) || a.path.localeCompare(b.path));

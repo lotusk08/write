@@ -369,8 +369,6 @@ async function importPost(path: string) {
     }
     drafts.value = sortDrafts([draft, ...drafts.value.filter((item) => item.id !== existing?.id)]);
     currentId.value = draft.id;
-    const draftsDir = settings.value.draftsDir.replace(/^\/+|\/+$/g, "");
-    updateSettings({ publishTarget: path.startsWith(`${draftsDir}/`) ? "drafts" : "posts" });
     showToast(existing ? `${path} changed on the site; opened the new version.` : `Opened ${path}.`);
   } catch (cause) {
     showToast(errorText(cause), "error");
@@ -661,6 +659,34 @@ function openMindmap() {
   }
 }
 
+function fixPhoto(src: string) {
+  publishOpen.value = false;
+  const image = [...document.querySelectorAll<HTMLImageElement>(".editor-host img")].find(
+    (img) => img.dataset.localSrc === src || img.dataset.src === src,
+  );
+  const figure = image?.closest("figure") ?? image;
+  figure?.scrollIntoView({ block: "center" });
+  figure?.click();
+}
+
+function editPost() {
+  publishOpen.value = false;
+  updateSettings({ menuTab: "post" });
+  menuOpen.value = true;
+}
+
+async function reopenFromSite(draft: Draft) {
+  const path = draft.publishedPath;
+  publishOpen.value = false;
+  if (!path) {
+    return;
+  }
+  const copy: Draft = { ...draft, publishedPath: undefined, publishedSha: undefined, publishedPrint: undefined, updatedAt: Date.now() };
+  await draftStore.put(copy);
+  drafts.value = drafts.value.map((item) => (item.id === copy.id ? copy : item));
+  await importPost(path);
+}
+
 async function openPublish() {
   await settle();
   menuOpen.value = false;
@@ -674,8 +700,6 @@ async function openPublish() {
  * photo until it is reloaded, since the site has not built them yet.
  */
 async function onPublished(id: string, result: PublishResult, plan: PublishPlan) {
-  publishOpen.value = false;
-  showToast(`Committed ${plan.markdownPath} to ${result.branch}`, "info", result.commitUrl);
   const urls = plan.imageUrls;
   await Promise.all(
     [...urls].map(async ([local, url]) => {
@@ -770,9 +794,16 @@ const scheme = window.matchMedia("(prefers-color-scheme: dark)");
 const onScheme = () => {
   systemDark.value = scheme.matches;
 };
+const onLeave = (event: Event) => {
+  if (event.type === "pagehide" || document.visibilityState === "hidden") {
+    void settle();
+  }
+};
 
 onMounted(() => {
   document.addEventListener("keydown", onKey);
+  document.addEventListener("visibilitychange", onLeave);
+  window.addEventListener("pagehide", onLeave);
   scheme.addEventListener("change", onScheme);
   void boot().then(({ drafts: stored, settings: active, config: remote }) => {
     if (remote) {
@@ -789,6 +820,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener("keydown", onKey);
+  document.removeEventListener("visibilitychange", onLeave);
+  window.removeEventListener("pagehide", onLeave);
   scheme.removeEventListener("change", onScheme);
 });
 
@@ -955,6 +988,9 @@ onBeforeUnmount(() => {
       @settings="updateSettings"
       @close="publishOpen = false"
       @published="(result, plan) => void onPublished(current!.id, result, plan)"
+      @fix-photo="fixPhoto"
+      @edit-post="editPost"
+      @reopen="() => void reopenFromSite(current!)"
     />
 
     <div v-if="toast" :class="['toast', { error: toast.kind === 'error' }]" role="status">

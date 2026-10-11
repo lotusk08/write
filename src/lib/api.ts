@@ -124,7 +124,7 @@ export async function fetchSitePhotos(own: string[]): Promise<{ files: SitePhoto
   };
 }
 
-export async function uploadPhoto(contentBase64: string, password: string): Promise<string> {
+export async function uploadPhoto(contentBase64: string, password: string, signal?: AbortSignal): Promise<string> {
   let status = 0;
   const send = async () => {
     status = 0;
@@ -132,6 +132,7 @@ export async function uploadPhoto(contentBase64: string, password: string): Prom
       method: "POST",
       headers: headers(password, { "content-type": "text/plain" }),
       body: contentBase64,
+      signal,
     });
     status = response.status;
     const result = await readJson<{ sha?: string }>(response, "Could not upload a photo");
@@ -141,7 +142,7 @@ export async function uploadPhoto(contentBase64: string, password: string): Prom
     return result.sha;
   };
   return send().catch((cause: unknown) => {
-    if (status >= 400 && status < 500) {
+    if ((status >= 400 && status < 500) || signal?.aborted) {
       throw cause;
     }
     return send();

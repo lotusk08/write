@@ -39,7 +39,6 @@ defineExpose({ focus: () => field.value?.focus() });
         type="password"
         autocomplete="current-password"
         :autofocus="!canPasskey"
-        placeholder="••••••••"
         @keydown.enter.prevent="emit('submit')"
       />
       <button v-if="canPasskey" type="button" class="btn" :disabled="disabled || busy" @click="withPasskey(signInWithPasskey)">

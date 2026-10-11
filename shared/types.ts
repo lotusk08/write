@@ -36,7 +36,7 @@ export type PublishFile = { path: string } & ({ contentBase64: string } | { sha:
 export interface PublishRequest {
   message: string;
   files: PublishFile[];
-  expect?: { path: string; sha: string };
+  expect?: { path: string; sha: string }[];
   remove?: string[];
   redirects?: [string, string][];
 }
