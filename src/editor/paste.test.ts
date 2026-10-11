@@ -86,4 +86,20 @@ describe("paste", () => {
     paste("dQw4w9WgXcQ");
     expect(root.querySelector("[data-embed]")).toBeNull();
   });
+
+  it("pastes blocks where the caret sits on the editor itself, as after a trailing photo", () => {
+    document.body.innerHTML = '<div contenteditable="true"><p>Before</p><figure><img src="/a.webp" alt=""></figure></div>';
+    const root = document.body.firstElementChild as HTMLElement;
+    const range = document.createRange();
+    range.setStart(root, root.childNodes.length);
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(range);
+    const data = new DataTransfer();
+    data.setData("text/html", "<p>One</p><p>Two</p>");
+    data.setData("text/plain", "One\n\nTwo");
+    const event = new ClipboardEvent("paste", { clipboardData: data, cancelable: true });
+    Object.defineProperty(event, "currentTarget", { value: root });
+    expect(pasteClipboard(event)).toBe(true);
+    expect([...root.children].map((node) => `${node.nodeName}:${node.textContent}`)).toEqual(["P:Before", "FIGURE:", "P:One", "P:Two"]);
+  });
 });

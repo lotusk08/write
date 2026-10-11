@@ -185,6 +185,12 @@ function placeCaret(parent: Node, offset: number): void {
 
 /** Puts pasted blocks where the caret is: the first paragraph joins the line, the rest follow it, and what came after the caret closes the last. */
 function insertBlocks(root: HTMLElement, range: Range, fragment: DocumentFragment): void {
+  if (range.startContainer === root) {
+    const paragraph = document.createElement("p");
+    root.insertBefore(paragraph, root.childNodes[range.startOffset] ?? null);
+    range.setStart(paragraph, 0);
+    range.collapse(true);
+  }
   const block = blockAround(range.startContainer, root);
   if (block.matches("li, td, th, summary")) {
     const inline = document.createDocumentFragment();
