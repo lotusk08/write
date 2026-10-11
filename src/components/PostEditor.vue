@@ -5,11 +5,13 @@ import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vu
 import { docToHtml, htmlToDoc } from "../editor/bridge.ts";
 import {
   askLink,
+  continueAfter,
   editCaption,
   insertImages,
   leaveGallery,
   moveGalleryPhoto,
   notify,
+  placeCaret,
   removeGalleryPhoto,
   selectFigure,
   setImageText,
@@ -112,6 +114,7 @@ function onReady(element: HTMLElement): void {
   element.addEventListener("drop", onDrop, true);
   element.addEventListener("mousedown", onMousedown);
   element.addEventListener("keydown", onShortcut, true);
+  element.addEventListener("compositionstart", onCompositionStart, true);
   decorate(element, previews, props.dark);
 }
 
@@ -143,22 +146,72 @@ function onKeydown(event: KeyboardEvent): void {
     return;
   }
   const target = event.target as Element;
-  const photo = target.matches(".is-selected[data-image]") && target.closest("[data-gallery]");
+  const selected = target.matches(".is-selected[data-image]") ? (target as HTMLElement) : null;
+  const photo = selected?.closest("[data-gallery]");
   const step = event.altKey ? ({ ArrowLeft: -1, ArrowRight: 1 } as const)[event.key as "ArrowLeft"] : undefined;
-  if (photo && (event.key === "Backspace" || event.key === "Delete" || step)) {
+  if (selected && (event.key === "Backspace" || event.key === "Delete" || (photo && step))) {
     event.preventDefault();
-    editPhoto(step ?? 0);
+    if (photo) {
+      editPhoto(step ?? 0);
+    } else {
+      removePhoto(element, selected);
+    }
     return;
   }
-  if (photo && (event.key.length === 1 || event.key === "Enter") && !event.metaKey && !event.ctrlKey) {
+  if (selected && (event.isComposing || event.key === "Unidentified" || event.key === "Process")) {
+    leavePhoto(element, selected);
+    return;
+  }
+  if (selected && (event.key.length === 1 || event.key === "Enter") && !event.metaKey && !event.ctrlKey) {
     event.preventDefault();
-    run(leaveGallery);
+    leavePhoto(element, selected);
     if (event.key !== "Enter") {
       document.execCommand("insertText", false, event.key);
     }
     return;
   }
   handleKeydown(element, event);
+}
+
+/** The photo with its caption line, the blocks a selected photo stands for. */
+function withCaption(figure: HTMLElement): Element {
+  const next = figure.nextElementSibling;
+  return next?.matches("p[data-join]") ? next : figure;
+}
+
+/** Typing on a selected photo writes in the paragraph after it, or after its gallery. */
+function leavePhoto(element: HTMLElement, figure: HTMLElement): void {
+  if (figure.closest("[data-gallery]")) {
+    run(leaveGallery);
+    return;
+  }
+  selectFigure(element, null);
+  element.focus({ preventScroll: true });
+  continueAfter(withCaption(figure), true);
+  notify(element);
+}
+
+/** Delete on a selected photo outside a gallery takes it and its caption line, leaving the caret where it stood. */
+function removePhoto(element: HTMLElement, figure: HTMLElement): void {
+  const paragraph = document.createElement("p");
+  paragraph.append(document.createElement("br"));
+  const caption = withCaption(figure);
+  if (caption !== figure) {
+    caption.remove();
+  }
+  figure.replaceWith(paragraph);
+  selectFigure(element, null);
+  element.focus({ preventScroll: true });
+  placeCaret(paragraph);
+  notify(element);
+}
+
+/** An input method starting on a selected photo writes in the paragraph after it. */
+function onCompositionStart(event: CompositionEvent): void {
+  const target = event.target as HTMLElement;
+  if (target.matches(".is-selected[data-image]") && root.value) {
+    leavePhoto(root.value, target);
+  }
 }
 
 /** Moves the selected gallery photo back (-1) or on (1), or removes it (0). */
@@ -183,9 +236,7 @@ function onClick(event: MouseEvent): void {
   }
   const figure = target.closest<HTMLElement>("figure[data-image]");
   selectFigure(element, figure && element.contains(figure) ? figure : null);
-  if (figure?.closest("[data-gallery]")) {
-    figure.focus({ preventScroll: true });
-  }
+  figure?.focus({ preventScroll: true });
   refreshTools();
 }
 
@@ -199,7 +250,7 @@ function photoTool(element: HTMLElement, button: Element): void {
   const gallery = figure.closest("[data-gallery]");
   if (button.classList.contains("editor-image-edit")) {
     selectFigure(element, figure);
-    editPhoto(button.textContent === "←" ? -1 : button.textContent === "→" ? 1 : 0);
+    editPhoto(Number((button as HTMLElement).dataset.step) as -1 | 0 | 1);
   } else if (!button.classList.contains("editor-image-caption") || gallery) {
     const value = window.prompt(
       gallery ? "Caption, shown on the card" : "Alt text (describes the image)",
@@ -211,7 +262,7 @@ function photoTool(element: HTMLElement, button: Element): void {
   } else {
     editCaption(element, figure);
   }
-  decorate(element, previews, props.dark);
+  redecorate();
 }
 
 /** The controls drawn inside the text — a section's toggle, a photo's tools, a task's box — must not move the caret. */

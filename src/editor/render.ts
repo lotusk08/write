@@ -43,7 +43,7 @@ async function loadChart() {
   return chartLoader;
 }
 
-export async function renderChart(source: string, target: HTMLElement, dark: boolean): Promise<Teardown> {
+export async function renderChart(source: string, target: HTMLElement): Promise<Teardown> {
   try {
     const config = JSON.parse(source) as Record<string, unknown>;
     const Chart = await loadChart();
@@ -54,8 +54,9 @@ export async function renderChart(source: string, target: HTMLElement, dark: boo
     const canvas = document.createElement("canvas");
     frame.append(canvas);
     target.append(frame);
-    Chart.defaults.color = dark ? "#a3a3a6" : "#5c5c5e";
-    Chart.defaults.borderColor = dark ? "#272727" : "#e6e6e8";
+    const tokens = getComputedStyle(target);
+    Chart.defaults.color = tokens.getPropertyValue("--muted").trim();
+    Chart.defaults.borderColor = tokens.getPropertyValue("--border").trim();
     const chart = new Chart(canvas, {
       ...config,
       options: { maintainAspectRatio: false, ...(config.options as object), responsive: true },

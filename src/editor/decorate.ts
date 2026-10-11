@@ -63,6 +63,12 @@ function toolButton(className: string, text = "", label = ""): HTMLButtonElement
   return button;
 }
 
+function editButton(step: -1 | 0 | 1, text: string, label: string): HTMLButtonElement {
+  const button = toolButton("tool editor-image-edit", text, label);
+  button.dataset.step = String(step);
+  return button;
+}
+
 /**
  * The buttons under a photo: alt text and caption. A gallery photo's caption is what its card shows — the title, else
  * the alt text, as the blog reads it — so there it is the one text button, and the selected photo also gets move and
@@ -75,9 +81,9 @@ function imageTools(figure: HTMLElement, img: HTMLImageElement): void {
     tools.append(
       toolButton("editor-image-alt"),
       toolButton("editor-image-alt editor-image-caption"),
-      toolButton("editor-image-alt editor-image-edit", "←", "Move photo back"),
-      toolButton("editor-image-alt editor-image-edit", "→", "Move photo on"),
-      toolButton("editor-image-alt editor-image-edit", "Remove", "Remove photo from the gallery"),
+      editButton(-1, "←", "Move photo back"),
+      editButton(1, "→", "Move photo on"),
+      editButton(0, "Remove", "Remove photo from the gallery"),
     );
     figure.append(tools);
   }
@@ -260,7 +266,7 @@ export class Previews {
     const started =
       language === "mermaid"
         ? renderMermaid(preview.source, preview.element, preview.dark, `mermaid-${key}`)
-        : renderChart(preview.source, preview.element, preview.dark);
+        : renderChart(preview.source, preview.element);
     void started.then((teardown) => {
       if (mine !== preview.generation) {
         teardown();

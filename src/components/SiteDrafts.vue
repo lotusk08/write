@@ -54,14 +54,14 @@ const pick = (path: string) => {
     class="btn icon ghost"
     title="Open a draft from the site"
     aria-label="Open a draft from the site"
-    aria-haspopup="menu"
+    aria-haspopup="dialog"
     :aria-expanded="open"
     @click="toggle"
   >
     <Icon name="download" />
   </button>
   <Teleport to="body">
-    <div v-if="open" ref="list" class="menu floating draft-list" role="menu" aria-label="Drafts on the site">
+    <div v-if="open" ref="list" class="menu floating draft-list" role="dialog" aria-label="Drafts on the site">
       <p v-if="problem" class="notice warn">{{ problem }}</p>
       <SignIn
         v-if="asking"
@@ -75,7 +75,7 @@ const pick = (path: string) => {
         <p v-if="!drafts" class="notice">Reading the site's drafts…</p>
         <p v-else-if="!drafts.length" class="notice">The site has no drafts.</p>
       </template>
-      <button v-for="draft in drafts ?? []" :key="draft.path" type="button" role="menuitem" :title="draft.path" @click="pick(draft.path)">
+      <button v-for="draft in drafts ?? []" :key="draft.path" type="button" :title="draft.path" @click="pick(draft.path)">
         <span class="draft-list-title">{{ draft.title || draft.path.split("/").pop() }}</span>
         <span class="mono">{{ draft.date }}</span>
       </button>

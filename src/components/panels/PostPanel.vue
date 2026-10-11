@@ -136,7 +136,7 @@ const onAltBlur = (event: FocusEvent) => {
       <label for="meta-date">Date</label>
       <input
         id="meta-date"
-        class="input mono"
+        class="input numeric"
         :value="meta.date"
         @input="emit('change', { date: ($event.target as HTMLInputElement).value })"
       />

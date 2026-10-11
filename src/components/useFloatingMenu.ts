@@ -4,7 +4,13 @@ import { viewportBand } from "../lib/viewport.ts";
 const GAP = 6;
 const EDGE = 8;
 
-/** Places a pop-up menu beside its button inside the visible band, and closes it on Escape or a tap outside. */
+const ITEMS = '[role="menuitem"]';
+const FIRST = `${ITEMS}, input, button`;
+
+/**
+ * Places a pop-up menu beside its button inside the visible band, and closes it on Escape or a tap outside. Opened from
+ * the keyboard it takes the focus, and the arrow keys walk its items.
+ */
 export function useFloatingMenu(
   open: Ref<boolean>,
   button: Ref<HTMLElement | null>,
@@ -37,6 +43,14 @@ export function useFloatingMenu(
       event.stopPropagation();
       open.value = false;
       button.value?.focus();
+      return;
+    }
+    const items = [...(menu.value?.querySelectorAll<HTMLElement>(ITEMS) ?? [])];
+    const at = items.indexOf(document.activeElement as HTMLElement);
+    const to = ({ ArrowDown: at + 1, ArrowUp: Math.max(at, 0) - 1, Home: 0, End: -1 } as Record<string, number>)[event.key];
+    if (to !== undefined && items.length && (at >= 0 || document.activeElement === button.value)) {
+      event.preventDefault();
+      items.at(to % items.length)?.focus();
     }
   };
   const onDown = (event: PointerEvent) => {
@@ -72,8 +86,14 @@ export function useFloatingMenu(
   watch(open, (value) => {
     unlisten();
     if (value) {
+      const keyboard = document.activeElement === button.value;
       listen();
-      void nextTick(place);
+      void nextTick(() => {
+        place();
+        if (keyboard) {
+          menu.value?.querySelector<HTMLElement>(FIRST)?.focus();
+        }
+      });
     }
   });
   onBeforeUnmount(unlisten);

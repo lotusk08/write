@@ -26,6 +26,7 @@ const choose = (pick: () => void) => {
     :class="['tool', { 'is-active': note }]"
     :title="note ? `Callout — ${NOTE_LABELS[note]}` : 'Callouts'"
     aria-label="Callouts"
+    aria-haspopup="menu"
     :aria-expanded="open"
     @mousedown.prevent
     @click="open = !open"
@@ -34,7 +35,7 @@ const choose = (pick: () => void) => {
   </button>
   <Teleport to="body">
     <div v-if="open" ref="menu" class="menu floating" role="menu" @mousedown.prevent>
-      <button v-for="type in NOTE_TYPES" :key="type" type="button" @click="choose(() => emit('note', type))">
+      <button v-for="type in NOTE_TYPES" :key="type" type="button" role="menuitem" @click="choose(() => emit('note', type))">
         <span class="swatch-label">
           <span class="swatch" :data-note="type" />
           {{ NOTE_LABELS[type] }}
