@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import { htmlToDoc } from "./bridge.ts";
-import { pastedHtml } from "./paste.ts";
+import { pasteClipboard, pastedHtml } from "./paste.ts";
 import { docToMarkdown } from "../lib/markdown.ts";
 
 const DOCS_SPAN = "font-size:11pt;font-family:Arial;color:#000000;background-color:transparent;font-variant:normal;text-decoration:none;vertical-align:baseline;white-space:pre-wrap;";
@@ -63,5 +63,27 @@ describe("paste", () => {
   it("treats a styled-only paste, as from a code editor, as its plain text", () => {
     const code = '<div style="color:#d4d4d4;font-family:Menlo"><span style="color:#569cd6">## Notes</span></div>';
     expect(markdown(pastedHtml(code, "## Notes"))).toBe("## Notes");
+  });
+
+  it("makes an embed of a player link pasted alone, and a paragraph of anything else", () => {
+    document.body.innerHTML = '<div contenteditable="true"><p><br></p></div>';
+    const root = document.body.firstElementChild as HTMLElement;
+    const paste = (text: string) => {
+      const range = document.createRange();
+      range.setStart(root.querySelector("p")!, 0);
+      getSelection()!.removeAllRanges();
+      getSelection()!.addRange(range);
+      const data = new DataTransfer();
+      data.setData("text/plain", text);
+      const event = new ClipboardEvent("paste", { clipboardData: data, cancelable: true });
+      Object.defineProperty(event, "currentTarget", { value: root });
+      return pasteClipboard(event);
+    };
+    expect(paste("https://youtu.be/dQw4w9WgXcQ")).toBe(true);
+    expect(root.querySelector("[data-embed]")?.getAttribute("data-id")).toBe("dQw4w9WgXcQ");
+    root.innerHTML = "<p><br></p>";
+    document.execCommand = () => true;
+    paste("dQw4w9WgXcQ");
+    expect(root.querySelector("[data-embed]")).toBeNull();
   });
 });

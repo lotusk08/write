@@ -1,5 +1,7 @@
 import type { JSONContent } from "./doc.ts";
+import { embedFromUrl } from "./blog.ts";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
+import { insertEmbed, notify } from "./commands.ts";
 import { markdownToDoc } from "../lib/import.ts";
 
 const BLOCKS = "address, article, aside, blockquote, details, div, dl, figure, footer, h1, h2, h3, h4, h5, h6, header, hr, li, ol, p, pre, section, table, ul";
@@ -231,8 +233,10 @@ function insertBlocks(root: HTMLElement, range: Range, fragment: DocumentFragmen
 }
 
 /**
- * Pastes as the editor's own HTML, built from the doc model. Text, anything
- * pasted into code (as escaped HTML: WebKit's `insertText` splits a code block
+ * Pastes as the editor's own HTML, built from the doc model. A link to a
+ * player the blog embeds, pasted alone with nothing selected, becomes that
+ * embed; with text selected it stays a paste, which may be meant as a link.
+ * Text, anything pasted into code (as escaped HTML: WebKit's `insertText` splits a code block
  * at each newline), and inline HTML go in through the browser's own commands,
  * so undo takes them back. Blocks go in by hand and are not undoable: Chrome's
  * `insertHTML` wraps blocks it merges into a line in inline styles and turns a
@@ -254,6 +258,12 @@ export function pasteClipboard(event: ClipboardEvent): boolean {
   }
   event.preventDefault();
   event.stopImmediatePropagation();
+  const embed = !inCode && /^https?:\/\/\S+$/.test(text.trim()) && range.collapsed ? embedFromUrl(text) : null;
+  if (embed) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    return insertEmbed(root, embed);
+  }
   if (inCode) {
     document.execCommand("insertHTML", false, escapeHtml(text));
     return true;
@@ -270,7 +280,7 @@ export function pasteClipboard(event: ClipboardEvent): boolean {
   }
   range.deleteContents();
   insertBlocks(root, range, template.content);
-  root.dispatchEvent(new Event("input", { bubbles: true }));
+  notify(root);
   return true;
 }
 
