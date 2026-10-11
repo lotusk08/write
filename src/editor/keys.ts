@@ -1,5 +1,7 @@
 import {
   continueAfter,
+  format,
+  insertRule,
   keepCaretInNewItem,
   liftLists,
   currentTextblock,
@@ -7,6 +9,10 @@ import {
   placeCaret,
   selectionIn,
   setCollapsible,
+  toggleCodeBlock,
+  toggleHeading,
+  toggleInline,
+  toggleList,
   togglePlainQuote,
   unsetCollapsible,
 } from "./commands.ts";
@@ -19,7 +25,8 @@ import {
  * a cell — and a cell moves to the one below instead, since a cell is one line
  * of pipes in the Markdown. A line that is only a fence opener becomes a code
  * block, and the Markdown shortcuts at the start of a line (`#`, `>`, `>>>`,
- * `-`, `1.`) turn it into what they write.
+ * `-`, `1.`, `[ ]`, `---`) turn it into what they write, as do `**bold**`,
+ * `*italic*`, `~~strike~~`, `==highlight==` and `` `code` `` once closed.
  */
 
 const FLOWING = "blockquote, [data-collapsible-content]";
@@ -172,6 +179,35 @@ function enter(root: HTMLElement): boolean {
   return true;
 }
 
+type Command = (root: HTMLElement) => unknown;
+
+const paragraph: Command = (root) => {
+  document.execCommand("formatBlock", false, "p");
+  notify(root);
+};
+
+/** The ⌘ shortcuts the Tiptap editor had, beyond the editor's own ⌘B, ⌘I, ⌘⇧X, ⌘K and undo. */
+const KEYS: Record<string, Command> = {
+  e: (root) => toggleInline(root, "code"),
+  "shift+h": (root) => toggleInline(root, "mark"),
+  ".": (root) => format(root, "superscript"),
+  ",": (root) => format(root, "subscript"),
+  "shift+7": (root) => toggleList(root, "ordered"),
+  "shift+8": (root) => toggleList(root, "bullet"),
+  "shift+9": (root) => toggleList(root, "task"),
+  "shift+b": togglePlainQuote,
+  "shift+d": (root) => unsetCollapsible(root) || setCollapsible(root),
+  "alt+c": toggleCodeBlock,
+  "alt+0": paragraph,
+  "alt+1": (root) => toggleHeading(root, 2),
+  "alt+2": (root) => toggleHeading(root, 2),
+  "alt+3": (root) => toggleHeading(root, 3),
+  "alt+4": (root) => toggleHeading(root, 4),
+};
+
+/** By the key's place, not its character: ⌥ and ⇧ change the character on a Mac. */
+const keyName = (code: string) => code.replace(/^(?:Key|Digit)/, "").toLowerCase().replace("period", ".").replace("comma", ",");
+
 /** Returns true when the key was taken, so the caller can stop the editor from acting on it too. */
 export function handleKeydown(root: HTMLElement, event: KeyboardEvent): boolean {
   if (event.isComposing || event.keyCode === 229) {
@@ -185,24 +221,18 @@ export function handleKeydown(root: HTMLElement, event: KeyboardEvent): boolean 
     }
     return false;
   }
-  if (mod && event.shiftKey && event.key.toLowerCase() === "d") {
+  const key = mod && KEYS[`${event.altKey ? "alt+" : ""}${event.shiftKey ? "shift+" : ""}${keyName(event.code)}`];
+  if (key) {
     event.preventDefault();
-    if (!unsetCollapsible(root)) {
-      setCollapsible(root);
-    }
-    return true;
-  }
-  if (mod && event.altKey && event.code === "Digit1") {
-    event.preventDefault();
-    const block = currentTextblock(root);
-    document.execCommand("formatBlock", false, block?.tagName === "H2" ? "p" : "h2");
-    notify(root);
+    key(root);
     return true;
   }
   return false;
 }
 
 type Shortcut = (root: HTMLElement) => void;
+
+const TASK = /^(?:[-*] )?\[[ xX]?\] $/;
 
 const SHORTCUTS: [RegExp, Shortcut][] = [
   [/^#{1,2} $/, () => document.execCommand("formatBlock", false, "h2")],
@@ -212,7 +242,42 @@ const SHORTCUTS: [RegExp, Shortcut][] = [
   [/^> $/, (root) => togglePlainQuote(root)],
   [/^[-*] $/, () => document.execCommand("insertUnorderedList")],
   [/^1[.)] $/, () => document.execCommand("insertOrderedList")],
+  [TASK, (root) => toggleList(root, "task")],
+  [/^(?:---|\*\*\*|___) $/, insertRule],
 ];
+
+const MARKS: [RegExp, string][] = [
+  [/\*\*([^*\s](?:[^*]*[^*\s])?)\*\*$/, "strong"],
+  [/(?<![*\w])\*([^*\s](?:[^*]*[^*\s])?)\*$/, "em"],
+  [/(?<![_\w])_([^_\s](?:[^_]*[^_\s])?)_$/, "em"],
+  [/~~([^~\s](?:[^~]*[^~\s])?)~~$/, "s"],
+  [/==([^=\s](?:[^=]*[^=\s])?)==$/, "mark"],
+  [/`([^`]+)`$/, "code"],
+];
+
+/** A mark typed in Markdown, turned into the mark once its closing character is typed. */
+function markShortcut(root: HTMLElement): boolean {
+  const range = selectionIn(root);
+  const node = range?.startContainer;
+  if (!range?.collapsed || node?.nodeType !== 3 || node.parentElement?.closest("code, pre")) {
+    return false;
+  }
+  const text = (node as Text).data.slice(0, range.startOffset);
+  for (const [pattern, tag] of MARKS) {
+    const found = pattern.exec(text);
+    if (found) {
+      const mark = document.createElement(tag);
+      mark.textContent = found[1];
+      range.setStart(node, range.startOffset - found[0].length);
+      range.deleteContents();
+      range.insertNode(mark);
+      range.setStartAfter(mark);
+      range.collapse(true);
+      return true;
+    }
+  }
+  return false;
+}
 
 /** After the editor has applied a keystroke: Markdown shortcuts, and a new block not inheriting the old one's layout. */
 export function handleInput(root: HTMLElement, event: InputEvent): void {
@@ -225,15 +290,21 @@ export function handleInput(root: HTMLElement, event: InputEvent): void {
     BLOCK_DATA.forEach((name) => block?.removeAttribute(name));
     return;
   }
-  if (event.inputType !== "insertText" || event.data !== " ") {
+  if (event.inputType !== "insertText") {
+    return;
+  }
+  if (event.data && "*_~=`".includes(event.data)) {
+    if (markShortcut(root)) {
+      notify(root);
+    }
     return;
   }
   const block = currentTextblock(root);
-  if (!block || !flows(root, block)) {
+  if (event.data !== " " || !block) {
     return;
   }
   const text = (block.textContent ?? "").replace(/\u00a0/g, " ");
-  const shortcut = SHORTCUTS.find(([pattern]) => pattern.test(text));
+  const shortcut = SHORTCUTS.find(([pattern]) => pattern.test(text) && (flows(root, block) || (pattern === TASK && block.closest("li"))));
   if (!shortcut) {
     return;
   }

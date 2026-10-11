@@ -13,6 +13,7 @@ export const ICONS = {
   orderedList: '<path d="M10 6h10M10 12h10M10 18h10"/><path d="M4 4.5h1.2V9M3.4 9h2.6"/><path d="M3.5 15.2c0-.9 2.3-1 2.3.2s-2.3 1.6-2.3 3h2.5"/>',
   taskList: '<path d="M11 6h9M11 12h9M11 18h9"/><path d="m3 6 1.6 1.6L7.6 4.6"/><path d="m3 12.5 1.6 1.6 3-3"/><path d="m3 18.5 1.6 1.6 3-3"/>',
   quote: '<path d="M9.5 7c-2.4 0-4 1.7-4 3.9 0 2 1.5 3.4 3.4 3.4.3 0 .6 0 .9-.1-.4 1.5-1.7 2.5-3.3 2.8"/><path d="M19 7c-2.4 0-4 1.7-4 3.9 0 2 1.5 3.4 3.4 3.4.3 0 .6 0 .9-.1-.4 1.5-1.7 2.5-3.3 2.8"/>',
+  note: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8M8 14h5"/>',
   codeBlock: '<rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><path d="m9 9.5-2.5 2.5L9 14.5M15 9.5l2.5 2.5-2.5 2.5"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.4"/><path d="m21 16-5-5L5 20"/>',
   table: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 10h18M9 10v10"/>',

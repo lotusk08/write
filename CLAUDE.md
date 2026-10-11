@@ -149,7 +149,17 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   block shedding the old one's layout attributes. A `<br>` is placed by hand:
   WebKit's `insertLineBreak` writes a bare newline into a `pre-wrap` block.
   The paragraph separator is set to `<p>`, or WebKit opens a `<div>` after a
-  heading.
+  heading. It also holds what the Tiptap editor did and the Vue one first
+  lost: `[ ]` for a task list (in a bullet item too) and `---` for a divider,
+  `**bold**`, `*italic*`/`_italic_`, `~~strike~~`, `==highlight==` and
+  `` `code` `` turned into the mark as the closing character is typed (never
+  inside code, not mid-word for `_`), and the ⌘ keys beyond the editor's own
+  ⌘B, ⌘I, ⌘⇧X, ⌘K and undo: ⌘E code, ⌘⇧H highlight, ⌘. and ⌘, super- and
+  subscript, ⌘⇧7/8/9 lists, ⌘⇧B quote, ⌘⇧D section, ⌥⌘C code block, ⌥⌘0
+  paragraph, ⌥⌘1–4 headings (1 is H2, as the blog has no H1). Keys are read
+  by `event.code`, since ⌥ and ⇧ change the character on a Mac. The plain
+  quote has its own toolbar button; the callout menu beside it holds only
+  callouts.
 - `decorate.ts` — what is shown but not kept: players, section toggles,
   gallery labels, photo tools, mermaid and chart previews, local photos
   resolved to blob URLs. A photo's attribute list is previewed only for

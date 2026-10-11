@@ -4,8 +4,8 @@ import { NOTE_LABELS, NOTE_TYPES, type NoteType } from "../editor/blog.ts";
 import Icon from "./Icon.vue";
 import { useFloatingMenu } from "./useFloatingMenu.ts";
 
-defineProps<{ active: boolean; note: NoteType | null }>();
-const emit = defineEmits<{ quote: []; note: [note: NoteType] }>();
+defineProps<{ note: NoteType | null }>();
+const emit = defineEmits<{ note: [note: NoteType] }>();
 
 const open = ref(false);
 const button = ref<HTMLButtonElement | null>(null);
@@ -23,21 +23,17 @@ const choose = (pick: () => void) => {
   <button
     ref="button"
     type="button"
-    :class="['tool', { 'is-active': active }]"
-    :title="note ? `Callout — ${NOTE_LABELS[note]}` : 'Quote and callouts'"
-    aria-label="Quote and callouts"
+    :class="['tool', { 'is-active': note }]"
+    :title="note ? `Callout — ${NOTE_LABELS[note]}` : 'Callouts'"
+    aria-label="Callouts"
     :aria-expanded="open"
     @mousedown.prevent
     @click="open = !open"
   >
-    <Icon name="quote" />
+    <Icon name="note" />
   </button>
   <Teleport to="body">
     <div v-if="open" ref="menu" class="menu floating" role="menu" @mousedown.prevent>
-      <button type="button" @click="choose(() => emit('quote'))">
-        <span>Quote</span>
-        <span v-if="active && !note" class="check">✓</span>
-      </button>
       <button v-for="type in NOTE_TYPES" :key="type" type="button" @click="choose(() => emit('note', type))">
         <span class="swatch-label">
           <span class="swatch" :data-note="type" />

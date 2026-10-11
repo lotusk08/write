@@ -130,12 +130,8 @@ const pickFiles = (event: Event) => {
         @press="run((root) => toggleList(root, 'ordered'))"
       />
       <ToolButton icon="taskList" title="Task list" :active="tools.list === 'task'" @press="run((root) => toggleList(root, 'task'))" />
-      <NoteMenu
-        :active="tools.quote"
-        :note="tools.note"
-        @quote="run(togglePlainQuote)"
-        @note="(note) => run((root) => setNote(root, note))"
-      />
+      <ToolButton icon="quote" title="Quote — ⌘⇧B, or type >" :active="tools.quote && !tools.note" @press="run(togglePlainQuote)" />
+      <NoteMenu :note="tools.note" @note="(note) => run((root) => setNote(root, note))" />
       <ToolButton icon="codeBlock" title="Code block" :active="tools.codeBlock" @press="run(toggleCodeBlock)" />
     </div>
 
