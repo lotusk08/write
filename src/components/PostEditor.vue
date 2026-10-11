@@ -20,6 +20,7 @@ import { editorInit } from "../editor/config.ts";
 import { decorate, Previews, releasePhotos } from "../editor/decorate.ts";
 import type { JSONContent } from "../editor/doc.ts";
 import { handleInput, handleKeydown } from "../editor/keys.ts";
+import { pasteClipboard } from "../editor/paste.ts";
 import { emptyTools, readTools, type ToolState } from "../editor/tools.ts";
 import SelectionBubble from "./SelectionBubble.vue";
 import Toolbar from "./Toolbar.vue";
@@ -271,6 +272,8 @@ function onPaste(event: ClipboardEvent): void {
     event.preventDefault();
     event.stopImmediatePropagation();
     addImages(files);
+  } else {
+    pasteClipboard(event);
   }
 }
 

@@ -1,7 +1,7 @@
 import type { JSONContent } from "../editor/doc.ts";
 import type { PostMeta } from "../../shared/types.ts";
 import { EMBED_LIQUID, EMBED_TAG, embedPlatform } from "../editor/blog.ts";
-import { type InlineToken, inlineTokens } from "./inline.ts";
+import { ENTITY, type InlineToken, entityText, inlineTokens } from "./inline.ts";
 import { languageOf } from "./topics.ts";
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
@@ -819,6 +819,29 @@ function isBlockStart(line: string, except: "" | "table" | "footnote" = ""): boo
   );
 }
 
+const hasCell = (line: string) => /(?<!\\)\|/.test(line.replace(/(`+)[^`]*?\1/g, (span) => " ".repeat(span.length)));
+
+function simpleTable(
+  lines: string[],
+  start: number,
+  lazy?: ReadonlySet<number>,
+): { table: JSONContent; next: number } | null {
+  let end = start;
+  while (
+    end < lines.length &&
+    !lazy?.has(end) &&
+    (end === start || !isBlockStart(lines[end], "table")) &&
+    !(end > start && SETEXT.test(lines[end]))
+  ) {
+    end += 1;
+  }
+  const rows = lines.slice(start, end);
+  if (!rows.length || !rows.every(hasCell) || (end < lines.length && SETEXT.test(lines[end]))) {
+    return null;
+  }
+  return { table: { type: "table", content: rows.map((row) => cells(splitRow(row), false, [])) }, next: end };
+}
+
 function splitRow(line: string): string[] {
   return line
     .trim()
@@ -847,6 +870,16 @@ function cells(row: string[], header: boolean, align: (string | null)[]): JSONCo
       content: [paragraph(cell)],
     })),
   };
+}
+
+function summaryText(html: string): JSONContent[] {
+  const text = html
+    .replace(/<[^>]*>/g, "")
+    .replace(/&(?:#[xX][0-9a-fA-F]{1,6}|#\d{1,7}|[a-zA-Z][a-zA-Z0-9]{1,31});/g, (raw) => {
+      const match = ENTITY.exec(raw);
+      return (match && entityText(match)) ?? raw;
+    });
+  return text ? [{ type: "text", text }] : [];
 }
 
 function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[] {
@@ -933,36 +966,6 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
       continue;
     }
 
-    if (HTML_BLOCK.test(line) || DESCRIPTION.test(lines[i + 1] ?? "")) {
-      const verbatim: string[] = [];
-      while (i < lines.length && lines[i].trim()) {
-        verbatim.push(lines[i]);
-        i += 1;
-      }
-      out.push({ type: "rawBlock", content: [{ type: "text", text: verbatim.join("\n") }] });
-      continue;
-    }
-
-    const fence = openingFence(line);
-    if (fence) {
-      const code: string[] = [];
-      i += 1;
-      const closes = new RegExp(`^\\s*${fence.marker[0]}{${fence.marker.length},}\\s*$`);
-      while (i < lines.length && !closes.test(lines[i])) {
-        code.push(lines[i]);
-        i += 1;
-      }
-      i += 1;
-      out.push(
-        galleryFromFence(fence.info, code) ?? {
-          type: "codeBlock",
-          attrs: { language: fence.info || null },
-          ...(code.length ? { content: [{ type: "text", text: code.join("\n") }] } : {}),
-        },
-      );
-      continue;
-    }
-
     if (line.trimStart().startsWith("<details")) {
       const body: string[] = [];
       const open = !/\bopen\s*=?\s*"?(false)"?/.test(line) && /\bopen\b/.test(line);
@@ -994,10 +997,40 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
         type: "collapsible",
         attrs: { open },
         content: [
-          { type: "collapsibleSummary", content: parseInline(summary, false) },
+          { type: "collapsibleSummary", content: summaryText(summary) },
           { type: "collapsibleContent", content: blocksOrEmpty(body) },
         ],
       });
+      continue;
+    }
+
+    if (HTML_BLOCK.test(line) || DESCRIPTION.test(lines[i + 1] ?? "")) {
+      const verbatim: string[] = [];
+      while (i < lines.length && lines[i].trim()) {
+        verbatim.push(lines[i]);
+        i += 1;
+      }
+      out.push({ type: "rawBlock", content: [{ type: "text", text: verbatim.join("\n") }] });
+      continue;
+    }
+
+    const fence = openingFence(line);
+    if (fence) {
+      const code: string[] = [];
+      i += 1;
+      const closes = new RegExp(`^\\s*${fence.marker[0]}{${fence.marker.length},}\\s*$`);
+      while (i < lines.length && !closes.test(lines[i])) {
+        code.push(lines[i]);
+        i += 1;
+      }
+      i += 1;
+      out.push(
+        galleryFromFence(fence.info, code) ?? {
+          type: "codeBlock",
+          attrs: { language: fence.info || null },
+          ...(code.length ? { content: [{ type: "text", text: code.join("\n") }] } : {}),
+        },
+      );
       continue;
     }
 
@@ -1113,6 +1146,13 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
         i = next;
         continue;
       }
+    }
+
+    const simple = simpleTable(lines, i, lazy);
+    if (simple) {
+      out.push(simple.table);
+      i = simple.next;
+      continue;
     }
 
     const buffer: string[] = [line];

@@ -1,7 +1,7 @@
 import type { JSONContent } from "../editor/doc.ts";
 import type { PostMeta } from "../../shared/types.ts";
 import { CENTER_ROW, embedTag } from "../editor/blog.ts";
-import { autolinkFor, bareLinks, escapeChars } from "./inline.ts";
+import { ENTITY, autolinkFor, bareLinks, entityText, escapeChars } from "./inline.ts";
 import { topicSlug } from "./topics.ts";
 
 export interface SerializeOptions {
@@ -42,6 +42,11 @@ function marksOf(node: JSONContent): Mark[] {
   return [];
 }
 
+function entityAt(text: string): boolean {
+  const match = ENTITY.exec(text);
+  return Boolean(match && entityText(match) !== null);
+}
+
 function escapePlain(text: string, follower = ""): string {
   return text
     .split(/(\[\^[^\]\s]+\])/)
@@ -50,13 +55,36 @@ function escapePlain(text: string, follower = ""): string {
         ? part
         : part
             .replace(/\\(?=[!-/:-@[-`{-~])/g, "\\\\")
-            .replace(/([`*_[\]])/g, "\\$1")
+            .replace(/([`*_[\]|])/g, "\\$1")
+            .replace(/&(?=#[xX]?[0-9a-fA-F]+;|[a-zA-Z][a-zA-Z0-9]*;)/g, (amp, at, whole) =>
+              entityAt(whole.slice(at)) ? "\\&" : amp,
+            )
             .replace(/~{2,}/g, (run) => run.replace(/~/g, "\\~"))
             .replace(/<(?=([a-zA-Z/!?])?)/g, (bracket, next, at, whole) =>
               next || (at === whole.length - 1 && /^[a-zA-Z/!?]/.test(follower)) ? "\\<" : bracket,
             ),
     )
     .join("");
+}
+
+const ANY_LINE = /^ {0,3}(?:(?:#{1,6}|[-+])(?=[ \t]|$)|>|\{:|-+[ \t]*$)/;
+const FIRST_LINE = /^ {0,3}\d{1,9}[.)](?=[ \t]|$)/;
+const LATER_LINE = /^ {0,3}(?:\d{1,9}[.)](?=[ \t]|$)|=+[ \t]*$)/;
+
+function escapeLineStarts(written: string, opensLine = true): string {
+  return written
+    .split("\n")
+    .map((line, index) => {
+      if (index === 0 && !opensLine) {
+        return line;
+      }
+      if (!ANY_LINE.test(line) && !(index === 0 ? FIRST_LINE : LATER_LINE).test(line)) {
+        return line;
+      }
+      const at = /^ *\d*/.exec(line)![0].length;
+      return `${line.slice(0, at)}\\${line.slice(at)}`;
+    })
+    .join("\n");
 }
 
 function escapeText(text: string, linked: boolean): string {
@@ -118,7 +146,7 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
       case "link": {
         const href = String(mark.attrs?.href ?? "");
         const title = quotedTitle(mark.attrs?.title);
-        out = `[${out}](${href}${title})`;
+        out = `[${out}](${balanced(href) ? href : `<${href}>`}${title})`;
         break;
       }
       default:
@@ -130,6 +158,17 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
     }
   }
   return out;
+}
+
+function balanced(href: string): boolean {
+  let depth = 0;
+  for (const char of href.replace(/\\./g, "")) {
+    depth += char === "(" ? 1 : char === ")" ? -1 : 0;
+    if (depth < 0) {
+      return false;
+    }
+  }
+  return depth === 0 || /[<>\n]/.test(href);
 }
 
 function nextLine(block: string, addition: string): string {
@@ -276,8 +315,8 @@ function quotedTitle(title: unknown): string {
 function image(node: JSONContent, options: SerializeOptions): string {
   const rawSrc = String(node.attrs?.src ?? "");
   const src = options.resolveImage ? options.resolveImage(rawSrc) : rawSrc;
-  const alt = escapeChars(String(node.attrs?.alt ?? ""), "[]`*_<~");
-  const title = quotedTitle(node.attrs?.title);
+  const alt = escapeChars(String(node.attrs?.alt ?? "").replace(/\s*\n\s*/g, " "), "[]`*_<~");
+  const title = quotedTitle(String(node.attrs?.title ?? "").replace(/\s*\n\s*/g, " "));
   const ial = node.attrs?.ial ? String(node.attrs.ial) : "";
   return `![${alt}](${src}${title})${ial}`;
 }
@@ -344,7 +383,7 @@ function tableBlock(node: JSONContent, options: SerializeOptions): string {
       blocks(cell.content, options)
         .join(" ")
         .replace(/\n+/g, " ")
-        .replace(/\|/g, "\\|")
+        .replace(/(?<!\\)\|/g, "\\|")
         .trim(),
     ),
   );
@@ -355,6 +394,9 @@ function tableBlock(node: JSONContent, options: SerializeOptions): string {
   const pad = (row: string[]) => `| ${Array.from({ length: width }, (_, i) => row[i] ?? "").join(" | ")} |`;
   const [head, ...body] = rows;
   const heading = node.content?.[0]?.content ?? [];
+  if (!heading.some((cell) => cell.type === "tableHeader")) {
+    return rows.map(pad).join("\n");
+  }
   const divider = Array.from({ length: width }, (_, i) => {
     const align = heading[i]?.attrs?.align;
     if (align === "center") {
@@ -368,7 +410,8 @@ function tableBlock(node: JSONContent, options: SerializeOptions): string {
 function collapsibleBlock(node: JSONContent, options: SerializeOptions): string {
   const summaryNode = node.content?.find((child) => child.type === "collapsibleSummary");
   const contentNode = node.content?.find((child) => child.type === "collapsibleContent");
-  const summary = inline(summaryNode?.content, options).trim() || "Details";
+  const text = (summaryNode?.content ?? []).map((child) => (child.type === "hardBreak" ? " " : (child.text ?? ""))).join("");
+  const summary = escapeHtml(text.trim() || "Details");
   const body = blocks(contentNode?.content, options).join("\n\n");
   const open = node.attrs?.open ? " open" : "";
   return `<details${open}>\n<summary>${summary}</summary>\n\n${body}\n\n</details>`;
@@ -424,7 +467,7 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         const content = withoutEdgeBreaks(node.content, before, after);
         const caption = before && nodes[index - 1]?.type === "image";
         const written = inline(caption ? captionContent(content) : content, options);
-        out.push(before && node.attrs?.sameLine ? written.replace(/\n>/g, "\n\\>") : written.replace(/^>/gm, "\\>"));
+        out.push(escapeLineStarts(written, !(before && node.attrs?.sameLine)));
         break;
       }
       case "heading": {
@@ -529,6 +572,10 @@ export function docToMarkdown(doc: JSONContent, options: SerializeOptions = {}):
     .join("\n\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 export function docToPlainText(doc: JSONContent): string {

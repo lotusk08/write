@@ -339,7 +339,7 @@ function markFrom(element: Element): DocMark | null {
       return withWithin({ type: named });
     }
     const style = element.getAttribute("style") ?? "";
-    if (/font-weight:\s*(?:bold|[6-9]00)/i.test(style)) {
+    if (/font-weight:\s*(?:bold|[7-9]00)/i.test(style)) {
       return { type: "bold" };
     }
     if (/font-style:\s*italic/i.test(style)) {

@@ -622,7 +622,8 @@ const link: Rule = (state, silent) => {
     state.pos = start + 1;
     state.posMax = labelEnd;
     const open = push(state, "link_open", 1);
-    open.attrs = linkAttrs(state.src.slice(labelEnd + 2, close));
+    const attrs = linkAttrs(state.src.slice(labelEnd + 2, close));
+    open.attrs = { ...attrs, href: attrs.href.replace(/^<([^<>\n]*)>$/, "$1") };
     open.start = start;
     open.end = close + 1;
     state.linkLevel += 1;
@@ -763,6 +764,37 @@ const htmlInline: Rule = (state, silent) => {
   return true;
 };
 
+export const NAMED_ENTITIES: Record<string, string> = {
+  amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0", copy: "©", reg: "®", trade: "™",
+  hellip: "…", mdash: "—", ndash: "–", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", laquo: "«",
+  raquo: "»", deg: "°", times: "×", divide: "÷", middot: "·", bull: "•", euro: "€", pound: "£",
+  yen: "¥", cent: "¢", sect: "§", para: "¶", shy: "\u00ad", zwj: "\u200d", zwnj: "\u200c",
+};
+
+export const ENTITY = /^&(?:#[xX]([0-9a-fA-F]{1,6})|#(\d{1,7})|([a-zA-Z][a-zA-Z0-9]{1,31}));/;
+
+export function entityText(match: RegExpExecArray): string | null {
+  const [, hex, decimal, name] = match;
+  if (name) {
+    return NAMED_ENTITIES[name] ?? null;
+  }
+  const code = parseInt(hex ?? decimal, hex ? 16 : 10);
+  return String.fromCodePoint(code === 0 || code > 0x10ffff || (code >= 0xd800 && code <= 0xdfff) ? 0xfffd : code);
+}
+
+const entity: Rule = (state, silent) => {
+  const match = ENTITY.exec(state.src.slice(state.pos, state.pos + 40));
+  const decoded = match && entityText(match);
+  if (!match || decoded === null) {
+    return false;
+  }
+  if (!silent) {
+    push(state, "text_special", 0).content = decoded;
+  }
+  state.pos += match[0].length;
+  return true;
+};
+
 const RULES: Rule[] = [
   text,
   linkify,
@@ -777,6 +809,7 @@ const RULES: Rule[] = [
   footnoteRef,
   autolink,
   htmlInline,
+  entity,
 ];
 
 function skipToken(state: State): void {

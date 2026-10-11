@@ -15,15 +15,15 @@ const allowedTags = [
 ];
 
 const allowedAttributes: Record<string, string[]> = {
-  "*": ["class", "style", "title", "dir", ...BLOCK_DATA, "data-within"],
+  "*": ["class", "title", "dir", ...BLOCK_DATA, "data-within"],
   a: ["href"],
   blockquote: ["data-note"],
   pre: ["data-language", "data-raw"],
   ul: ["data-task-list"],
   ol: ["start"],
   li: ["data-checked"],
-  td: ["colspan", "rowspan"],
-  th: ["colspan", "rowspan"],
+  td: ["colspan", "rowspan", "style"],
+  th: ["colspan", "rowspan", "style"],
   figure: ["data-image", "data-ial", "data-gallery", "contenteditable"],
   img: ["src", "alt", "data-src", "data-local-src"],
   div: [
@@ -39,7 +39,7 @@ const allowedAttributes: Record<string, string[]> = {
     "data-raw",
   ],
   sup: ["data-footnote-ref", "contenteditable"],
-  span: ["data-raw-inline", "data-mark"],
+  span: ["data-raw-inline", "data-mark", "style"],
 };
 
 export const sanitizerOptions = {
