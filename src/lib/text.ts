@@ -1,10 +1,14 @@
-export function slugify(input: string): string {
-  return input
+export function fold(value: string): string {
+  return value
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/\p{M}+/gu, "")
     .replace(/đ/g, "d")
     .replace(/Đ/g, "D")
-    .toLowerCase()
+    .toLowerCase();
+}
+
+export function slugify(input: string): string {
+  return fold(input)
     .replace(/['"’]/g, "")
     .replace(/[^a-z0-9]+/g, "-")
     .slice(0, 80)

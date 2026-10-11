@@ -31,14 +31,20 @@ export interface Topics {
   tags: Topic[];
 }
 
-export interface PublishFile {
-  path: string;
-  contentBase64: string;
-}
+export type PublishFile = { path: string } & ({ contentBase64: string } | { sha: string });
 
 export interface PublishRequest {
   message: string;
   files: PublishFile[];
+  expect?: { path: string; sha: string };
+  remove?: string[];
+  redirects?: [string, string][];
+}
+
+export interface SitePhoto {
+  name: string;
+  sha: string;
+  shared: boolean;
 }
 
 export interface PublishResult {
@@ -47,4 +53,5 @@ export interface PublishResult {
   commitSha: string;
   commitUrl: string;
   paths: string[];
+  shas: Record<string, string>;
 }

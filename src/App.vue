@@ -13,7 +13,7 @@ import { useOutline } from "./components/useOutline.ts";
 import { docToHtml } from "./editor/bridge.ts";
 import type { JSONContent } from "./editor/doc.ts";
 import { createShareRoom, endShareRoom, fetchAppConfig, fetchPostSource, shareRoomState } from "./lib/api.ts";
-import { draftStore, resolveLocalSrc, type Draft } from "./lib/db.ts";
+import { draftStore, isLocalSrc, resolveLocalSrc, type Draft } from "./lib/db.ts";
 import { createDraft, currentMeta, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
 import { buildHtmlDocument } from "./lib/html.ts";
@@ -21,7 +21,15 @@ import { markdownToDoc, parsePost, postPathFromLink, slugFromPath } from "./lib/
 import { docToMarkdown, docToPlainText } from "./lib/markdown.ts";
 import { mindmapUrl } from "./lib/mindmap.ts";
 import { sessionPassword } from "./lib/password.ts";
-import { draftSlug, markdownForExport, repointCover, repointDoc, type PublishPlan } from "./lib/publish.ts";
+import {
+  draftPrint,
+  draftSlug,
+  markdownForExport,
+  printOf,
+  repointCover,
+  repointDoc,
+  type PublishPlan,
+} from "./lib/publish.ts";
 import { applyConfig, loadSettings, saveSettings, type Settings } from "./lib/settings.ts";
 import {
   applyParticipantName,
@@ -41,7 +49,7 @@ import {
   type SharePeer,
   type ShareSession,
 } from "./lib/share.ts";
-import { setSiteUrl, showPublishedAs } from "./lib/site.ts";
+import { previewSrc, setSiteUrl, showPublishedAs } from "./lib/site.ts";
 import { countWords, datePrefix, rememberValue, slugify, tidyEdited } from "./lib/text.ts";
 import { usePinnedViewport } from "./lib/viewport.ts";
 
@@ -313,34 +321,65 @@ async function newDraft() {
 
 async function importPost(path: string) {
   try {
+    await settle();
     const existing = drafts.value.find((draft) => draft.publishedPath === path);
-    if (existing) {
+    const fetched = await fetchPostSource(path, sessionPassword()).catch((cause: unknown) => {
+      if (existing) {
+        return null;
+      }
+      throw cause;
+    });
+    const mine = existing ? await draftPrint(existing) : "";
+    const same = Boolean(existing && fetched) && mine === (await printOf(fetched!.markdown));
+    if (existing && (!fetched || !existing.publishedSha || fetched.sha === existing.publishedSha || same)) {
+      if (same && fetched!.sha !== existing.publishedSha) {
+        const known = { ...existing, publishedSha: fetched!.sha, publishedPrint: mine };
+        await draftStore.put(known);
+        drafts.value = drafts.value.map((item) => (item.id === known.id ? known : item));
+      }
       currentId.value = existing.id;
       showToast(`Opened your local draft of ${path}.`);
       return;
     }
-    const fetched = await fetchPostSource(path, sessionPassword());
-    const parsed = parsePost(fetched.markdown);
+    if (existing && mine !== existing.publishedPrint) {
+      currentId.value = existing.id;
+      showToast(
+        `${path} changed on the site since you opened it, and this draft has edits that are not published, so it was kept. The site will refuse it: copy your edits, delete this draft and open the post again.`,
+        "error",
+      );
+      return;
+    }
+    const parsed = parsePost(fetched!.markdown);
     const now = Date.now();
     const draft: Draft = {
       id: crypto.randomUUID(),
       title: parsed.meta.title ?? slugFromPath(path),
       slug: slugFromPath(path),
       doc: parsed.doc,
-      meta: { ...newPostMeta(), ...parsed.meta },
+      meta: { ...newPostMeta(), ...dateOf(path), ...parsed.meta },
       createdAt: now,
       updatedAt: now,
       publishedPath: path,
+      publishedSha: fetched!.sha,
     };
+    draft.publishedPrint = await draftPrint(draft);
     await draftStore.put(draft);
-    drafts.value = sortDrafts([draft, ...drafts.value]);
+    if (existing) {
+      await draftStore.remove(existing.id);
+    }
+    drafts.value = sortDrafts([draft, ...drafts.value.filter((item) => item.id !== existing?.id)]);
     currentId.value = draft.id;
     const draftsDir = settings.value.draftsDir.replace(/^\/+|\/+$/g, "");
     updateSettings({ publishTarget: path.startsWith(`${draftsDir}/`) ? "drafts" : "posts" });
-    showToast(`Opened ${path}.`);
+    showToast(existing ? `${path} changed on the site; opened the new version.` : `Opened ${path}.`);
   } catch (cause) {
     showToast(errorText(cause), "error");
   }
+}
+
+function dateOf(path: string): { date?: string } {
+  const date = /(\d{4}-\d{2}-\d{2})-[^/]*$/.exec(path)?.[1];
+  return date ? { date } : {};
 }
 
 function openRequested() {
@@ -640,13 +679,18 @@ async function onPublished(id: string, result: PublishResult, plan: PublishPlan)
   const urls = plan.imageUrls;
   await Promise.all(
     [...urls].map(async ([local, url]) => {
-      const shown = await resolveLocalSrc(local).catch(() => null);
+      const shown = isLocalSrc(local) ? await resolveLocalSrc(local).catch(() => null) : previewSrc(local);
       if (shown) {
         showPublishedAs(url, shown);
       }
     }),
   );
-  const published = { publishedPath: plan.markdownPath, publishedAt: Date.now() };
+  const published = {
+    publishedPath: plan.markdownPath,
+    publishedAt: Date.now(),
+    publishedSha: result.shas[plan.markdownPath],
+    publishedPrint: await printOf(plan.markdown),
+  };
 
   if (id !== currentId.value) {
     const draft = findDraft(id);
@@ -761,6 +805,7 @@ onBeforeUnmount(() => {
       @new="() => void newDraft()"
       @rename="(title) => updateMeta({ title })"
       @delete="(id) => void deleteDraft(id)"
+      @site="(path) => void importPost(path)"
     />
 
     <div ref="mainRegion" class="main">

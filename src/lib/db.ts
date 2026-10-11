@@ -1,6 +1,5 @@
 import type { JSONContent } from "../editor/doc.ts";
 import type { PostMeta } from "../../shared/types.ts";
-import { shrinkImage } from "./images.ts";
 
 export interface Draft {
   id: string;
@@ -12,6 +11,8 @@ export interface Draft {
   updatedAt: number;
   publishedPath?: string;
   publishedAt?: number;
+  publishedSha?: string;
+  publishedPrint?: string;
   shareToken?: string;
   shareOwner?: boolean;
   shareSeed?: Uint8Array;
@@ -108,12 +109,11 @@ export async function resolveLocalSrc(src: string): Promise<string | null> {
 }
 
 export async function storeImageFile(file: File | Blob, name?: string): Promise<StoredImage> {
-  const blob = await shrinkImage(file);
   const image: StoredImage = {
     id: crypto.randomUUID(),
     name: name || (file instanceof File ? file.name : "image.png"),
-    type: blob.type || "image/png",
-    blob,
+    type: file.type || "image/png",
+    blob: file,
     addedAt: Date.now(),
   };
   await imageStore.put(image);

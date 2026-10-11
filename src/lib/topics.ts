@@ -1,4 +1,5 @@
 import type { Topic } from "../../shared/types.ts";
+import { fold } from "./text.ts";
 
 const SUGGESTION_LIMIT = 8;
 
@@ -8,15 +9,6 @@ export function topicSlug(value: string): string {
     .toLowerCase()
     .replace(/[^\p{L}\p{N}]+/gu, "-")
     .replace(/^-+|-+$/g, "");
-}
-
-function fold(value: string): string {
-  return value
-    .normalize("NFD")
-    .replace(/\p{M}+/gu, "")
-    .replace(/đ/g, "d")
-    .replace(/Đ/g, "D")
-    .toLowerCase();
 }
 
 const LANGUAGES = new Map([

@@ -1,25 +1,21 @@
 import { imageStore, LOCAL_PREFIX, storeImageFile } from "../lib/db.ts";
-import { CENTER_ROW, withoutRowClasses, withRowClasses, type GalleryKind, type NoteType } from "./blog.ts";
+import { withoutRowClasses, type NoteType } from "./blog.ts";
 import { docToHtml } from "./bridge.ts";
 import type { JSONContent } from "./doc.ts";
 
 /**
  * The blog's own blocks, edited straight on the editor's DOM. The editor
  * (text-editor-vue) keeps its content as HTML and offers the common formatting
- * itself; what it has no command for — callouts, sections, photo rows,
- * galleries, footnotes, players — is done here, in the same HTML `bridge.ts`
+ * itself; what it has no command for — callouts, sections, galleries,
+ * footnotes, players — is done here, in the same HTML `bridge.ts`
  * reads back. Every command ends with `notify`, which is how the editor learns
  * its content changed under it.
  */
-
-const ROW_LIMIT = 4;
 
 const TEXTBLOCK = "p, h1, h2, h3, h4, h5, h6, pre, li, td, th, [data-collapsible-summary]";
 
 /** Containers whose children are blocks laid one under another, as the document's own are. */
 const FLOW = "blockquote, [data-collapsible-content], [data-footnote], li, td, th";
-
-const CENTERABLE = "p, h1, h2, h3, h4, h5, h6, blockquote, table, ul, ol, pre";
 
 const selectedFigures = new WeakMap<HTMLElement, HTMLElement>();
 
@@ -113,10 +109,13 @@ export function continueAfter(node: Element): void {
 // ------------------------------------------------------------- selected photo
 
 export function selectFigure(root: HTMLElement, figure: HTMLElement | null): void {
-  selectedFigures.get(root)?.classList.remove("is-selected");
+  const previous = selectedFigures.get(root);
+  previous?.classList.remove("is-selected");
+  previous?.removeAttribute("tabindex");
   if (figure) {
     figure.classList.add("is-selected");
     selectedFigures.set(root, figure);
+    figure.tabIndex = -1;
   } else {
     selectedFigures.delete(root);
   }
@@ -238,7 +237,7 @@ function wrapInQuote(root: HTMLElement): HTMLElement | null {
   return quote;
 }
 
-/** A callout of the blog's: `{: .prompt-tip }` and the rest, or `{: .author }`. Picking the current kind takes it off. */
+/** A callout of the blog's: `{: .note-tip }` and the rest, or `{: .author }`. Picking the current kind takes it off. */
 export function setNote(root: HTMLElement, note: NoteType): boolean {
   const quote = quoteAt(root) ?? wrapInQuote(root);
   if (!quote) {
@@ -331,26 +330,6 @@ export function setAllCollapsibles(root: HTMLElement, open: boolean): void {
   }
 }
 
-// -------------------------------------------------------------------- centre
-
-export function centerTarget(root: HTMLElement): HTMLElement | null {
-  return selectedFigure(root) ?? closestIn(root, anchor(root), CENTERABLE);
-}
-
-export function toggleCenter(root: HTMLElement): boolean {
-  const target = centerTarget(root);
-  if (!target) {
-    return false;
-  }
-  if (target.getAttribute("data-block-ial") === CENTER_ROW) {
-    target.removeAttribute("data-block-ial");
-  } else {
-    target.setAttribute("data-block-ial", CENTER_ROW);
-  }
-  notify(root);
-  return true;
-}
-
 // --------------------------------------------------------------- insert blocks
 
 /**
@@ -369,9 +348,10 @@ function insertBlocks(root: HTMLElement, html: string): boolean {
   }
   const figure = selectedFigure(root);
   const gallery = figure?.closest("[data-gallery]");
-  if (gallery && inserted.every((node) => node.hasAttribute("data-image"))) {
-    gallery.querySelector(".editor-gallery-strip")?.append(fragment);
+  if (figure && gallery && inserted.every((node) => node.hasAttribute("data-image"))) {
+    figure.after(fragment);
     continueAfter(gallery);
+    selectFigure(root, last as HTMLElement);
     notify(root);
     return true;
   }
@@ -393,7 +373,7 @@ function insertBlocks(root: HTMLElement, html: string): boolean {
   return true;
 }
 
-/** Stores the photos in this browser, then inserts them — as a row when there are two to four. */
+/** Stores the photos in this browser, then inserts them — several at once as a gallery, the blog's only way to show photos together. */
 export async function insertImages(
   root: HTMLElement,
   files: File[],
@@ -408,28 +388,21 @@ export async function insertImages(
     return;
   }
   const inGallery = Boolean(selectedFigure(root)?.closest("[data-gallery]"));
-  const row = stored.length > 1 && stored.length <= ROW_LIMIT && !inGallery;
-  const images: JSONContent[] = stored.map((image, index) => ({
+  const images: JSONContent[] = stored.map((image) => ({
     type: "image",
-    attrs: {
-      src: `${LOCAL_PREFIX}${image.id}`,
-      alt: "",
-      title: null,
-      joinPrevious: row && index > 0,
-      ial: row ? withRowClasses(null) : null,
-      blockIal: row && index === stored.length - 1 ? CENTER_ROW : null,
-    },
+    attrs: { src: `${LOCAL_PREFIX}${image.id}`, alt: "", title: null },
   }));
-  insertBlocks(root, docToHtml({ type: "doc", content: images }));
+  const content = images.length > 1 && !inGallery ? [{ type: "gallery", content: images }] : images;
+  insertBlocks(root, docToHtml({ type: "doc", content }));
 }
 
 export function insertEmbed(root: HTMLElement, embed: { platform: string; id: string }): boolean {
   return insertBlocks(root, docToHtml({ type: "doc", content: [{ type: "embed", attrs: embed }] }));
 }
 
-// ------------------------------------------------------------ rows, galleries
+// ------------------------------------------------------------------ galleries
 
-/** The photos a row or gallery would take: the selected one and the photos either side of it. */
+/** The photos a gallery would take: the selected one and the photos either side of it. */
 export function imageRun(root: HTMLElement): HTMLElement[] {
   const figure = selectedFigure(root);
   if (!figure || figure.closest("[data-gallery]")) {
@@ -445,35 +418,12 @@ export function imageRun(root: HTMLElement): HTMLElement[] {
   return run;
 }
 
-export function isRow(run: HTMLElement[]): boolean {
-  return run.length > 1 && run.slice(1).every((figure) => figure.hasAttribute("data-join"));
-}
-
 function setIal(figure: HTMLElement, ial: string | null): void {
   if (ial) {
     figure.setAttribute("data-ial", ial);
   } else {
     figure.removeAttribute("data-ial");
   }
-}
-
-export function toggleImageRow(root: HTMLElement): boolean {
-  const run = imageRun(root);
-  if (run.length < 2) {
-    return false;
-  }
-  const breaking = isRow(run);
-  run.forEach((figure, index) => {
-    figure.toggleAttribute("data-join", !breaking && index > 0);
-    setIal(figure, breaking ? withoutRowClasses(figure.getAttribute("data-ial")) : withRowClasses(figure.getAttribute("data-ial")));
-    if (!breaking && index === run.length - 1) {
-      figure.setAttribute("data-block-ial", CENTER_ROW);
-    } else if (figure.getAttribute("data-block-ial") === CENTER_ROW) {
-      figure.removeAttribute("data-block-ial");
-    }
-  });
-  notify(root);
-  return true;
 }
 
 export function galleryAt(root: HTMLElement): HTMLElement | null {
@@ -488,18 +438,12 @@ function plainImage(figure: HTMLElement): HTMLElement {
   return figure;
 }
 
-export function setGallery(root: HTMLElement, kind: GalleryKind): boolean {
-  const current = galleryAt(root);
-  if (current) {
-    current.setAttribute("data-kind", kind);
-    notify(root);
-    return true;
-  }
+export function setGallery(root: HTMLElement): boolean {
   const run = imageRun(root);
   if (run.length < 2) {
     return false;
   }
-  const gallery = fragmentOf(docToHtml({ type: "doc", content: [{ type: "gallery", attrs: { kind }, content: [] }] }))
+  const gallery = fragmentOf(docToHtml({ type: "doc", content: [{ type: "gallery", content: [] }] }))
     .firstElementChild as HTMLElement;
   run[0].before(gallery);
   gallery.querySelector(".editor-gallery-strip")?.append(...run.map(plainImage));
@@ -525,18 +469,68 @@ export function unsetGallery(root: HTMLElement): boolean {
   return true;
 }
 
-/** Sets a photo's alt text, or — inside a gallery — the caption its card shows. */
-export function setImageText(root: HTMLElement, figure: HTMLElement, attribute: "alt" | "title", value: string): void {
+/** Puts the caret in the paragraph after the selected photo's gallery, so typing goes on there. */
+export function leaveGallery(root: HTMLElement): boolean {
+  const gallery = selectedFigure(root)?.closest("[data-gallery]");
+  if (!gallery) {
+    return false;
+  }
+  selectFigure(root, null);
+  root.focus({ preventScroll: true });
+  continueAfter(gallery);
+  notify(root);
+  return true;
+}
+
+/** Moves the selected gallery photo one place back (-1) or on (1). */
+export function moveGalleryPhoto(root: HTMLElement, step: -1 | 1): boolean {
+  const figure = selectedFigure(root);
+  const other = step < 0 ? figure?.previousElementSibling : figure?.nextElementSibling;
+  if (!figure?.closest("[data-gallery]") || !other?.hasAttribute("data-image")) {
+    return false;
+  }
+  other[step < 0 ? "before" : "after"](figure);
+  figure.focus({ preventScroll: true });
+  figure.scrollIntoView({ block: "nearest", inline: "nearest" });
+  notify(root);
+  return true;
+}
+
+/** Takes the selected photo out of its gallery; a gallery left with one photo or none is no gallery. */
+export function removeGalleryPhoto(root: HTMLElement): boolean {
+  const figure = selectedFigure(root);
+  const gallery = figure?.closest<HTMLElement>("[data-gallery]");
+  if (!figure || !gallery) {
+    return false;
+  }
+  const next = (figure.nextElementSibling ?? figure.previousElementSibling) as HTMLElement | null;
+  figure.remove();
+  const left = [...gallery.querySelectorAll<HTMLElement>("[data-image]")];
+  if (left.length > 1 && next) {
+    selectFigure(root, next);
+    next.focus({ preventScroll: true });
+  } else {
+    const place = left[0] ? plainImage(left[0]) : emptyParagraph();
+    gallery.replaceWith(place);
+    selectFigure(root, null);
+    if (left[0]) {
+      continueAfter(place);
+    } else {
+      placeCaret(place);
+    }
+  }
+  notify(root);
+  return true;
+}
+
+/** Sets a photo's alt text — inside a gallery the caption its card shows, so a title there gives way to it. */
+export function setImageText(root: HTMLElement, figure: HTMLElement, value: string): void {
   const img = figure.querySelector("img");
   if (!img) {
     return;
   }
-  const text = value.trim();
-  if (attribute === "alt") {
-    img.setAttribute("alt", text);
-  } else if (text) {
-    img.setAttribute("title", text);
-  } else {
+  img.setAttribute("alt", value.trim());
+  if (figure.closest("[data-gallery]")) {
     img.removeAttribute("title");
   }
   notify(root);

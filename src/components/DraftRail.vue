@@ -4,10 +4,17 @@ import type { Draft } from "../lib/db.ts";
 import { draftLabel } from "../lib/draft.ts";
 import { useMediaQuery } from "../lib/viewport.ts";
 import Icon from "./Icon.vue";
+import SiteDrafts from "./SiteDrafts.vue";
 import { useFloatingMenu } from "./useFloatingMenu.ts";
 
 const props = defineProps<{ drafts: Draft[]; currentId: string | null }>();
-const emit = defineEmits<{ select: [id: string]; new: []; rename: [title: string]; delete: [id: string] }>();
+const emit = defineEmits<{
+  select: [id: string];
+  new: [];
+  rename: [title: string];
+  delete: [id: string];
+  site: [path: string];
+}>();
 
 const editing = ref<string | null>(null);
 const field = ref<HTMLInputElement | null>(null);
@@ -75,6 +82,7 @@ const pickFromList = (draft: Draft) => {
     <button type="button" class="btn icon ghost" title="New draft — ⌘⇧N" aria-label="New draft" @click="emit('new')">
       <Icon name="plus" />
     </button>
+    <SiteDrafts @open="(path) => emit('site', path)" />
 
     <div class="rail-tabs">
       <div class="rail-deck">

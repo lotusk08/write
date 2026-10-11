@@ -7,13 +7,6 @@ export const CENTER_ROW = "{: .d-flex .c-center }";
 const ROW_CLASSES = ["normal", "gap"];
 
 const IAL_BODY = /^\{:\s*|\s*\}$/g;
-const rowClass = (name: string) => new RegExp(`\\.${name}(?![\\w-])`);
-
-export function withRowClasses(ial: unknown): string {
-  const body = String(ial ?? "").replace(IAL_BODY, "").trim();
-  const missing = ROW_CLASSES.filter((name) => !rowClass(name).test(body));
-  return `{: ${[body, ...missing.map((name) => `.${name}`)].filter(Boolean).join(" ")} }`;
-}
 
 export function withoutRowClasses(ial: unknown): string | null {
   const body = String(ial ?? "")
@@ -41,22 +34,7 @@ export function isNoteType(value: unknown): value is NoteType {
   return (NOTE_TYPES as readonly unknown[]).includes(value);
 }
 
-export const GALLERY_KINDS = ["deck", "fan", "peek", "fold"] as const;
-
-export type GalleryKind = (typeof GALLERY_KINDS)[number];
-
-export const GALLERY_LABELS: Record<GalleryKind, string> = {
-  deck: "Deck",
-  fan: "Fan",
-  peek: "Peek",
-  fold: "Fold",
-};
-
-export function isGalleryKind(value: unknown): value is GalleryKind {
-  return (GALLERY_KINDS as readonly unknown[]).includes(value);
-}
-
-const PLATFORMS = ["youtube", "x", "bilibili", "spotify", "twitch", "audio", "video"] as const;
+const PLATFORMS = ["youtube", "x", "spotify", "audio", "video"] as const;
 
 const FILE_PLATFORMS = new Set(["audio", "video"]);
 
@@ -91,17 +69,9 @@ export function embedFromUrl(value: string): { platform: string; id: string } | 
   if (x) {
     return { platform: "x", id: x[1] };
   }
-  const bilibili = /bilibili\.com\/video\/([\w-]+)/.exec(url);
-  if (bilibili) {
-    return { platform: "bilibili", id: bilibili[1] };
-  }
   const spotify = /spotify\.com\/(?:embed\/)?track\/(\w+)/.exec(url);
   if (spotify) {
     return { platform: "spotify", id: spotify[1] };
-  }
-  const twitch = /twitch\.tv\/videos\/(\d+)/.exec(url);
-  if (twitch) {
-    return { platform: "twitch", id: twitch[1] };
   }
   return /^[\w-]{6,}$/.test(url) ? { platform: "youtube", id: url } : null;
 }
@@ -110,12 +80,8 @@ export function embedUrl(platform: string, id: string): string | null {
   switch (platform) {
     case "x":
       return `https://x.com/i/status/${id}`;
-    case "bilibili":
-      return `https://www.bilibili.com/video/${id}`;
     case "spotify":
       return `https://open.spotify.com/track/${id}`;
-    case "twitch":
-      return `https://www.twitch.tv/videos/${id}`;
     default:
       if (/^https?:\/\//i.test(id)) {
         return id;

@@ -1,13 +1,11 @@
-import { CENTER_ROW, isGalleryKind, isNoteType, type GalleryKind, type NoteType } from "./blog.ts";
+import { isNoteType, type NoteType } from "./blog.ts";
 import {
-  centerTarget,
   collapsibleAt,
   galleryAt,
   headingLevel,
   imageRun,
   inCodeBlock,
   isFormatted,
-  isRow,
   linkAt,
   listKind,
   quoteAt,
@@ -32,10 +30,7 @@ export interface ToolState {
   note: NoteType | null;
   codeBlock: boolean;
   collapsible: boolean;
-  centered: boolean;
-  imageRow: boolean;
-  canImageRow: boolean;
-  gallery: GalleryKind | null;
+  gallery: boolean;
   canGallery: boolean;
 }
 
@@ -56,10 +51,7 @@ export function emptyTools(): ToolState {
     note: null,
     codeBlock: false,
     collapsible: false,
-    centered: false,
-    imageRow: false,
-    canImageRow: false,
-    gallery: null,
+    gallery: false,
     canGallery: false,
   };
 }
@@ -78,7 +70,6 @@ export function readTools(root: HTMLElement): ToolState {
   const quote = quoteAt(root);
   const gallery = galleryAt(root);
   const run = imageRun(root);
-  const kind = gallery?.getAttribute("data-kind");
   const note = quote?.getAttribute("data-note");
   const typing = Boolean(range);
   return {
@@ -97,10 +88,7 @@ export function readTools(root: HTMLElement): ToolState {
     note: isNoteType(note) ? note : null,
     codeBlock: inCodeBlock(root),
     collapsible: Boolean(collapsibleAt(root)),
-    centered: centerTarget(root)?.getAttribute("data-block-ial") === CENTER_ROW,
-    imageRow: isRow(run),
-    canImageRow: run.length > 1,
-    gallery: isGalleryKind(kind) ? kind : null,
+    gallery: Boolean(gallery),
     canGallery: Boolean(gallery) || run.length > 1,
   };
 }

@@ -1346,10 +1346,6 @@ textarea {
   vertical-align: top;
 }
 
-.editor-host .post-body .editor-image.is-gapped {
-  margin-right: 0.25rem;
-}
-
 .editor-host .post-body .editor-image[data-join] img,
 .editor-host .post-body .editor-image:has(+ .editor-image[data-join]) img {
   width: 100%;
@@ -1373,14 +1369,6 @@ textarea {
 .editor-host .post-body .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join] + .editor-image[data-join]) + .editor-image[data-join] + .editor-image[data-join],
 .editor-host .post-body .editor-image:not([data-join]):has(+ .editor-image[data-join] + .editor-image[data-join] + .editor-image[data-join]) + .editor-image[data-join] + .editor-image[data-join] + .editor-image[data-join] {
   max-width: calc(25% - 8px);
-}
-
-.editor-host .post-body .editor-image.is-shadowed img {
-  box-shadow: var(--shadow-pop);
-}
-
-.editor-host .post-body .editor-image.is-rounded img {
-  border-radius: var(--radius-lg);
 }
 
 :root[data-theme="dark"] .editor-host .post-body .editor-image.is-light,
@@ -2120,16 +2108,6 @@ textarea {
   margin-bottom: 0;
 }
 
-.editor-host .post-body .editor-image.is-left {
-  margin-right: 1em;
-  float: left;
-}
-
-.editor-host .post-body .editor-image.is-right {
-  margin-left: 1em;
-  float: right;
-}
-
 .editor-host .post-body .editor-image,
 .editor-host .post-body .editor-gallery,
 .editor-host .post-body .embed-block {
@@ -2217,6 +2195,19 @@ textarea {
 
 .editor-image-alt.is-empty {
   color: var(--muted);
+}
+
+.editor-gallery-strip .editor-image-tools {
+  flex-wrap: wrap;
+}
+
+.editor-image-edit {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.editor-image:not(.is-selected) .editor-image-edit {
+  display: none;
 }
 
 .bubble.floating {

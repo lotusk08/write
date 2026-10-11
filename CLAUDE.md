@@ -72,6 +72,8 @@ its own npm lockfile.
   `worker/`, `shared/` and the tests. `typescript` is aliased to
   `@typescript/typescript6`: vue-tsc and typescript-eslint need TypeScript's
   JS API, which the native TypeScript 7 package does not ship.
+- `npx knip` — unused files, exports and dependencies; `knip.json` ignores
+  `cloudflare:workers`, a Workers runtime module rather than a package.
 - `npm run lint` — ESLint (`eslint.config.js`: typescript-eslint and
   eslint-plugin-vue). `npm test` — Vitest; `npm run check` runs all three.
 - `npm run build` — emits `dist`, flat. Wrangler bundles `worker/` itself, so
@@ -122,7 +124,7 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
 `markdown.ts` did not move a line. `src/editor/` is the layer between:
 
 - `doc.ts` — the draft's JSON type. `blog.ts` — the blog's vocabulary
-  (callouts, row classes, gallery kinds, embed components), pure functions.
+  (callouts, embed components), pure functions.
 - `bridge.ts` — `docToHtml` and `htmlToDoc`. Every attribute the writer reads
   rides on the element as a `data-*` attribute, under the names the Tiptap
   schema rendered, so the stylesheet's selectors held. A block's last `<br>`
@@ -134,8 +136,8 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   writes that is not on the list is gone after one pass.
 - `commands.ts` — every toolbar action, edited straight on the DOM: the
   browser's own commands for headings, marks, lists and links, and the
-  blog's blocks — callouts, sections, footnotes, photos, rows, galleries,
-  players, tables, centring. Each ends with `notify`, an `input` event that is
+  blog's blocks — callouts, sections, footnotes, photos, galleries,
+  players, tables. Each ends with `notify`, an `input` event that is
   how the editor learns its content changed under it. The editor's own
   toolbar, menubar and status bar are off: the app draws its toolbar in the
   dock as it always did (`Toolbar.vue`, teleported from `PostEditor`), the
@@ -150,7 +152,10 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   heading.
 - `decorate.ts` — what is shown but not kept: players, section toggles,
   gallery labels, photo tools, mermaid and chart previews, local photos
-  resolved to blob URLs. Those elements carry `data-transient`, which
+  resolved to blob URLs. A photo's attribute list is previewed only for
+  `.light` and `.dark`, which the blog still draws; `.left`, `.right`,
+  `.shadow`, `.w-*`, `.rounded-*` and `w=`/`h=` are kept in the markdown but
+  no longer shown, since the blog's renderer drops them. Those elements carry `data-transient`, which
   `htmlToDoc` skips. It runs after every load and edit and only touches what
   changed.
 
@@ -197,26 +202,47 @@ the move re-publishes without moving a line.
 
 Body output follows the blog too: headings start at H2, images are committed
 under `public/assets/img/post` and written as `/assets/img/post/…`, and
-blockquotes can carry the site's `{: .note-* }` callout classes.
+blockquotes can carry the site's `{: .note-* }` callout classes, written
+`{: .note-info}` with no space inside, as 128 of the blog's 136 are.
 
 An embed is one of the blog's components — `<EmbedYoutube id="…" />`, and
 `src=` rather than `id=` for `EmbedVideo` and `EmbedAudio`. A Liquid include is
 still read, so a post written before the move opens here and is converted the
 next time it is published; nothing writes one again. A component carrying more
 than the one prop the editor models (`compact`, `types`, `title` …) is kept as
-a raw block instead, which is written back exactly as it was found.
+a raw block instead, which is written back exactly as it was found. The
+embeds are the blog's five — YouTube, X, Spotify, audio and video; Bilibili
+and Twitch are gone from the blog, so no link makes one, and a post that
+still has one keeps it as a raw block.
 
-A gallery is the blog's ```` ```gallery <kind> ```` fence — `deck`, `fan`,
-`peek` or `fold` — holding one image per line, `![alt](src "caption")`, the
-title being the caption the card shows. Here it is a `gallery` node whose
-children are ordinary image nodes (`src/editor/extensions/gallery.ts`), so a
-local photo inside one is stored, shrunk, uploaded and repointed exactly like
-any other image, and the toolbar's gallery menu turns a run of images into
-one, changes its kind, or separates it again. A fence that names no kind, an
-unknown one, or holds anything but image lines stays a code block and is
-written back as found — the site shows it as code too. A fence's whole info
-string is kept in the code block's `language`, which is how `gallery peekk`
-survives a round trip.
+A gallery is the blog's ```` ```gallery ```` fence, holding one image per line,
+`![alt](src "caption")`. The caption the card shows is the title, else the
+alt (`caption` in the blog's `src/logics/gallery.js`), and every gallery
+photo in the posts is written with alt alone, so the editor shows that as the
+caption and editing it writes the alt and drops the title. A title is written
+in double quotes; `escapeChars` in `src/lib/inline.ts`, the one escaper for
+image and link text, escapes a `"` in it, and in alt the brackets, a
+backtick, `*`, `_`, `<`, `~`, and a backslash wherever markdown would
+swallow it, and the importer undoes every escape, as the blog's markdown-it
+does. A caption with a quote in it used to turn the whole gallery into a code
+block the next time it opened, a backtick in alt and caption made a code
+span of the line, and a trailing backslash broke it. A blank line inside the
+fence leaves it a gallery, as on the blog. The blog
+draws every gallery as one carousel and ignores a word after `gallery` (the
+kinds there were until October 2026, `deck`, `fan`, `peek` and `fold`, are
+gone), so a fence that still names one opens as a gallery here and is written
+back as plain `gallery` the next time it is published. Here it is a `gallery`
+node whose children are ordinary image nodes (`src/editor/bridge.ts`), so
+a local photo inside one is stored, shrunk, uploaded and repointed exactly
+like any other image, and the toolbar's gallery button turns a run of images
+into one or separates it again. Several photos inserted at once outside a
+gallery become one: the blog retired photo rows (`{: .normal .gap }` under
+`{: .d-flex .c-center }`; every row became a gallery), so the editor has no
+row or centre button. A legacy row still reads and writes back as found, is
+still shown side by side so it reads as one, and making it a gallery strips
+its row classes. A fence that holds anything but image lines
+stays a code block and is written back as found, its whole info string kept in
+the code block's `language`.
 
 Images are published in the format they arrived in, named from it. The blog's
 build converts them — `convert-images.js` runs first, writes WebP and repoints
@@ -224,23 +250,84 @@ the post that referenced them, gallery fences included — because that is the o
 with a real encoder: WebKit has none behind its canvas, so converting here
 never worked from an iPhone, which is where most of these photos come from.
 
-Size is the one thing handled before the push: an image wider than 1760px is
-redrawn to 1760 (`shrinkImage` in `src/lib/images.ts`) when it is stored, and
-again at publish for drafts that still hold originals. 1760 is `MAX_WIDTH` in
-the blog's `convert-images.js` — the width the build would cut it to anyway,
-so nothing a reader would see is lost, and a post of phone photos stays inside
-the Worker's 20 MB cap. JPEG stays JPEG and PNG stays PNG, which is what keeps
-alpha; other formats, and anything that fails to re-encode or comes back
-bigger, pass through whole. Downscaling works on an iPhone — it was only a
-WebP encoder WebKit lacked, and this writes JPEG and PNG.
+This is an editor, so a photo is kept exactly as it arrived: the draft stores
+the original file, untouched, and shows it from there. Size is the one thing
+handled, and only at the push (`shrinkImage` in `src/lib/images.ts`): a photo
+wider than 3840px (4K) or heavier than 4 MB is reduced until it is neither;
+one within both is uploaded byte for byte. 3840 is `MAX_WIDTH` in the blog's
+`convert-images.js`, the width the build would cut it to anyway, and the
+repository keeps a photo as large as the site may ever show (it was 1920, and
+the photos cut to 1760 before it had to be dug out of git history). A JPEG is
+drawn at 3840 or its own width, whichever is less, at quality 0.95, then 0.9
+and down by 0.05 to 0.7, the floor, and then drawn 15% narrower each time
+until it fits; a PNG has no quality to give, so only its width steps down.
+If nothing fits within the tries, the smallest copy drawn is uploaded rather
+than failing the publish, and a photo that came back no smaller than an
+original already within 3840 is sent as it was. JPEG stays JPEG and PNG stays
+PNG, which is what keeps alpha; any other format is uploaded whole. The
+drawn area is capped at 16,777,216 pixels, Safari's canvas limit: a 48 MP
+portrait at 3840 wide (3840×5120) is past it, and the original was sent.
+
+Photos go up one per request: `POST /api/publish/photo` takes one photo as
+base64 text (8 MB cap) and returns its git blob sha, and `/api/publish` then
+commits the markdown with every photo as `{path, sha}` in one commit, so a
+publish holds as many photos as the 50-file limit allows and makes about
+eight GitHub calls however many there are. Each photo is shrunk only then,
+sent one at a time, retried once after a network failure or a 5xx (a 400 is
+not sent again), and the button counts them ("Photo 2 of
+7…"). A publish used to carry every photo in one body under the Worker's
+20 MB cap, three or four full-size photos at once, and its advice to publish
+fewer meant taking photos out of a post being edited.
+Downscaling works on an iPhone — it was only a WebP encoder WebKit lacked,
+and this writes JPEG and PNG. Photos used to be redrawn when they were stored,
+at quality 0.85, so the draft never held the original.
 
 A publish repoints the draft. Every `local:` photo it uploaded — in the body,
 in a gallery, the cover — is renamed in the draft to the address it was
 published at (`plan.imageUrls`), so the next publish of the same draft uploads
 nothing but the Markdown and writes it byte for byte the same. Before that, every
-publish sent every photo again, and since a new image is numbered past every
-name the post already uses, each one would have added another copy to the
-repository and pointed the post at it. The body is repointed through the
+publish sent every photo again, each one adding another copy to the
+repository and pointing the post at it.
+
+A photo is named from its alt: `<slug>-<alt>`, the alt folded to ASCII
+(`slugify`: Vietnamese marks off, đ to d) and cut to 50 characters on a word
+boundary; `<slug>-N` with no alt, and a new cover from its alt or
+`<slug>-cover`. A name is never one any file in `public/assets/img/post`
+already has, extension aside, nor a source in `src/redirects.txt`:
+`/api/images` lists the folder (name and sha per file, one tree call and one
+GraphQL query) and, given the post's own files (`?own=`), says of each photo
+only whether another file uses it (`shared`). It needs no password, so it
+never names posts or drafts; it used to list every path using each photo. A
+clash takes `-2`, `-3` …, and the worker checks again against the
+commit it builds on and refuses a name already there. Names used to be
+numbered past only what the post's own text used, so a removed photo's name
+came back: the new `slug-3.jpg` either sat beside the old `slug-3.webp`,
+which `convert-images.js` takes as already converted, so readers got the 4K
+JPEG, or replaced the old file at an address the site caches for 30 days.
+
+A published photo whose name no longer follows its alt is renamed in the
+same commit, as a tree entry pointing at the blob it already has, so nothing
+is downloaded or sent again; the file renamed is the one the repository
+has, so a `.jpg` the post names whose file is `.webp` renames the `.webp`.
+The old file is removed unless another post, draft or page still uses it,
+and the post and the draft are repointed; the post's own files are only
+the one being written and the draft file a publish removes, so an older copy
+left by a changed date or slug still counts as using its photos. The dialog lists each rename as
+`old → new`. A photo already named `<slug>-<alt>` or `<slug>-<alt>-N` is
+left alone, so it never takes `-2` against itself, and one with no alt keeps
+its name; changing a caption renames it again at the next publish. Once the
+rename whose old file is removed adds `old new` to the blog's
+`src/redirects.txt` in the same commit (`mergeRedirects` in
+`shared/redirects.ts`): both addresses as the site serves them — the
+`.webp` name for a `.jpg` or `.png` the build converts (`servedName` in
+`shared/paths.ts`), as are the names a commit creates — percent-encoded, a line that pointed at `old` repointed to `new`, a line
+whose source this commit creates dropped, the file kept sorted and unique.
+A file kept for another post gets no line. The blog's `scripts/redirects.js`
+turns each line into a 301 in `_redirects`, the narrower copies included,
+and follows a chain to its last name, so once the site deploys the old
+address reaches the photo; `vite preview` reads no `_redirects`, so there it
+does not. Every redirected source counts as a taken name, so a redirected
+address is never given out again. The body is repointed through the
 editor, outside its history, so a shared room carries it to everyone in it and
 undo does not bring the `local:` address back; in the Markdown source view it
 is the text that is repointed.
@@ -260,7 +347,11 @@ phone's JPEG is still `29-thang-9.jpg` in the repository while the site,
 whose build converted it and dropped the original, serves only
 `29-thang-9.webp`. The post is left saying `.jpg` — the repository has no
 `.webp` to point at, and the next build converts it again. What changes is
-what is shown: an image tries the name as written and, failing that, the
+what is shown. A photo already on the site is shown from its 960px copy
+(`previewSrc`, `/assets/img/resized/960/….webp`, the WebP name for a `.jpg`
+under `post/`), so a 4K gallery does not download every original; a photo
+too narrow to have one falls back to the original (`fullSrc`), and an image
+tries the name as written and, failing that, the
 WebP the build made of it (`convertedSrc`: a JPEG, PNG or TIFF under
 `/assets/img/post/`, the only photos the build converts). The editor's
 images did this already; the cover in the post panel did not, and showed a
@@ -285,7 +376,8 @@ While a field has focus, a row of chips sits under it — inline rather than a
 pop-up, so the sheet scrolls it into view above a phone keyboard like the rest
 of the panel. An empty field shows the eight most used; typing narrows them to
 the ones whose title or slug starts with it, then the ones containing it, with
-diacritics folded so `tet` finds `Tết`. What the post already carries is never
+diacritics folded so `tet` finds `Tết` (`fold` in `src/lib/text.ts`, the one
+folding `slugify` uses too). What the post already carries is never
 offered. A chip is picked on click, with the pointer's mousedown and
 pointerdown cancelled so the input keeps focus and its blur does not eat the
 tap. Picking on pointerdown instead would add a tag for every scroll of the
@@ -360,8 +452,8 @@ draws every one of these lines differently:
   written under three spaces of indent. Which side of the block it was written
   on is a fact about the post, not a formatting choice: one above leaves a
   paragraph of its own in the HTML where one below does not, so `ialAbove`
-  rides on the block and it is written back where it was found. A row's
-  `{: .d-flex .c-center }` is a row's whichever side it sits.
+  rides on the block and it is written back where it was found. A legacy
+  row's `{: .d-flex .c-center }` is a row's whichever side it sits.
 - A list marker indented less than the item above it starts the next item of
   that list, however little it is indented; only one indented as far as that
   item's own text opens a list inside it.
@@ -472,13 +564,13 @@ Things that took a bug to learn, and that a change here can quietly undo:
 - An image and the line under it are one paragraph, and the blog styles that
   line as a caption; a row of images is one paragraph too. `joinPrevious` keeps
   those together on the way out. A run is a row only where one of its photos
-  says so: the row tool and a multi-photo insert both write
-  `{: .d-flex .c-center }` themselves, and reading a row out of `.gap` alone
+  says so — `{: .d-flex .c-center }`, which nothing writes any more — and
+  reading a row out of `.gap` alone
   invented one for a run of photos whose own list belonged to the quote around
   them. The marker belongs
   on the last image of the run — Kramdown reads the list under the last line as
-  the whole paragraph's. That is what the row tool and a multi-photo insert
-  build, and `rowAttributes` in `import.ts` is what puts it back there.
+  the whole paragraph's, and `rowAttributes` in `import.ts` is what puts it
+  back there.
 - A Kramdown attribute list attaches to whichever neighbour is not separated
   from it by a blank line, and it is parsed with quoted values taken whole —
   the base64 inside `lqip="…"` contains things that look like classes and
@@ -551,9 +643,8 @@ Things that took a bug to learn, and that a change here can quietly undo:
 - The break that ends the line an image sits on is layout, not text. Left in the
   run it becomes a paragraph between two images, which is a blank line on the way
   out, and a blank line is the end of the row.
-- A photo in a row carries `{: .normal .gap }`. `.gap` is `margin-right: 0.25rem`
-  in the blog's stylesheet, so the spacing between photos is the site's to set;
-  the editor reads the same class rather than inventing a margin of its own.
+- A photo in a legacy row carries `{: .normal .gap }`, written back as found;
+  the blog draws neither class now, and the editor no longer previews `.gap`.
 - Front matter the app has no field for survives anyway. `redirect_from` is
   one the blog actually uses, and an `image.lqip` a post still carries wins
   over the placeholder the build measures — losing either on an edit would
@@ -596,7 +687,7 @@ Things that took a bug to learn, and that a change here can quietly undo:
   `{: .divider }` under a rule and `{: .collapse }` under a `<details>` were
   stripped the first time the post passed through the editor. The corpus test
   in `bridge.test.ts` is what catches this now.
-- Storing an image is async (the 1760px redraw takes a moment on a phone), and
+- Storing an image is async (it is written to IndexedDB first), and
   the insert that follows lands in whatever the editor holds by then.
   `PostEditor` counts content swaps (`setDoc`: a repoint, a change from the
   shared room; a draft switch remounts the editor outright), and an insert
@@ -608,8 +699,18 @@ Things that took a bug to learn, and that a change here can quietly undo:
   paragraph after what it inserted, making one when none follows, and the
   divider, a new gallery and a separated one do the same. Over a selected
   block the insert lands after it and after whatever joins it — its caption,
-  the rest of its row — so neither is cut in two; photos added over a gallery
-  photo join the gallery, and the cursor leaves it. A table keeps the cursor
+  the rest of its row — so neither is cut in two. Photos added while a
+  gallery photo is selected — picked, pasted, or dropped onto it — go in
+  right after it, and the last of them becomes the selected one, so the next
+  batch follows in order. A drop on the gallery's frame goes after its last
+  photo, and a drop anywhere else clears the selection first, so an old one
+  cannot pull it into a gallery. The selected gallery photo takes the focus
+  (`tabIndex = -1`), so its keys are its own: a character or Enter goes on
+  in the paragraph after the gallery (`leaveGallery`), shortcuts still reach
+  the editor, Delete or Backspace removes it, ⌥← and ⌥→ move it, and the
+  same three appear as 44px buttons under it, for a phone. A gallery left
+  with one photo becomes a plain image, and one left with none an empty
+  paragraph. A table keeps the cursor
   in its first cell, with a paragraph made under it to leave by.
 - `#` types an H2, as `##` does: the title is the page's only H1 and the
   contents start at H2. A post that has an H1 (or an H5) opens with it and
@@ -763,5 +864,37 @@ held during the jump so it does not flicker through every heading passed.
 `?edit=<repo path>` — what the blog's own edit button links to — reads the post
 through `/api/source`, which asks no password for anything under `src/posts`, and
 opens it as a draft whose `publishedPath` is that file, so re-publishing lands on the same path rather than making a copy. Images
-already on the blog are left alone: not re-encoded, re-uploaded or renamed, and
-a newly added image is numbered past every name the post already uses.
+already on the blog are not re-encoded or re-uploaded; they are renamed only
+to follow their alt, and a new one is named from its alt, never taking a name
+already in the folder (see *Publishing format*).
+
+A draft remembers the post's blob sha when it is opened or published
+(`publishedSha`, with `publishedPrint`, a SHA-256 of the markdown it would
+write), and the worker checks it against the commit it builds on: a publish
+over a post that changed since is refused with a 409 ("This post changed on
+the site since you opened it"). Opening a post a local draft already holds
+asks the site first: unchanged, or the draft would write exactly the site's
+markdown, the draft opens; changed with no unpublished edits, the new
+version replaces it; changed with edits, the draft is kept and a toast says
+so; unreachable, the draft opens. A draft from before this, with no sha,
+opens as it did and takes the site's sha only when its markdown matches. It
+used to open the local draft without
+asking, and the publish overwrote whatever had changed on the site since. A
+draft never published from here sends `expect {path, sha: ""}`, and the
+worker refuses to write over a post already at that path ("The site already
+has a post at … Change its title or date, then publish."). A push landing at the same moment is "Someone published at
+the same moment. Publish again." rather than GitHub's 422.
+
+The blog's own drafts open from the rail's download button, beside the
+"+": a list of every file in `src/drafts` (`GET /api/drafts`, password or
+session, one GraphQL read like `/api/images`: the title from front matter,
+the date from the file name, newest first), each row 44px, with a password
+field in place when the password is missing or wrong. Opening one is
+`importPost`, as `?edit=` is, so the stale guard, the sha, the alt renames
+and the round trip all apply, and the target is set to Draft. Published as
+Draft it is written back to its own file. Published as Post, or under a new
+slug, it is written to its new path and the old draft file removed in the
+same commit (`leavesDraft` in `publish.ts`), the stale check made against
+the draft file, and the dialog says the draft is moved. A draft without a
+`date:` takes its file name's date, so a publish does not move it to
+today.

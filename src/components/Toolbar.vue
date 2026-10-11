@@ -12,11 +12,9 @@ import {
   setCollapsible,
   setGallery,
   setNote,
-  toggleCenter,
   toggleCodeBlock,
   toggleFilepath,
   toggleHeading,
-  toggleImageRow,
   toggleInline,
   toggleList,
   togglePlainQuote,
@@ -24,7 +22,6 @@ import {
   unsetGallery,
 } from "../editor/commands.ts";
 import type { ToolState } from "../editor/tools.ts";
-import GalleryMenu from "./GalleryMenu.vue";
 import NoteMenu from "./NoteMenu.vue";
 import ToolButton from "./ToolButton.vue";
 
@@ -63,7 +60,7 @@ onBeforeUnmount(() => {
 
 const embed = () => {
   const url = window.prompt(
-    "Video or post URL (YouTube, X, Bilibili, Spotify, Twitch)",
+    "Video, post or song URL (YouTube, X, Spotify)",
     "https://www.youtube.com/watch?v=",
   );
   if (!url) {
@@ -160,27 +157,15 @@ const pickFiles = (event: Event) => {
     <div class="tool-group">
       <ToolButton icon="image" title="Insert image" @press="fileInput?.click()" />
       <ToolButton
-        icon="imageRow"
-        title="Row of images — one photo strip, the way the blog lays them out"
-        :active="tools.imageRow"
-        :disabled="!tools.canImageRow"
-        @press="run(toggleImageRow)"
-      />
-      <GalleryMenu
-        :kind="tools.gallery"
-        :enabled="tools.canGallery"
-        @kind="(kind) => run((root) => setGallery(root, kind))"
-        @separate="run(unsetGallery)"
+        icon="gallery"
+        title="Gallery — several photos in one frame"
+        :active="tools.gallery"
+        :disabled="!tools.canGallery"
+        @press="run(tools.gallery ? unsetGallery : setGallery)"
       />
       <ToolButton icon="video" title="Embed a video — YouTube, X, Spotify…" @press="embed" />
       <ToolButton icon="table" title="Insert table" @press="run((root) => insertTable(root))" />
       <ToolButton icon="rule" title="Divider" @press="run(insertRule)" />
-      <ToolButton
-        icon="center"
-        title="Centre this block — the blog's {: .d-flex .c-center }"
-        :active="tools.centered"
-        @press="run(toggleCenter)"
-      />
     </div>
 
     <input ref="fileInput" type="file" accept="image/*" multiple hidden @change="pickFiles" />

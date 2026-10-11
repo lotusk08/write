@@ -1,5 +1,5 @@
 import { isLocalSrc } from "../lib/db.ts";
-import { displaySrc } from "../lib/site.ts";
+import { previewSrc } from "../lib/site.ts";
 import type { DocMark, JSONContent } from "./doc.ts";
 
 /**
@@ -178,7 +178,7 @@ function itemBody(content: JSONContent[] | undefined, options: RenderOptions): s
 
 function imageHtml(node: JSONContent, options: RenderOptions): string {
   const src = String(node.attrs?.src ?? "");
-  const display = options.display ?? displaySrc;
+  const display = options.display ?? previewSrc;
   let source: string;
   if (isLocalSrc(src)) {
     source = `${attr("src", BLANK_SRC)}${attr("data-local-src", src)}`;
@@ -239,7 +239,7 @@ function blockHtml(node: JSONContent, options: RenderOptions): string {
       return imageHtml(node, options);
     case "gallery":
       return (
-        `<figure class="editor-gallery" data-gallery${attr("data-kind", node.attrs?.kind ?? "deck")} contenteditable="false"${extra}>` +
+        `<figure class="editor-gallery" data-gallery contenteditable="false"${extra}>` +
         `<div class="editor-gallery-strip">${blocksHtml(children, options)}</div></figure>`
       );
     case "embed":
@@ -621,8 +621,7 @@ function blockFrom(element: Element): JSONContent[] {
       const images = [...element.querySelectorAll("img")]
         .map((img) => imageFrom(img.closest("figure[data-image]") ?? img))
         .filter((image): image is JSONContent => image !== null);
-      const kind = element.getAttribute("data-kind") || "deck";
-      return images.length ? [withAttrs({ type: "gallery", attrs: { kind }, content: images }, attrs)] : [];
+      return images.length ? [withAttrs({ type: "gallery", content: images }, attrs)] : [];
     }
     if (element.hasAttribute("data-image") || element.querySelector("img")) {
       const images = element.hasAttribute("data-image")

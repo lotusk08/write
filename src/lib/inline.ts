@@ -591,10 +591,17 @@ function target(state: State, labelEnd: number, image: boolean): number {
   return pos < max && src.charCodeAt(pos) === 0x29 ? pos : -1;
 }
 
+const ASCII_PUNCTUATION = "!-/:-@[-`{-~";
+const ESCAPE = new RegExp(`\\\\([${ASCII_PUNCTUATION}])`, "g");
+
+export function escapeChars(text: string, chars: string): string {
+  return text.replace(new RegExp(`\\\\(?=[${ASCII_PUNCTUATION}]|$)|[${chars.replace(/[\\\]^-]/g, "\\$&")}]`, "g"), "\\$&");
+}
+
 function linkAttrs(inner: string): Record<string, string> {
-  const quoted = /\s+"([^"]*)"\s*$/.exec(inner);
+  const quoted = /\s+"((?:[^"\\]|\\.)*)"\s*$/.exec(inner);
   const href = (quoted ? inner.slice(0, quoted.index) : inner).trim();
-  return quoted?.[1] ? { href, title: quoted[1] } : { href };
+  return quoted?.[1] ? { href, title: quoted[1].replace(ESCAPE, "$1") } : { href };
 }
 
 const link: Rule = (state, silent) => {
@@ -645,7 +652,7 @@ const image: Rule = (state, silent) => {
   if (!silent) {
     const { href, title } = linkAttrs(src.slice(labelEnd + 2, close));
     const found = push(state, "image", 0);
-    found.attrs = { src: href, alt: src.slice(labelStart, labelEnd), ...(title ? { title } : {}) };
+    found.attrs = { src: href, alt: src.slice(labelStart, labelEnd).replace(ESCAPE, "$1"), ...(title ? { title } : {}) };
     found.start = labelStart - 2;
     found.end = close + 1;
   }

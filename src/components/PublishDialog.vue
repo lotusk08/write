@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { computed, nextTick, ref, watch } from "vue";
 import type { AppConfig, PublishResult } from "../../shared/types.ts";
-import { PasswordRejected, publish } from "../lib/api.ts";
+import { PasswordRejected } from "../lib/api.ts";
 import type { Draft } from "../lib/db.ts";
 import { addPasskey, passkeysAvailable, signInWithPasskey } from "../lib/passkey.ts";
 import { rememberPassword, rememberSession, sessionPassword, sessionToken } from "../lib/password.ts";
-import { buildPublishPlan, defaultCommitMessage, type PublishPlan } from "../lib/publish.ts";
+import { buildPublishPlan, defaultCommitMessage, sendPlan, type PublishPlan } from "../lib/publish.ts";
 import type { Settings } from "../lib/settings.ts";
 import Dialog from "./Dialog.vue";
 import Toggle from "./Toggle.vue";
@@ -26,6 +26,7 @@ const TARGETS: ToggleOption<Settings["publishTarget"]>[] = [
 const plan = ref<PublishPlan | null>(null);
 const message = ref(defaultCommitMessage(props.draft, Boolean(props.draft.publishedPath)));
 const busy = ref(false);
+const sent = ref(0);
 const error = ref<string | null>(null);
 const password = ref(sessionPassword());
 const session = ref(sessionToken());
@@ -110,9 +111,11 @@ const run = async () => {
   busy.value = true;
   error.value = null;
   try {
-    const result = await publish(
-      { message: message.value, files: plan.value.files },
+    const result = await sendPlan(
+      plan.value,
+      message.value,
       asking.value ? password.value : sessionPassword(),
+      (done) => (sent.value = done),
     );
     if (asking.value) {
       rememberPassword(password.value);
@@ -132,7 +135,10 @@ const run = async () => {
 <template>
   <Dialog title="Publish" :subtitle="`${settings.repo} · ${settings.branch}`" @close="emit('close')">
     <div v-if="blocked" class="notice warn">{{ blocked }}</div>
-    <div v-if="renamedFrom" class="notice warn">
+    <div v-if="renamedFrom && plan?.remove.includes(renamedFrom)" class="notice">
+      This moves the draft: <span class="mono">{{ renamedFrom }}</span> is removed from the blog in the same commit.
+    </div>
+    <div v-else-if="renamedFrom" class="notice warn">
       This writes a new file. The post it was opened from,
       <span class="mono">{{ renamedFrom }}</span>, stays on the blog — delete it there if you meant to rename this one.
     </div>
@@ -191,7 +197,7 @@ const run = async () => {
     <div class="field">
       <span class="field-label">Files</span>
       <ul v-if="plan" class="file-list">
-        <li v-for="file in plan.files" :key="file.path">{{ file.path }}</li>
+        <li v-for="path in plan.paths" :key="path">{{ path }}</li>
       </ul>
       <p v-else class="hint">Preparing…</p>
       <p v-if="plan?.skippedImages.length" class="hint" style="color: var(--danger)">
@@ -212,7 +218,13 @@ const run = async () => {
         :disabled="!plan || busy || Boolean(blocked) || (asking && !password)"
         @click="run"
       >
-        {{ busy ? "Publishing…" : "Commit" }}
+        {{
+          !busy
+            ? "Commit"
+            : plan && sent < plan.photos.length
+              ? `Photo ${sent + 1} of ${plan.photos.length}…`
+              : "Publishing…"
+        }}
       </button>
     </template>
   </Dialog>

@@ -1,7 +1,7 @@
 import type { JSONContent } from "../editor/doc.ts";
 import type { PostMeta } from "../../shared/types.ts";
 import { CENTER_ROW, embedTag } from "../editor/blog.ts";
-import { autolinkFor, bareLinks } from "./inline.ts";
+import { autolinkFor, bareLinks, escapeChars } from "./inline.ts";
 import { topicSlug } from "./topics.ts";
 
 export interface SerializeOptions {
@@ -117,7 +117,7 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
         break;
       case "link": {
         const href = String(mark.attrs?.href ?? "");
-        const title = mark.attrs?.title ? ` "${String(mark.attrs.title)}"` : "";
+        const title = quotedTitle(mark.attrs?.title);
         out = `[${out}](${href}${title})`;
         break;
       }
@@ -269,11 +269,15 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions, lin
     .join("");
 }
 
+function quotedTitle(title: unknown): string {
+  return title ? ` "${escapeChars(String(title), '"')}"` : "";
+}
+
 function image(node: JSONContent, options: SerializeOptions): string {
   const rawSrc = String(node.attrs?.src ?? "");
   const src = options.resolveImage ? options.resolveImage(rawSrc) : rawSrc;
-  const alt = String(node.attrs?.alt ?? "").replace(/[[\]]/g, "");
-  const title = node.attrs?.title ? ` "${String(node.attrs.title)}"` : "";
+  const alt = escapeChars(String(node.attrs?.alt ?? ""), "[]`*_<~");
+  const title = quotedTitle(node.attrs?.title);
   const ial = node.attrs?.ial ? String(node.attrs.ial) : "";
   return `![${alt}](${src}${title})${ial}`;
 }
@@ -285,9 +289,8 @@ function fenced(info: string, body: string): string {
 }
 
 function galleryBlock(node: JSONContent, options: SerializeOptions): string {
-  const kind = String(node.attrs?.kind ?? "deck");
   const photos = (node.content ?? []).filter((child) => child.type === "image");
-  return fenced(`gallery ${kind}`, photos.map((photo) => image(photo, options)).join("\n"));
+  return fenced("gallery", photos.map((photo) => image(photo, options)).join("\n"));
 }
 
 function indentedBody(
@@ -441,7 +444,7 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
           .map((line) => (line ? `> ${line}` : ">"))
           .join("\n");
         const name = node.attrs?.note ? String(node.attrs.note) : "";
-        const note = name ? `\n{: ${name === "author" ? ".author" : `.note-${name}`} }` : "";
+        const note = name ? `\n{: ${name === "author" ? ".author" : `.note-${name}`}}` : "";
         out.push(quoted + note);
         break;
       }

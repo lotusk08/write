@@ -1,6 +1,6 @@
 import { isLocalSrc, resolveLocalSrc } from "../lib/db.ts";
-import { convertedSrc } from "../lib/site.ts";
-import { embedTag, embedUrl, GALLERY_LABELS, isGalleryKind } from "./blog.ts";
+import { convertedSrc, fullSrc } from "../lib/site.ts";
+import { embedTag, embedUrl } from "./blog.ts";
 import { BLANK_SRC, TRANSIENT } from "./bridge.ts";
 import { renderChart, renderMermaid, type Teardown } from "./render.ts";
 
@@ -15,13 +15,6 @@ import { renderChart, renderMermaid, type Teardown } from "./render.ts";
 const RENDERED = new Set(["mermaid", "chart"]);
 const REDRAW_MS = 400;
 
-const WIDTH_CLASSES: Record<string, string> = {
-  "w-25": "25%",
-  "w-50": "50%",
-  "w-75": "75%",
-  normal: "100%",
-};
-
 function transient<K extends keyof HTMLElementTagNameMap>(tag: K, className: string): HTMLElementTagNameMap[K] {
   const element = document.createElement(tag);
   element.className = className;
@@ -34,41 +27,23 @@ function firstTransient(parent: Element, className: string): HTMLElement | null 
   return parent.querySelector<HTMLElement>(`:scope > .${className}[${TRANSIENT}]`);
 }
 
-function parseIal(ial: string): { classes: string[]; attrs: Record<string, string> } {
-  const classes: string[] = [];
-  const attrs: Record<string, string> = {};
-  const token = /\.([\w-]+)|([\w-]+)=(["'])((?:(?!\3).)*)\3|([\w-]+)=(\S+)/g;
-  for (const match of ial.matchAll(token)) {
-    if (match[1]) {
-      classes.push(match[1]);
-    } else if (match[2]) {
-      attrs[match[2]] = match[4];
-    } else if (match[5]) {
-      attrs[match[5]] = match[6];
-    }
-  }
-  return { classes, attrs };
+/** Shows a photo for one theme only, as the blog's `.light` and `.dark` do; the layout classes it no longer draws are kept in the markdown but not previewed. */
+function applyTheme(figure: HTMLElement): void {
+  const ial = figure.getAttribute("data-ial") ?? "";
+  figure.classList.toggle("is-light", /\.light(?![\w-])/.test(ial));
+  figure.classList.toggle("is-dark", /\.dark(?![\w-])/.test(ial));
 }
 
-/** Lays a photo out the way the blog's attribute list says: width, float, shadow, the row's gap. */
-function applyLayout(figure: HTMLElement, image: HTMLImageElement): void {
-  const { classes, attrs } = parseIal(figure.getAttribute("data-ial") ?? "");
-  const fraction = classes.find((name) => name in WIDTH_CLASSES);
-  const width = Number(attrs.width ?? attrs.w);
-  const height = Number(attrs.height ?? attrs.h);
-  figure.style.width = fraction ? WIDTH_CLASSES[fraction] : "";
-  image.style.aspectRatio = width && height ? `${width} / ${height}` : "";
-  figure.classList.toggle("is-left", classes.includes("left"));
-  figure.classList.toggle("is-right", classes.includes("right"));
-  figure.classList.toggle("is-shadowed", classes.includes("shadow"));
-  figure.classList.toggle("is-gapped", classes.includes("gap"));
-  figure.classList.toggle("is-rounded", classes.some((name) => name.startsWith("rounded")));
-  figure.classList.toggle("is-light", classes.includes("light"));
-  figure.classList.toggle("is-dark", classes.includes("dark"));
-}
-
-/** A JPEG the blog's build converted is served as WebP; try that when the name as written is gone. */
+/**
+ * A photo is shown from the site's 960px copy; when that is missing it falls back to the original, and a JPEG the
+ * blog's build converted is served as WebP, tried when the name as written is gone.
+ */
 function fallBackToWebp(this: HTMLImageElement): void {
+  const full = fullSrc(this.src);
+  if (full !== this.src) {
+    this.src = full;
+    return;
+  }
   const converted = convertedSrc(this.src);
   this.onerror = null;
   if (converted !== this.src) {
@@ -76,28 +51,48 @@ function fallBackToWebp(this: HTMLImageElement): void {
   }
 }
 
-/** The alt-text and caption buttons under a photo; a gallery photo's caption is the title its card shows. */
+function toolButton(className: string, text = "", label = ""): HTMLButtonElement {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = className;
+  button.textContent = text;
+  if (label) {
+    button.setAttribute("aria-label", label);
+    button.title = label;
+  }
+  return button;
+}
+
+/**
+ * The buttons under a photo: alt text and caption. A gallery photo's caption is what its card shows — the title, else
+ * the alt text, as the blog reads it — so there it is the one text button, and the selected photo also gets move and
+ * remove.
+ */
 function imageTools(figure: HTMLElement, img: HTMLImageElement): void {
   let tools = firstTransient(figure, "editor-image-tools");
   if (!tools) {
     tools = transient("div", "editor-image-tools");
-    const alt = document.createElement("button");
-    alt.type = "button";
-    alt.className = "editor-image-alt";
-    const caption = document.createElement("button");
-    caption.type = "button";
-    caption.className = "editor-image-alt editor-image-caption";
-    tools.append(alt, caption);
+    tools.append(
+      toolButton("editor-image-alt"),
+      toolButton("editor-image-alt editor-image-caption"),
+      toolButton("editor-image-alt editor-image-edit", "←", "Move photo back"),
+      toolButton("editor-image-alt editor-image-edit", "→", "Move photo on"),
+      toolButton("editor-image-alt editor-image-edit", "Remove", "Remove photo from the gallery"),
+    );
     figure.append(tools);
   }
-  const [alt, caption] = [...tools.children] as HTMLButtonElement[];
+  const [alt, caption, ...edits] = [...tools.children] as HTMLButtonElement[];
+  const gallery = Boolean(figure.closest("[data-gallery]"));
   const altText = img.getAttribute("alt") ?? "";
   alt.textContent = altText || "Add alt text";
   alt.classList.toggle("is-empty", !altText);
-  const gallery = Boolean(figure.closest("[data-gallery]"));
-  const title = img.getAttribute("title") ?? "";
-  caption.textContent = gallery && title ? title : "Add caption";
-  caption.classList.toggle("is-empty", gallery && !title);
+  alt.hidden = gallery;
+  const text = gallery ? img.getAttribute("title") || altText : "";
+  caption.textContent = text || "Add caption";
+  caption.classList.toggle("is-empty", gallery && !text);
+  for (const edit of edits) {
+    edit.hidden = !gallery;
+  }
 }
 
 function images(root: HTMLElement): void {
@@ -106,7 +101,7 @@ function images(root: HTMLElement): void {
     if (!img) {
       continue;
     }
-    applyLayout(figure, img);
+    applyTheme(figure);
     imageTools(figure, img);
     img.draggable = false;
     const local = img.getAttribute("data-local-src");
@@ -129,15 +124,13 @@ function images(root: HTMLElement): void {
 
 function galleries(root: HTMLElement): void {
   for (const gallery of root.querySelectorAll<HTMLElement>("[data-gallery]")) {
-    const kind = gallery.getAttribute("data-kind") ?? "deck";
-    const text = `Gallery · ${isGalleryKind(kind) ? GALLERY_LABELS[kind] : kind}`;
     let label = firstTransient(gallery, "editor-gallery-label");
     if (!label) {
       label = transient("span", "editor-gallery-label");
       gallery.prepend(label);
     }
-    if (label.textContent !== text) {
-      label.textContent = text;
+    if (label.textContent !== "Gallery") {
+      label.textContent = "Gallery";
     }
   }
 }

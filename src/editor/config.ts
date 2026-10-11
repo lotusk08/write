@@ -24,7 +24,7 @@ const allowedAttributes: Record<string, string[]> = {
   li: ["data-checked"],
   td: ["colspan", "rowspan"],
   th: ["colspan", "rowspan"],
-  figure: ["data-image", "data-ial", "data-gallery", "data-kind", "contenteditable"],
+  figure: ["data-image", "data-ial", "data-gallery", "contenteditable"],
   img: ["src", "alt", "data-src", "data-local-src"],
   div: [
     "contenteditable",

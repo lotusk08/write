@@ -1,8 +1,11 @@
 import {
   branchExists,
   commitFiles,
+  createBlob,
   getDefaultBranch,
   GitHubError,
+  listFiles,
+  readTexts,
   readTextFile,
   tokenLogin,
 } from "../shared/github.ts";
@@ -15,6 +18,8 @@ import type {
   Topics,
 } from "../shared/types.ts";
 
+import { decoded, servedName, stem, trimSlashes } from "../shared/paths.ts";
+import { redirectSources, REDIRECTS_PATH } from "../shared/redirects.ts";
 import {
   ALGORITHMS,
   base64url,
@@ -44,9 +49,13 @@ export interface Env {
   POSTS_DIR?: string;
   DRAFTS_DIR?: string;
   IMAGES_DIR?: string;
+  PAGES_DIR?: string;
 }
 
-const MAX_REQUEST_BYTES = 20 * 1024 * 1024;
+const MAX_REQUEST_BYTES = 4 * 1024 * 1024;
+const MAX_PHOTO_BYTES = Math.ceil((8 * 1024 * 1024 * 4) / 3) + 4;
+const SHA = /^[0-9a-f]{40}$/;
+
 const PASSKEY_BODY_BYTES = 16 * 1024;
 
 function githubToken(env: Env): string {
@@ -55,9 +64,9 @@ function githubToken(env: Env): string {
 
 function dirs(env: Env) {
   return {
-    postsDir: env.POSTS_DIR || "src/posts",
-    draftsDir: env.DRAFTS_DIR || "src/drafts",
-    imagesDir: env.IMAGES_DIR || "public/assets/img/post",
+    postsDir: trimSlashes(env.POSTS_DIR || "src/posts"),
+    draftsDir: trimSlashes(env.DRAFTS_DIR || "src/drafts"),
+    imagesDir: trimSlashes(env.IMAGES_DIR || "public/assets/img/post"),
   };
 }
 
@@ -186,7 +195,7 @@ async function authorize(
 ): Promise<Response | null> {
   const missing = problem(env);
   if (missing) {
-    return json({ error: missing }, env.GITHUB_TOKEN ? 500 : 501);
+    return misconfigured(missing, env);
   }
   const session = request.headers.get("x-write-session");
   if (!passwordOnly && session && (await validSession(session, env.WRITE_PASSWORD!))) {
@@ -206,6 +215,18 @@ function upstreamStatus(error: unknown): number {
   return error.status === 401 || error.status === 403 ? 502 : error.status;
 }
 
+function failed(error: unknown, fallback: string): Response {
+  return json({ error: error instanceof Error ? error.message : fallback }, upstreamStatus(error));
+}
+
+function misconfigured(missing: string, env: Env): Response {
+  return misconfigured(missing, env);
+}
+
+function tooMany(): Response {
+  return tooMany();
+}
+
 function validateFiles(files: unknown, env: Env): { files: PublishFile[] } | { error: string } {
   if (!Array.isArray(files) || files.length === 0) {
     return { error: "No files to publish." };
@@ -214,12 +235,13 @@ function validateFiles(files: unknown, env: Env): { files: PublishFile[] } | { e
     return { error: "Too many files in one publish (max 50)." };
   }
 
-  const allowed = Object.values(dirs(env)).map((dir) => `${dir.replace(/\/+$/, "")}/`);
+  const allowed = Object.values(dirs(env)).map((dir) => `${dir}/`);
   const validated: PublishFile[] = [];
-  let total = 0;
 
   for (const file of files as PublishFile[]) {
-    if (typeof file?.path !== "string" || typeof file?.contentBase64 !== "string") {
+    const sha = file && "sha" in file ? file.sha : undefined;
+    const content = file && "contentBase64" in file ? file.contentBase64 : undefined;
+    if (typeof file?.path !== "string" || (typeof content !== "string" && !(typeof sha === "string" && SHA.test(sha)))) {
       return { error: "Malformed file entry." };
     }
     const path = repoPath(file.path);
@@ -229,15 +251,14 @@ function validateFiles(files: unknown, env: Env): { files: PublishFile[] } | { e
     if (!allowed.some((dir) => path.startsWith(dir))) {
       return { error: `Path outside the allowed directories (${allowed.join(", ")}): ${path}` };
     }
-    if (!/^[A-Za-z0-9+/=\s]*$/.test(file.contentBase64)) {
+    if (typeof content !== "string") {
+      validated.push({ path, sha: sha! });
+      continue;
+    }
+    if (!/^[A-Za-z0-9+/=\s]*$/.test(content)) {
       return { error: `File content is not base64: ${path}` };
     }
-    total += file.contentBase64.length;
-    validated.push({ path, contentBase64: file.contentBase64.replace(/\s+/g, "") });
-  }
-
-  if (total > MAX_REQUEST_BYTES) {
-    return { error: "Publish payload is too large (max ~20 MB)." };
+    validated.push({ path, contentBase64: content.replace(/\s+/g, "") });
   }
   return { files: validated };
 }
@@ -292,15 +313,23 @@ async function handleTopics(env: Env): Promise<Response> {
   }
 }
 
+function servedDir(env: Env): string {
+  return `/${dirs(env).imagesDir.replace(/^public\//, "")}/`;
+}
+
+function validList<T>(value: unknown, valid: (item: unknown) => item is T): value is T[] {
+  return Array.isArray(value) && value.length <= 50 && value.every(valid);
+}
+
 async function handlePublish(request: Request, env: Env): Promise<Response> {
   const denied = await authorize(request, env);
   if (denied) {
     return denied;
   }
 
-  const raw = await readCapped(request, MAX_REQUEST_BYTES + 1024 * 1024);
+  const raw = await readCapped(request, MAX_REQUEST_BYTES);
   if (!raw) {
-    return json({ error: "Publish payload is too large (max ~20 MB)." }, 400);
+    return json({ error: "This post is too large to publish (max ~4 MB of text)." }, 400);
   }
   let body: PublishRequest;
   try {
@@ -316,7 +345,35 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
   if ("error" in checked) {
     return json({ error: checked.error }, 400);
   }
-
+  const { postsDir, draftsDir, imagesDir } = dirs(env);
+  const markdownPath = (path: unknown): path is string =>
+    typeof path === "string" &&
+    repoPath(path) === path &&
+    (path.startsWith(`${postsDir}/`) || path.startsWith(`${draftsDir}/`)) &&
+    /\.(md|markdown)$/i.test(path);
+  const expect = body.expect;
+  if (expect !== undefined && !(markdownPath(expect?.path) && typeof expect.sha === "string" && (expect.sha === "" || SHA.test(expect.sha)))) {
+    return json({ error: "Malformed expect entry." }, 400);
+  }
+  const remove = body.remove ?? [];
+  const removable = (path: unknown): path is string =>
+    typeof path === "string" &&
+    repoPath(path) === path &&
+    (path.startsWith(`${imagesDir}/`) || (path.startsWith(`${draftsDir}/`) && markdownPath(path)));
+  if (!validList(remove, removable)) {
+    return json({ error: "Malformed remove entry." }, 400);
+  }
+  const served = servedDir(env);
+  const moves = body.redirects ?? [];
+  const address = (value: unknown): value is string =>
+    typeof value === "string" && value.startsWith(served) && !/[\s/]/.test(value.slice(served.length)) && value.length > served.length;
+  const move = (pair: unknown): pair is [string, string] => Array.isArray(pair) && pair.length === 2 && pair.every(address);
+  if (!validList(moves, move)) {
+    return json({ error: "Malformed redirect entry." }, 400);
+  }
+  const names = checked.files
+    .filter((file) => file.path.startsWith(`${imagesDir}/`))
+    .map((file) => file.path.slice(imagesDir.length + 1));
 
   const message =
     (typeof body.message === "string" ? body.message : "").trim().slice(0, 500) ||
@@ -329,13 +386,98 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
       branch: env.BLOG_BRANCH || undefined,
       message,
       files: checked.files,
+      expect,
+      fresh: { dir: imagesDir, names },
+      remove,
+      redirects: {
+        path: REDIRECTS_PATH,
+        moves,
+        created: names.map((name) => `${served}${encodeURIComponent(servedName(name))}`),
+      },
     });
     return json(result);
   } catch (error) {
-    return json(
-      { error: error instanceof Error ? error.message : "Publish failed." },
-      upstreamStatus(error),
-    );
+    return failed(error, "Publish failed.");
+  }
+}
+
+async function handlePhoto(request: Request, env: Env): Promise<Response> {
+  const denied = await authorize(request, env);
+  if (denied) {
+    return denied;
+  }
+  const raw = await readCapped(request, MAX_PHOTO_BYTES);
+  if (!raw) {
+    return json({ error: "This photo is too large to publish (max 8 MB)." }, 400);
+  }
+  const content = new TextDecoder().decode(raw);
+  if (!content || !/^[A-Za-z0-9+/]+={0,2}$/.test(content)) {
+    return json({ error: "The photo was not sent as base64." }, 400);
+  }
+  try {
+    return json({ sha: await createBlob(githubToken(env), env.BLOG_REPO!, content) });
+  } catch (error) {
+    return failed(error, "Upload failed.");
+  }
+}
+
+async function handleImages(request: Request, env: Env): Promise<Response> {
+  const missing = unreachable(env);
+  if (missing) {
+    return misconfigured(missing, env);
+  }
+  if (await limited(env.SOURCE_RATE, request, "source")) {
+    return tooMany();
+  }
+  const own = new URL(request.url).searchParams.getAll("own").slice(0, 4);
+  const { postsDir, draftsDir, imagesDir } = dirs(env);
+  const branch = env.BLOG_BRANCH || "main";
+  const token = githubToken(env);
+  const served = servedDir(env).slice(1).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  try {
+    const [files, texts, redirects] = await Promise.all([
+      listFiles(token, env.BLOG_REPO!, branch, imagesDir),
+      readTexts(token, env.BLOG_REPO!, branch, [postsDir, draftsDir, trimSlashes(env.PAGES_DIR || "src/pages")]),
+      readTextFile(token, env.BLOG_REPO!, branch, REDIRECTS_PATH),
+    ]);
+    const shared = new Set<string>();
+    for (const { path, text } of texts) {
+      if (!own.includes(path)) {
+        for (const [, file] of text.matchAll(new RegExp(`${served}([^\\s)"'<>?#]+)`, "g"))) {
+          shared.add(stem(decoded(file)));
+        }
+      }
+    }
+    return json({
+      files: files.map((file) => ({ ...file, shared: shared.has(stem(file.name)) })),
+      redirected: redirectSources(redirects?.markdown ?? "").map((source) => decoded(source.split("/").pop()!)),
+    });
+  } catch (error) {
+    return failed(error, "Read failed.");
+  }
+}
+
+async function handleDrafts(request: Request, env: Env): Promise<Response> {
+  const denied = await authorize(request, env);
+  if (denied) {
+    return denied;
+  }
+  if (await limited(env.SOURCE_RATE, request, "source")) {
+    return tooMany();
+  }
+  try {
+    const texts = await readTexts(githubToken(env), env.BLOG_REPO!, env.BLOG_BRANCH || "main", [dirs(env).draftsDir]);
+    const drafts = texts
+      .filter(({ path }) => /\.(md|markdown)$/i.test(path))
+      .map(({ path, text }) => ({
+        path,
+        title: /^title:\s*["']?(.*?)["']?\s*$/m.exec(text.split(/^---\s*$/m, 2).join(""))?.[1] || "",
+        date: /(\d{4}-\d{2}-\d{2})-[^/]*$/.exec(path)?.[1] ?? "",
+      }))
+      .sort((a, b) => b.date.localeCompare(a.date) || a.path.localeCompare(b.path));
+    return json({ drafts });
+  } catch (error) {
+    return failed(error, "Read failed.");
   }
 }
 
@@ -363,22 +505,22 @@ async function handleSource(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const requested = url.searchParams.get("path") ?? "";
   const path = repoPath(requested);
-  const allowed = Object.values(dirs(env)).map((dir) => `${dir.replace(/\/+$/, "")}/`);
+  const allowed = Object.values(dirs(env)).map((dir) => `${dir}/`);
   if (!path || !allowed.some((dir) => path.startsWith(dir))) {
     return json({ error: `Path outside the allowed directories (${allowed.join(", ")}): ${requested}` }, 400);
   }
   if (await limited(env.SOURCE_RATE, request, "source")) {
-    return json({ error: "Too many requests — wait a minute and try again." }, 429);
+    return tooMany();
   }
   if (!/\.(md|markdown)$/i.test(path)) {
     return json({ error: "Only Markdown files can be opened." }, 400);
   }
 
-  const published = path.startsWith(`${dirs(env).postsDir.replace(/\/+$/, "")}/`);
+  const published = path.startsWith(`${dirs(env).postsDir}/`);
   if (published) {
     const missing = unreachable(env);
     if (missing) {
-      return json({ error: missing }, env.GITHUB_TOKEN ? 500 : 501);
+      return misconfigured(missing, env);
     }
   } else {
     const denied = await authorize(request, env);
@@ -389,16 +531,13 @@ async function handleSource(request: Request, env: Env): Promise<Response> {
 
   const branch = env.BLOG_BRANCH || "main";
   try {
-    const markdown = await readTextFile(githubToken(env), env.BLOG_REPO!, branch, path);
-    if (markdown === null) {
+    const file = await readTextFile(githubToken(env), env.BLOG_REPO!, branch, path);
+    if (file === null) {
       return json({ error: await whyMissing(env, branch, path) }, 404);
     }
-    return json({ path, branch, markdown });
+    return json({ path, branch, ...file });
   } catch (error) {
-    return json(
-      { error: error instanceof Error ? error.message : "Read failed." },
-      upstreamStatus(error),
-    );
+    return failed(error, "Read failed.");
   }
 }
 
@@ -425,10 +564,10 @@ async function handlePasskeyChallenge(request: Request, env: Env): Promise<Respo
   }
   const missing = problem(env);
   if (missing) {
-    return json({ error: missing }, env.GITHUB_TOKEN ? 500 : 501);
+    return misconfigured(missing, env);
   }
   if (await limited(env.SOURCE_RATE, request, "passkey")) {
-    return json({ error: "Too many requests — wait a minute and try again." }, 429);
+    return tooMany();
   }
   const { challenge, credentials } = await passkeyStore(env).challenge();
   return json({ challenge, rpId: new URL(request.url).hostname, credentials, algorithms: ALGORITHMS });
@@ -480,10 +619,10 @@ async function handlePasskeyLogin(request: Request, env: Env): Promise<Response>
   }
   const missing = problem(env);
   if (missing) {
-    return json({ error: missing }, env.GITHUB_TOKEN ? 500 : 501);
+    return misconfigured(missing, env);
   }
   if (await limited(env.SOURCE_RATE, request, "passkey")) {
-    return json({ error: "Too many requests — wait a minute and try again." }, 429);
+    return tooMany();
   }
   const body = await readPasskeyBody(request);
   const id = typeof body?.id === "string" && fromBase64url(body.id, 1024) ? body.id : null;
@@ -586,6 +725,17 @@ export default {
       return request.method === "POST"
         ? handlePublish(request, env)
         : json({ error: "Use POST." }, 405);
+    }
+    if (url.pathname === "/api/publish/photo") {
+      return request.method === "POST"
+        ? handlePhoto(request, env)
+        : json({ error: "Use POST." }, 405);
+    }
+    if (url.pathname === "/api/images") {
+      return request.method === "GET" ? handleImages(request, env) : json({ error: "Use GET." }, 405);
+    }
+    if (url.pathname === "/api/drafts") {
+      return request.method === "GET" ? handleDrafts(request, env) : json({ error: "Use GET." }, 405);
     }
     if (url.pathname === "/api/source") {
       return request.method === "GET"

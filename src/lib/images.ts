@@ -23,8 +23,9 @@ export async function blobToBase64(blob: Blob): Promise<string> {
   return bytesToBase64(new Uint8Array(await blob.arrayBuffer()));
 }
 
-const BLOG_MAX_WIDTH = 1760;
-const JPEG_QUALITY = 0.85;
+const MAX_WIDTH = 3840;
+const MAX_BYTES = 4 * 1024 * 1024;
+const MAX_PIXELS = 16_777_216;
 const SHRINKABLE = new Set(["image/jpeg", "image/png"]);
 
 export async function shrinkImage(blob: Blob): Promise<Blob> {
@@ -37,22 +38,39 @@ export async function shrinkImage(blob: Blob): Promise<Blob> {
     image.src = url;
     await image.decode();
     const { naturalWidth, naturalHeight } = image;
-    if (!naturalWidth || !naturalHeight || naturalWidth <= BLOG_MAX_WIDTH) {
+    if (!naturalWidth || !naturalHeight || (naturalWidth <= MAX_WIDTH && blob.size <= MAX_BYTES)) {
       return blob;
     }
     const canvas = document.createElement("canvas");
-    canvas.width = BLOG_MAX_WIDTH;
-    canvas.height = Math.max(1, Math.round((naturalHeight / naturalWidth) * BLOG_MAX_WIDTH));
     const context = canvas.getContext("2d");
     if (!context) {
       return blob;
     }
-    context.imageSmoothingQuality = "high";
-    context.drawImage(image, 0, 0, canvas.width, canvas.height);
-    const shrunk = await new Promise<Blob | null>((resolve) =>
-      canvas.toBlob(resolve, blob.type, JPEG_QUALITY),
-    );
-    return shrunk && shrunk.type === blob.type && shrunk.size < blob.size ? shrunk : blob;
+    let width = Math.min(naturalWidth, MAX_WIDTH, Math.floor(Math.sqrt((MAX_PIXELS * naturalWidth) / naturalHeight)));
+    let quality = 95;
+    let best: Blob | null = null;
+    for (let tries = 0; tries < 20; tries++) {
+      canvas.width = width;
+      canvas.height = Math.max(1, Math.round((naturalHeight / naturalWidth) * width));
+      context.imageSmoothingQuality = "high";
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const drawn = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, blob.type, quality / 100));
+      if (!drawn || drawn.type !== blob.type) {
+        break;
+      }
+      if (!best || drawn.size < best.size) {
+        best = drawn;
+      }
+      if (drawn.size <= MAX_BYTES) {
+        break;
+      }
+      if (blob.type === "image/jpeg" && quality > 70) {
+        quality -= 5;
+      } else {
+        width = Math.max(1, Math.round(width * 0.85));
+      }
+    }
+    return best && !(naturalWidth <= MAX_WIDTH && blob.size <= best.size) ? best : blob;
   } catch {
     return blob;
   } finally {

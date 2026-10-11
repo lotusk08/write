@@ -37,7 +37,7 @@ describe("bridge", () => {
     ["tables", "| a | b |\n|:--|--:|\n| 1 | 2 |\n| 3 | 4 |"],
     ["images and captions", "![alt](/assets/img/post/a.jpg \"Title\")\n*A caption*"],
     ["image rows", "![a](/a.jpg){: .normal .gap }\n![b](/b.jpg){: .normal .gap }\n{: .d-flex .c-center }"],
-    ["galleries", "```gallery fan\n![a](/a.jpg \"one\")\n![b](/b.jpg)\n```"],
+    ["galleries", "```gallery\n![a](/a.jpg \"one\")\n![b](/b.jpg)\n```"],
     ["embeds", "<EmbedYoutube id=\"dQw4w9WgXcQ\" />\n\n<EmbedVideo src=\"/v.mp4\" />"],
     ["footnotes", "A claim[^1].\n\n[^1]: The source."],
     ["rules and attribute lists", "Above\n\n---\n{: .divider }\n\n{: .lead }\nBelow"],
@@ -48,6 +48,12 @@ describe("bridge", () => {
   ])("keeps %s", (_name, markdown) => {
     const expected = docToMarkdown(markdownToDoc(markdown));
     expect(roundTrip(markdown)).toBe(expected);
+  });
+
+  it("writes every gallery as a plain gallery fence", () => {
+    const photos = '![a](/a.jpg "one")\n![b](/b.jpg)';
+    expect(roundTrip(`\`\`\`gallery deck\n${photos}\n\`\`\``)).toBe(`\`\`\`gallery\n${photos}\n\`\`\``);
+    expect(roundTrip("```gallery\nnot a photo\n```")).toBe("```gallery\nnot a photo\n```");
   });
 
   it("keeps a collapsible section and its state", () => {

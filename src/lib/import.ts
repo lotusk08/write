@@ -1,6 +1,6 @@
 import type { JSONContent } from "../editor/doc.ts";
 import type { PostMeta } from "../../shared/types.ts";
-import { EMBED_LIQUID, EMBED_TAG, embedPlatform, isGalleryKind } from "../editor/blog.ts";
+import { EMBED_LIQUID, EMBED_TAG, embedPlatform } from "../editor/blog.ts";
 import { type InlineToken, inlineTokens } from "./inline.ts";
 import { languageOf } from "./topics.ts";
 
@@ -755,12 +755,11 @@ function openingFence(line: string): Fence | null {
 }
 
 function galleryFromFence(info: string, lines: string[]): JSONContent | null {
-  const [name, kind, ...rest] = info.split(/\s+/);
-  if (name !== "gallery" || !isGalleryKind(kind) || rest.length) {
+  if (info.split(/\s+/)[0] !== "gallery") {
     return null;
   }
   const photos: JSONContent[] = [];
-  for (const line of lines) {
+  for (const line of lines.filter((text) => text.trim())) {
     const [image, tail, ...more] = parseInline(line.trim());
     if (image?.type !== "image" || more.length) {
       return null;
@@ -773,7 +772,7 @@ function galleryFromFence(info: string, lines: string[]): JSONContent | null {
     }
     photos.push(image);
   }
-  return photos.length ? { type: "gallery", attrs: { kind }, content: photos } : null;
+  return photos.length ? { type: "gallery", content: photos } : null;
 }
 const MATH = /^\s*\$\$\s*$/;
 const LIQUID = /^\{%[\s\S]*%\}$/;

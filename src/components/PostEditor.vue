@@ -7,7 +7,10 @@ import {
   askLink,
   editCaption,
   insertImages,
+  leaveGallery,
+  moveGalleryPhoto,
   notify,
+  removeGalleryPhoto,
   selectFigure,
   setImageText,
   toggleSection,
@@ -126,10 +129,37 @@ function onShortcut(event: KeyboardEvent): void {
   }
 }
 
+/**
+ * A selected gallery photo holds the focus, so its keys are its own: Delete removes it, ⌥← and ⌥→ move it, and a
+ * character or Enter leaves the gallery for the paragraph after it, the character typed there.
+ */
 function onKeydown(event: KeyboardEvent): void {
-  if (root.value) {
-    handleKeydown(root.value, event);
+  const element = root.value;
+  if (!element) {
+    return;
   }
+  const target = event.target as Element;
+  const photo = target.matches(".is-selected[data-image]") && target.closest("[data-gallery]");
+  const step = event.altKey ? ({ ArrowLeft: -1, ArrowRight: 1 } as const)[event.key as "ArrowLeft"] : undefined;
+  if (photo && (event.key === "Backspace" || event.key === "Delete" || step)) {
+    event.preventDefault();
+    editPhoto(step ?? 0);
+    return;
+  }
+  if (photo && (event.key.length === 1 || event.key === "Enter") && !event.metaKey && !event.ctrlKey) {
+    event.preventDefault();
+    run(leaveGallery);
+    if (event.key !== "Enter") {
+      document.execCommand("insertText", false, event.key);
+    }
+    return;
+  }
+  handleKeydown(element, event);
+}
+
+/** Moves the selected gallery photo back (-1) or on (1), or removes it (0). */
+function editPhoto(step: -1 | 0 | 1): void {
+  run((root) => (step ? moveGalleryPhoto(root, step) : removeGalleryPhoto(root)));
 }
 
 function onInput(event: InputEvent): void {
@@ -143,27 +173,36 @@ function onClick(event: MouseEvent): void {
   if (!element) {
     return;
   }
-  const figure = (event.target as Element).closest<HTMLElement>("figure[data-image]");
+  const target = event.target as Element;
+  if (target.closest(".editor-image-tools")) {
+    return;
+  }
+  const figure = target.closest<HTMLElement>("figure[data-image]");
   selectFigure(element, figure && element.contains(figure) ? figure : null);
+  if (figure?.closest("[data-gallery]")) {
+    figure.focus({ preventScroll: true });
+  }
   refreshTools();
 }
 
-/** A gallery photo's caption is the title its card shows; any other photo's is the line written under it. */
+/** A gallery photo's caption is the alt text its card shows; any other photo's is the line written under it. */
 function photoTool(element: HTMLElement, button: Element): void {
   const figure = button.closest<HTMLElement>("figure[data-image]");
   const img = figure?.querySelector("img");
   if (!figure || !img) {
     return;
   }
-  if (!button.classList.contains("editor-image-caption")) {
-    const value = window.prompt("Alt text (describes the image)", img.getAttribute("alt") ?? "");
+  const gallery = figure.closest("[data-gallery]");
+  if (button.classList.contains("editor-image-edit")) {
+    selectFigure(element, figure);
+    editPhoto(button.textContent === "←" ? -1 : button.textContent === "→" ? 1 : 0);
+  } else if (!button.classList.contains("editor-image-caption") || gallery) {
+    const value = window.prompt(
+      gallery ? "Caption, shown on the card" : "Alt text (describes the image)",
+      (gallery && img.getAttribute("title")) || (img.getAttribute("alt") ?? ""),
+    );
     if (value !== null) {
-      setImageText(element, figure, "alt", value);
-    }
-  } else if (figure.closest("[data-gallery]")) {
-    const value = window.prompt("Caption, shown on the card", img.getAttribute("title") ?? "");
-    if (value !== null) {
-      setImageText(element, figure, "title", value);
+      setImageText(element, figure, value);
     }
   } else {
     editCaption(element, figure);
@@ -239,7 +278,15 @@ function onDrop(event: DragEvent): void {
   }
   event.preventDefault();
   event.stopImmediatePropagation();
-  const caret = document.caretRangeFromPoint?.(event.clientX, event.clientY);
+  const element = root.value;
+  const target = event.target as Element;
+  const photo =
+    target.closest<HTMLElement>("[data-gallery] figure[data-image]") ??
+    target.closest("[data-gallery]")?.querySelector<HTMLElement>("figure[data-image]:last-child");
+  if (element) {
+    selectFigure(element, photo ?? null);
+  }
+  const caret = !photo && document.caretRangeFromPoint?.(event.clientX, event.clientY);
   if (caret) {
     window.getSelection()?.removeAllRanges();
     window.getSelection()?.addRange(caret);

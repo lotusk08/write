@@ -41,12 +41,11 @@ browser.
 - **Callouts.** Quotes can carry the blog's five note styles, exported as
   `{: .note-info }` and friends, plus its centred `{: .author }` attribution.
   Body headings start at H2, since the title lives in front matter.
-- **The blog's own formats.** `{: .filepath}` code, centred image rows
-  (`{: .d-flex .c-center }`), the ```` ```gallery ```` fence — deck, fan, peek
-  or fold, made from a run of photos with one menu — and
-  `<EmbedYoutube id="…" />` players are first-class here — paste a YouTube, X,
-  Spotify, Bilibili or Twitch link and the right component is written for
-  you. Any other attribute list a post carries is kept exactly as written, so
+- **The blog's own formats.** `{: .filepath}` code, the ```` ```gallery ````
+  fence, made from a run of photos with one button (several photos added at
+  once become one), its photos added, moved and removed in place, and
+  `<EmbedYoutube id="…" />` players are first-class here — paste a YouTube, X
+  or Spotify link and the right component is written for you. Any other attribute list a post carries is kept exactly as written, so
   editing a post does not rewrite lines you did not touch.
 - **Seeing what the blog will render.** Mermaid diagrams and Chart.js charts are
   drawn live above their source; embedded videos play in
@@ -54,15 +53,21 @@ browser.
 - **Markdown when you want it.** The **MD** button in the dock swaps the page
   view for the raw Markdown — exactly what gets published — and back.
 - **Editing published posts.** The blog's *Edit this post* button opens the post
-  here (`?edit=src/posts/…`). Its images are left alone — not re-encoded, renamed
-  or re-uploaded — and re-publishing commits back to the file it came from.
+  here (`?edit=src/posts/…`). Its images are not re-encoded or re-uploaded,
+  and re-publishing commits back to the file it came from, refusing if the post
+  changed on the site since it was opened.
+- **The blog's drafts.** The rail's download button lists the drafts in the
+  blog's `src/drafts`; open one, keep it a draft, or publish it as a post, which
+  moves it out of `src/drafts` in the same commit.
 - **Export.** Markdown (with front matter), Word `.docx` (images embedded), a
   self-contained HTML file, or Markdown straight to the clipboard.
 - **Publish.** Commits `src/posts/YYYY-MM-DD-slug.md` — or `src/drafts/…` — plus
-  every image, in one commit. Images are renamed to the blog's flat convention
-  (`public/assets/img/post/<slug>.jpg`, `<slug>-1.jpg`, …), the Markdown is
-  rewritten to point at the address they are served from, and the site's own
-  build converts them to WebP. Publish as Post or Draft; either way it is one
+  every image, in one commit, the photos sent one per request first. Images are
+  named from their alt text (`public/assets/img/post/<slug>-<alt>.jpg`,
+  `<slug>-N.jpg` with none), a published photo whose name no longer follows its
+  alt is renamed and its old address redirected, the Markdown is rewritten to
+  point at the address they are served from, and the site's own build converts
+  them to WebP. Publish as Post or Draft; either way it is one
   commit to the blog's branch.
 
 Drafts sit as vertical tabs along the left edge, Obsidian-style: the draft you

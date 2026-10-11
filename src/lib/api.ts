@@ -2,6 +2,7 @@ import type {
   AppConfig,
   PublishRequest,
   PublishResult,
+  SitePhoto,
   Topic,
   Topics,
 } from "../../shared/types.ts";
@@ -87,6 +88,7 @@ export interface PostSource {
   path: string;
   branch: string;
   markdown: string;
+  sha: string;
 }
 
 export async function fetchPostSource(path: string, password: string): Promise<PostSource> {
@@ -98,6 +100,52 @@ export async function fetchPostSource(path: string, password: string): Promise<P
     throw new Error(`Could not open ${path}.`);
   }
   return source;
+}
+
+export interface SiteDraft {
+  path: string;
+  title: string;
+  date: string;
+}
+
+export async function fetchSiteDrafts(password: string): Promise<SiteDraft[]> {
+  const response = await fetch("/api/drafts", { headers: headers(password) });
+  const result = await readJson<{ drafts?: SiteDraft[] }>(response, "Could not read the site's drafts");
+  return Array.isArray(result.drafts) ? result.drafts : [];
+}
+
+export async function fetchSitePhotos(own: string[]): Promise<{ files: SitePhoto[]; redirected: string[] }> {
+  const query = new URLSearchParams(own.map((path) => ["own", path]));
+  const response = await fetch(`/api/images?${query}`, { headers: { accept: "application/json" } });
+  const result = await readJson<{ files?: SitePhoto[]; redirected?: string[] }>(response, "Could not read the site's photos");
+  return {
+    files: Array.isArray(result.files) ? result.files : [],
+    redirected: Array.isArray(result.redirected) ? result.redirected : [],
+  };
+}
+
+export async function uploadPhoto(contentBase64: string, password: string): Promise<string> {
+  let status = 0;
+  const send = async () => {
+    status = 0;
+    const response = await fetch("/api/publish/photo", {
+      method: "POST",
+      headers: headers(password, { "content-type": "text/plain" }),
+      body: contentBase64,
+    });
+    status = response.status;
+    const result = await readJson<{ sha?: string }>(response, "Could not upload a photo");
+    if (!result.sha) {
+      throw new Error("Could not upload a photo.");
+    }
+    return result.sha;
+  };
+  return send().catch((cause: unknown) => {
+    if (status >= 400 && status < 500) {
+      throw cause;
+    }
+    return send();
+  });
 }
 
 export async function createShareRoom(seed: Uint8Array): Promise<string> {
