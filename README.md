@@ -30,16 +30,23 @@ browser.
   which the blog renders as a real disclosure widget with its body still read
   as Markdown.
 - **Drafts.** Everything is stored locally in IndexedDB and autosaves ~600 ms
-  after you stop typing. Images are kept as blobs so drafts stay small and
-  survive reloads. The open draft renames in place on a double-click and carries
+  after you stop typing, and again as the tab closes or goes to the
+  background. Photos are kept as they arrived and survive reloads; the editor
+  shows a lighter copy, and photos no draft uses are cleared after a day. The open draft renames in place on a double-click and carries
   the delete button.
 - **Front matter.** Title, description, slug (made from the title), date,
   topics, language, cover image, and the `pin` / `toc` switches the blog uses. It is written the
   way the published posts already are — block sequences, no unnecessary
   quoting, empty fields omitted — so re-publishing a post never moves a line
   of its front matter.
-- **Callouts.** Quotes can carry the blog's five note styles, exported as
-  `{: .note-info }` and friends, plus its centred `{: .author }` attribution.
+- **Quotes and callouts.** A plain quote has its own button; quotes can carry
+  the blog's five note styles, exported as `{: .note-info}` and friends, plus
+  its centred `{: .author}` attribution.
+- **Shortcuts.** Markdown as you type (`**bold**`, `[text](url)`, `- [x] `,
+  `---` …) and the ⌘ keys the old editor had; Tab nests list items.
+- **Paste.** From Google Docs, Word or a web page, keeping headings, lists,
+  bold and italic and dropping fonts and colours; pasted Markdown becomes
+  formatting.
   Body headings start at H2, since the title lives in front matter.
 - **The blog's own formats.** `{: .filepath}` code, the ```` ```gallery ````
   fence, made from a run of photos with one button (several photos added at
@@ -61,7 +68,10 @@ browser.
   moves it out of `src/drafts` in the same commit.
 - **Export.** Markdown (with front matter), Word `.docx` (images embedded), a
   self-contained HTML file, or Markdown straight to the clipboard.
-- **Publish.** Commits `src/posts/YYYY-MM-DD-slug.md` — or `src/drafts/…` — plus
+- **Review, then publish.** The publish dialog shows what is about to go out
+  — warnings with their fixes, where it lands, the post as readers see it,
+  each photo with its final name, renames, and a diff against the site — then
+  counts the photos up and links the commit and the live post. Commits `src/posts/YYYY-MM-DD-slug.md` — or `src/drafts/…` — plus
   every image, in one commit, the photos sent one per request first. Images are
   named from their alt text (`public/assets/img/post/<slug>-<alt>.jpg`,
   `<slug>-N.jpg` with none), a published photo whose name no longer follows its

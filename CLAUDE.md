@@ -27,7 +27,12 @@ Reading and writing are not the same privilege, so they are not asked for the
 same way. A published post opens without the password: `src/posts` is on the
 blog already, and the *Edit this post* link should land you in the editor rather
 than at a prompt. Drafts do not — they are the writing nobody has seen — and neither
-does publishing. So the password appears in one place, the publish dialog.
+does publishing. So the password appears in two places, the publish dialog
+and the list of the blog's drafts, and they are one component (`SignIn.vue`,
+its state in `useSignIn.ts`): the same field, the same Passkey button, the
+same sizes, and signing in at either one stops the other asking. The drafts
+list once had its own row, a different height, and asked again after a
+sign-in had worked.
 
 The Worker fails closed: with no `WRITE_PASSWORD` set it refuses to publish at
 all, because it would otherwise be an open endpoint holding a write token. A
@@ -49,7 +54,20 @@ Request bodies are read through `readCapped`, which counts bytes as they
 stream, so a chunked upload cannot be buffered whole before its size is
 known. Reading a published post is public, so it is rate-limited instead
 (`SOURCE_RATE`, sixty a minute per connection): each read spends the
-token's GitHub quota.
+token's GitHub quota. The password is limited too: ten wrong ones from a
+connection block it for fifteen minutes, the right password included, while
+other connections are untouched. The count lives in the `Passkeys` Durable
+Object (`attempt`), so it needs no binding of its own; an empty password is
+not counted, and a passkey session skips it. Before, every authorized route
+compared the password without limit.
+
+Every response, page and API alike, carries a content security policy
+(scripts only from the app, `frame-ancestors 'none'`, photos and media from
+any https address, `frame-src` only YouTube's no-cookie host; inline styles
+allowed because mermaid writes them, and `connect-src https:` so the Word
+export can fetch photos from other sites), plus `Referrer-Policy`,
+`nosniff`, `X-Frame-Options: DENY` and `noindex` (`secured` in
+`worker/index.ts`). A WebSocket upgrade is passed through untouched.
 
 `401` is reserved for that password and nothing else — it is the app's cue to
 forget what it stored and ask again, so GitHub's own 401 and 403 are reported
@@ -99,11 +117,14 @@ its own npm lockfile.
   The publish dialog sits inside that band too: its title and its actions
   stay put and only the middle scrolls, because the password field raises
   the keyboard the moment the dialog opens, and a dialog that scrolled as one
-  piece put Commit below it. The rail is its own stacking context, so the open
-  tab's z-index stops at the rail rather than drawing over the dialog's scrim,
-  and toasts sit under the scrim with the rest of the app.
+  piece put the main button below it. `Dialog.vue` is a native `<dialog>`
+  opened with `showModal()`, so the focus stays inside it, the page behind is
+  inert, Escape closes it and focus goes back where it was; it sits in the top
+  layer, above the selection bubble that used to draw over it. Its `locked`
+  prop ignores Escape while a publish is sending.
 - `worker/index.ts` — the only thing holding a credential. The blog endpoints
-  (`/api/config`, `/api/source`, `/api/publish`, `/api/topics`), the share
+  (`/api/config`, `/api/source`, `/api/publish`, `/api/publish/photo`,
+  `/api/images`, `/api/drafts`, `/api/topics`), the share
   endpoints (`/api/share`, `/api/share/<token>`), a constant-time check on the
   password, and path validation against the configured directories so a leaked
   password cannot rewrite workflows. `worker/share.ts` is the `ShareRoom`
@@ -133,12 +154,46 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   `<b>`, `<i>`, `<div>` lines, a photo dropped into a paragraph — is read too.
 - `config.ts` — the editor's settings and the sanitizer's allowlist. The
   editor sanitizes every value and every paste, so anything `bridge.ts`
-  writes that is not on the list is gone after one pass.
+  writes that is not on the list is gone after one pass. `style` is allowed
+  only on `span`, `td` and `th`: allowed everywhere, a pasted web page kept
+  its fonts and colours on screen though the Markdown dropped them.
+- `paste.ts` — every paste (`pasteClipboard`, from `PostEditor`'s
+  `onPaste`). Pasted HTML is turned into the editor's own HTML
+  (`pastedHtml`): Google Docs' `<b style="font-weight:normal">` wrapper is not
+  bold and the blocks inside it stay blocks, a span both bold and italic
+  keeps both, `font-weight: 600` is not bold, Word's list paragraphs become
+  lists without their `·` and `1.` markers (nested ones flattened to one
+  level), styles, scripts and `javascript:` links are dropped, a figcaption
+  becomes the alt. Plain text that is clearly Markdown is read through
+  `import.ts` into formatting; a code editor's copy, styled spans only,
+  counts as plain text. CRLF is folded. A paste into a heading, mid-line or
+  into a list item keeps its structure, and one into a code block goes in as
+  text, newlines included (WebKit's `insertText` split the block at each).
+  One YouTube, X or Spotify link (or an audio or video file address) pasted
+  alone, as a full `http(s)` address with nothing selected, becomes its
+  embed; a bare word never does, since `embedFromUrl` reads any eleven
+  characters as a YouTube id. A single line, inline HTML and code go in
+  through the browser's own commands, so undo takes them back; a paste of
+  several blocks is inserted by hand and ends with `notify`, and cannot be
+  undone: Chrome's `insertHTML` wrapped merged blocks in styled spans.
 - `commands.ts` — every toolbar action, edited straight on the DOM: the
   browser's own commands for headings, marks, lists and links, and the
   blog's blocks — callouts, sections, footnotes, photos, galleries,
   players, tables. Each ends with `notify`, an `input` event that is
-  how the editor learns its content changed under it. The editor's own
+  how the editor learns its content changed under it. Any DOM change made
+  while a key or a paste is handled must call it too: missed, the editor
+  wrote back its stale copy and the caret jumped to the top, which is what
+  Enter in a ticked task did. Highlight and inline code take off only the
+  part of a mark selected, apply to the word at a collapsed caret, and format
+  each block of a selection that crosses several. A link with nothing
+  selected inserts the address as its own link; the bubble's link button
+  starts from the current address, and an empty answer removes the link. The
+  footnote button puts its marker after the selection rather than over it.
+  Switching a list's kind converts the whole list, turning one off leaves
+  paragraphs, and the code block button turns a block back into one
+  paragraph. An embed link the blog cannot draw says what it can; a bare
+  YouTube id must be eleven characters, and an audio or video file address
+  makes `EmbedAudio` or `EmbedVideo`. The editor's own
   toolbar, menubar and status bar are off: the app draws its toolbar in the
   dock as it always did (`Toolbar.vue`, teleported from `PostEditor`), the
   bubble over selected text (`SelectionBubble.vue`), and the alt-text and
@@ -153,7 +208,16 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   lost: `[ ]` for a task list (in a bullet item too) and `---` for a divider,
   `**bold**`, `*italic*`/`_italic_`, `~~strike~~`, `==highlight==` and
   `` `code` `` turned into the mark as the closing character is typed (never
-  inside code, not mid-word for `_`), and the ⌘ keys beyond the editor's own
+  inside code, never mid-word: a word is `\p{L}\p{N}`, so `Hồ_Chí_` and
+  `ồ*b*` stay plain where an ASCII `\w` made them italic). Bold, italic,
+  strike and links go through the browser's own commands, so ⌘Z undoes each
+  one step at a time; code and highlight have no command, so the text typed
+  straight after one is moved out of the mark, where Chrome kept typing
+  inside it. `[t](url)` becomes a link (an image `![a](b)` is left alone),
+  `- [x] ` a ticked task, `3. ` a list starting at 3, `` `x`{: .filepath} `` a
+  file path. Tab and Shift+Tab nest and lift list items and Tab indents in a
+  code block; Enter on an empty last line leaves a code block or a section,
+  and a typed fence leaves a paragraph after the block. And the ⌘ keys beyond the editor's own
   ⌘B, ⌘I, ⌘⇧X, ⌘K and undo: ⌘E code, ⌘⇧H highlight, ⌘. and ⌘, super- and
   subscript, ⌘⇧7/8/9 lists, ⌘⇧B quote, ⌘⇧D section, ⌥⌘C code block, ⌥⌘0
   paragraph, ⌥⌘1–4 headings (1 is H2, as the blog has no H1). Keys are read
@@ -162,7 +226,11 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   callouts.
 - `decorate.ts` — what is shown but not kept: players, section toggles,
   gallery labels, photo tools, mermaid and chart previews, local photos
-  resolved to blob URLs. A photo's attribute list is previewed only for
+  resolved to blob URLs — a 1600px display copy (`resolveDisplaySrc` in
+  `db.ts`), never the original, see *Publishing format*. The photo tools
+  are told apart by `data-step` (`-1`, `0`, `1`), not their glyphs; read by
+  text, any new button there removed the photo. Chart colours are read from
+  the CSS tokens (`render.ts`). A photo's attribute list is previewed only for
   `.light` and `.dark`, which the blog still draws; `.left`, `.right`,
   `.shadow`, `.w-*`, `.rounded-*` and `w=`/`h=` are kept in the markdown but
   no longer shown, since the blog's renderer drops them. Those elements carry `data-transient`, which
@@ -185,7 +253,19 @@ checked out beside this repository that half of the suite is skipped.
 Not carried over from Tiptap: remote carets in a shared draft, and Tiptap's
 typography input rules (the site's own
 typographer handles quotes and dashes). The editor's undo is the browser's,
-so a change made by one of the blog's tools is not always undoable.
+so what the blog's tools change on the DOM by hand — lists, quotes,
+sections, galleries, photos, code and highlight, a paste of several blocks —
+is outside it; `insertHTML` would put them in, but Chrome rewrote `<code>`
+as a styled span.
+
+The editor library is patched (`patches/@erag+text-editor-vue+1.3.0.patch`,
+reapplied by `postinstall: patch-package`): its hidden preview no longer
+sanitizes the whole post on every render, four times a keystroke, and its
+own format-state polling runs only when its own toolbar or menubar is shown,
+which they are not. The app reads its tools at most once a frame, from
+`selectionchange`. A keystroke in a 5,200-word post with 80 photos went from
+72–93ms of main-thread work to 21–23ms, and from about 380ms to 120ms at 4×
+CPU.
 
 ## Publishing format
 
@@ -214,6 +294,18 @@ Body output follows the blog too: headings start at H2, images are committed
 under `public/assets/img/post` and written as `/assets/img/post/…`, and
 blockquotes can carry the site's `{: .note-* }` callout classes, written
 `{: .note-info}` with no space inside, as 128 of the blog's 136 are.
+
+Plain text is written so the site reads it as text (`escapePlain` in
+`markdown.ts`). At the start of a line `# `, `##### `, `- `, `+ `, `1. `,
+`2020. `, `>`, `{:` and `---` are escaped, and so is a line of `===` or
+`---` under one, which the site reads as a heading; `|` is escaped
+everywhere, since the blog's `content.js` makes any line with a pipe a table
+row; `&` only before what would be an entity, and entities are decoded when a
+post is read, as markdown-it does. A paragraph saying `a | b`, `1. not a
+list` or `&copy;` used to be a table, a list or a © on the site while the
+editor showed the text. A link address with an unbalanced `)` is written
+`[x](<…>)`. A section's summary is written as escaped plain text, which is
+what the site shows.
 
 An embed is one of the blog's components — `<EmbedYoutube id="…" />`, and
 `src=` rather than `id=` for `EmbedVideo` and `EmbedAudio`. A Liquid include is
@@ -278,14 +370,36 @@ PNG, which is what keeps alpha; any other format is uploaded whole. The
 drawn area is capped at 16,777,216 pixels, Safari's canvas limit: a 48 MP
 portrait at 3840 wide (3840×5120) is past it, and the original was sent.
 
+A JPEG is drawn once per width and only encoded again for each quality
+step. Base64 is the browser's `Uint8Array.prototype.toBase64` where there is
+one, `btoa` in chunks otherwise (`shared/base64.ts`): the hand-written loop
+took 0.8–2s and 159 MB of heap for a 4 MB photo.
+
+The draft keeps the original, but the editor shows a 1600px display copy,
+made once on first show and stored beside it (`display`, `resolveDisplaySrc`
+in `db.ts`); a 48 MP photo decoded is about 186 MB, and 80 originals in a
+gallery decoded to 3.7 GB against 586 MB for the copies — enough to crash a
+phone's tab. The first show makes the copies one at a time (about 9s for 80
+12 MP photos on a laptop), after that they are instant. The copies' object
+URLs are released when the editor unmounts. Deleting a draft removes the
+photos only it used, and photos no draft uses are swept about 5s after the
+app opens once they are a day old (`sweepImages`), so another open tab can
+still undo a deletion; before, the store only grew. Every IndexedDB
+transaction is committed eagerly (`transaction.commit()` in `tx()`) and the
+pending save is written on `pagehide` and when the page is hidden: the last
+three quarters of a second typed before a reload, a closed tab or an iPhone
+switching apps used to be lost.
+
 Photos go up one per request: `POST /api/publish/photo` takes one photo as
 base64 text (8 MB cap) and returns its git blob sha, and `/api/publish` then
 commits the markdown with every photo as `{path, sha}` in one commit, so a
 publish holds as many photos as the 50-file limit allows and makes about
 eight GitHub calls however many there are. Each photo is shrunk only then,
 sent one at a time, retried once after a network failure or a 5xx (a 400 is
-not sent again), and the button counts them ("Photo 2 of
-7…"). A publish used to carry every photo in one body under the Worker's
+not sent again), and the dialog counts them ("Photo 2 of 7 · name"); Cancel
+aborts the uploads (`uploadPhoto` takes a signal) until the commit starts. A
+photo over 8 MB in a format that is not reduced (GIF, WebP, HEIC) is caught
+before anything is sent and named in the review. A publish used to carry every photo in one body under the Worker's
 20 MB cap, three or four full-size photos at once, and its advice to publish
 fewer meant taking photos out of a post being edited.
 Downscaling works on an iPhone — it was only a WebP encoder WebKit lacked,
@@ -304,8 +418,10 @@ A photo is named from its alt: `<slug>-<alt>`, the alt folded to ASCII
 boundary; `<slug>-N` with no alt, and a new cover from its alt or
 `<slug>-cover`. A name is never one any file in `public/assets/img/post`
 already has, extension aside, nor a source in `src/redirects.txt`:
-`/api/images` lists the folder (name and sha per file, one tree call and one
-GraphQL query) and, given the post's own files (`?own=`), says of each photo
+`/api/images` lists the folder (name and sha per file, through GraphQL,
+which has no cap where the contents API stopped at 1,000 files — past them a
+clash would have gone unseen; the commit-time check reads it the same way)
+and, given the post's own files (`?own=`), says of each photo
 only whether another file uses it (`shared`). It needs no password, so it
 never names posts or drafts; it used to list every path using each photo. A
 clash takes `-2`, `-3` …, and the worker checks again against the
@@ -367,6 +483,58 @@ WebP the build made of it (`convertedSrc`: a JPEG, PNG or TIFF under
 images did this already; the cover in the post panel did not, and showed a
 broken image. The mindmap, which cannot try twice, is handed the WebP's
 address outright.
+
+## The publish dialog
+
+Publishing is a review before it is a send (`PublishDialog.vue`, the plan
+from `buildPublishPlan`). Review shows, in order: warnings, each with the
+button that fixes it — a photo with no caption (it would be named
+`<slug>-N`) selects the photo, no description opens the post panel, a photo
+over 8 MB that will not be reduced blocks the publish and names the file, a
+copy with no sha offers *Open the site version*, a photo missing from this
+browser's storage; then Post or Draft with the repo path and the live link;
+a card of the post as readers see it (cover, title, date, description,
+topics); the photos with their final names, sizes and a *reduced* badge
+(decided from size and width, without shrinking at review time, since a
+48 MP photo takes seconds), shown from their display copies; the renames
+`old → new`; a collapsed line diff against the site's file (`src/lib/diff.ts`,
+the file fetched once); the commit message, collapsed; and the sign-in. The
+main button names what it does — *Publish post*, *Save draft*, *Update post*
+— and when it is disabled the reason is beside it. It used to say Commit for
+both, show the repo paths and the first 4,000 characters of raw markdown, and
+none of the names, renames or redirects the plan already held.
+
+Post or Draft follows where the draft came from (`publishedPath` under
+`src/drafts` is Draft, anything else Post) each time the dialog opens; it was
+one setting for every draft, so a post opened after a site draft was
+published as a new draft file. Sending keeps the dialog's size, makes the
+body inert, and turns the footer into a progress row with Cancel; Escape is
+ignored. Done shows what went up with *View commit* and *Open post*, Done
+focused, in place of the toast. An error comes back as the first warning with
+its way out: a changed post offers the site version (keeping this draft as a
+copy), a post already at the address opens the post panel to change the title
+or date, a race, a name clash or a network failure offer *Try again*, which
+rebuilds the plan first, and a 401 focuses the sign-in. On a phone the dialog
+is a bottom sheet with a sticky footer.
+
+## Styles
+
+Sizes come from tokens on `:root` in `src/styles.css`. One control height,
+`--control-h`, 34px with a mouse and 44px under `pointer: coarse`, is used by
+`.btn`, `.btn.icon`, `.input`, `.tool`, the toggles, menu tabs and header
+buttons, the rail's delete and checkbox rows; with none, buttons were 32px,
+inputs 34 (38 on touch) and tools 36, so a button beside an input never lined
+up and touch targets fell short of 44 — the password field and the Passkey
+button were two heights. A small type scale and radius tokens replace stray
+px values; the 30px title and the 16px inputs that keep iOS from zooming stay
+as they are. `--faint` is `#6e6e73` light and `#8e8e93` dark, at least 4.5:1
+on every surface (it was 3.44:1 and 4.02:1). With a mouse the toolbar wraps
+onto a second row, where eight tools hid behind a sideways scroll; on a phone
+it stays a strip that snaps per tool behind the edge fade. A selected
+gallery photo shows its caption full width, then ←, → and Remove as tools.
+The gallery strip snaps to each photo. A menu that is only items is
+`role="menu"` with focus moved in and ↑ ↓ Home End moving through it
+(`useFloatingMenu.ts`); one that holds a form is a dialog.
 
 ## Topics and language
 
@@ -554,7 +722,11 @@ draws every one of these lines differently:
   where a line begins, which is the one place it would be a quote. The site
   runs markdown-it's typographer, narrowed to what kramdown wrote: escaping
   either bracket put `<<` and `>>` into the post instead of the guillemets
-  they stand for.
+  they stand for. The line-start, `|` and `&` escapes under *Publishing
+  format* are the only others.
+
+All 89 files also render on the site exactly as their source does since the
+plain-text escaping (87 before: two quote lines had lost a `\|`).
 
 Things that took a bug to learn, and that a change here can quietly undo:
 
@@ -566,9 +738,13 @@ Things that took a bug to learn, and that a change here can quietly undo:
   schema has no inline image, and one left there threw the editor out.
 - `<details>` is written without kramdown's `markdown="1"`, which markdown-it
   has no use for: an HTML block ends at the blank line after the `<summary>`,
-  so the body is read as Markdown either way. It is read back as raw blocks
-  rather than a collapsible node, which is why a section a post already carries
-  is written out exactly as it was found, `markdown="1"` and all.
+  so the body is read as Markdown either way. It is read back as a
+  collapsible node, the `<details>` check made before the raw-HTML one, so a
+  section survives the Markdown source view instead of coming back as raw
+  HTML.
+- A table whose every line is a row of pipes, with no header line — how the
+  blog's `content.js` draws one — opens as a table and is written back as it
+  was.
 - A list marker indented four spaces or more is not a list — it continues the
   block above. Tabs indent by columns, not by one character.
 - An image and the line under it are one paragraph, and the blog styles that
@@ -720,7 +896,15 @@ Things that took a bug to learn, and that a change here can quietly undo:
   the editor, Delete or Backspace removes it, ⌥← and ⌥→ move it, and the
   same three appear as 44px buttons under it, for a phone. A gallery left
   with one photo becomes a plain image, and one left with none an empty
-  paragraph. A table keeps the cursor
+  paragraph. A photo outside a gallery behaves the same way when tapped: it
+  takes the focus, Backspace removes it with its caption line, and typing
+  goes on in a new paragraph after it. On Android, whose keyboards report
+  `Unidentified`, and under an input method composing Vietnamese, leaving a
+  selected photo happens on `beforeinput` and `compositionstart`, and the
+  browser inserts the text itself (written for, not tried on, a device). A
+  caption edit redraws the photo tools on the next frame, after the editor has
+  read it; redrawn at once they were drawn twice. Backspace at the start of
+  the line under a photo removes only the photo. A table keeps the cursor
   in its first cell, with a paragraph made under it to leave by.
 - `#` types an H2, as `##` does: the title is the page's only H1 and the
   contents start at H2. A post that has an H1 (or an H5) opens with it and
@@ -768,8 +952,8 @@ under its neighbour, fanned out by hover. A phone has no hover, and ten drafts
 were ten strips a few pixels high with no title on any of them. On a coarse
 pointer a deck of more than one sheet is a single target that opens a list of
 every draft by title, each row 44px, scrolling inside the visible band; a deck
-of one still opens its draft directly. The open tab's delete button is 32px
-there.
+of one still opens its draft directly. The open tab's delete button is 44px
+there, and only shows on hover with a mouse.
 
 The menu sheet covers the ⌘ button that opened it, so on a phone it carries
 its own close button, and closing it from inside — that button or Escape —
@@ -780,9 +964,15 @@ hands focus back to ⌘.
 The Share tab holds one switch and a name — no password. The password guards
 the blog, and a share room holds no credential: the draft is copied into a
 `ShareRoom` Durable Object and the app hands back `?share=<token>`, and that
-token is the whole credential, for joining and for ending alike — the link
-opens the same live document for anyone holding it, the same trade `?edit=`
-makes. What an open create endpoint gives away is bounded instead of gated: a
+token is the whole credential for joining — the link opens the same live
+document for anyone holding it, the same trade `?edit=` makes. Ending is
+not: creating a room returns an owner key too, which the draft keeps, and
+only that key can delete the room (a room made before the key existed can
+still be ended as it was). A message over 1 MB closes its connection, and a
+room past 8 MB stops saving, disconnects everyone and goes back to its last
+saved state. `share.ts` and Yjs are loaded only when a share starts or a share
+link opens (the names, colours and link the app needs at once are in
+`participants.ts`), which took 22 kB gzipped off every load. What an open create endpoint gives away is bounded instead of gated: a
 seed is capped at ~4 MB, and a room deletes itself after 14 idle days through
 a Durable Object alarm (open sockets and fresh edits push the expiry out, and
 the alarm re-arms itself), so neither an abandoned link nor a stranger
@@ -892,16 +1082,23 @@ used to open the local draft without
 asking, and the publish overwrote whatever had changed on the site since. A
 draft never published from here sends `expect {path, sha: ""}`, and the
 worker refuses to write over a post already at that path ("The site already
-has a post at … Change its title or date, then publish."). A push landing at the same moment is "Someone published at
+has a post at … Change its title or date, then publish."). `expect` is a
+list, so a publish that moves a post — a new slug or date, or a draft
+promoted to `src/posts` — guards its new address with `sha: ""` as well as
+the old one; moved, it used to overwrite whatever post sat there. The
+commit's reads that depend only on the head — the stale checks, the folder
+listing, the commit, `redirects.txt` — run together. A push landing at the same moment is "Someone published at
 the same moment. Publish again." rather than GitHub's 422.
 
 The blog's own drafts open from the rail's download button, beside the
 "+": a list of every file in `src/drafts` (`GET /api/drafts`, password or
 session, one GraphQL read like `/api/images`: the title from front matter,
-the date from the file name, newest first), each row 44px, with a password
-field in place when the password is missing or wrong. Opening one is
+the date from the file name, newest first; titles read as YAML strings,
+`yamlScalar`, so an escaped quote does not show its backslash), each row
+44px. The list is a dialog rather than a menu, since it holds the sign-in,
+and opening it focuses the password field. Opening one is
 `importPost`, as `?edit=` is, so the stale guard, the sha, the alt renames
-and the round trip all apply, and the target is set to Draft. Published as
+and the round trip all apply. Published as
 Draft it is written back to its own file. Published as Post, or under a new
 slug, it is written to its new path and the old draft file removed in the
 same commit (`leavesDraft` in `publish.ts`), the stale check made against
