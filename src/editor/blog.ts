@@ -58,10 +58,18 @@ export function embedPlatform(component: string): string | null {
   return (PLATFORMS as readonly string[]).includes(platform) ? platform : null;
 }
 
+const MEDIA_FILE = /^(?:https?:\/\/|\/(?!\/))\S+\.(mp3|m4a|aac|ogg|oga|opus|wav|flac|mp4|m4v|webm|mov|ogv)(?:[?#]\S*)?$/i;
+
+const AUDIO = new Set(["mp3", "m4a", "aac", "ogg", "oga", "opus", "wav", "flac"]);
+
 export function embedFromUrl(value: string): { platform: string; id: string } | null {
   const url = value.trim();
+  const media = MEDIA_FILE.exec(url);
+  if (media) {
+    return { platform: AUDIO.has(media[1].toLowerCase()) ? "audio" : "video", id: url };
+  }
   const youtube =
-    /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{6,})/.exec(url);
+    /(?:youtube\.com\/(?:watch\?(?:.*&)?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([\w-]{11})/.exec(url);
   if (youtube) {
     return { platform: "youtube", id: youtube[1] };
   }
@@ -73,7 +81,7 @@ export function embedFromUrl(value: string): { platform: string; id: string } | 
   if (spotify) {
     return { platform: "spotify", id: spotify[1] };
   }
-  return /^[\w-]{6,}$/.test(url) ? { platform: "youtube", id: url } : null;
+  return /^[\w-]{11}$/.test(url) ? { platform: "youtube", id: url } : null;
 }
 
 export function embedUrl(platform: string, id: string): string | null {

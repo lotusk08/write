@@ -59,16 +59,13 @@ onBeforeUnmount(() => {
 });
 
 const embed = () => {
-  const url = window.prompt(
-    "Video, post or song URL (YouTube, X, Spotify)",
-    "https://www.youtube.com/watch?v=",
-  );
-  if (!url) {
+  const url = window.prompt("Link to embed: a YouTube video, an X post, a Spotify track, or an audio or video file", "");
+  if (!url?.trim()) {
     return;
   }
   const found = embedFromUrl(url);
   if (!found) {
-    window.alert(`Could not find a video id in: ${url}`);
+    window.alert(`The blog can't embed this link:\n${url}\n\nIt embeds YouTube videos, X posts, Spotify tracks, and audio or video files (.mp3, .mp4 …).`);
     return;
   }
   props.run((root) => insertEmbed(root, found));

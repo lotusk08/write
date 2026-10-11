@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
-import { format, selectionIn, setLink, toggleInline } from "../editor/commands.ts";
+import { askLink, format, selectionIn, toggleInline } from "../editor/commands.ts";
 import type { ToolState } from "../editor/tools.ts";
 import { viewportBand } from "../lib/viewport.ts";
 import Icon from "./Icon.vue";
@@ -68,19 +68,12 @@ onBeforeUnmount(() => {
   window.removeEventListener("resize", follow);
 });
 
-const link = () => {
-  const href = window.prompt("Link URL", "https://");
-  if (href) {
-    props.run((root) => setLink(root, href.trim()));
-  }
-};
-
 const buttons: { icon: IconName; label: string; active: () => boolean; press: () => void }[] = [
   { icon: "bold", label: "Bold", active: () => props.tools.bold, press: () => props.run((root) => format(root, "bold")) },
   { icon: "italic", label: "Italic", active: () => props.tools.italic, press: () => props.run((root) => format(root, "italic")) },
   { icon: "highlight", label: "Highlight", active: () => props.tools.highlight, press: () => props.run((root) => toggleInline(root, "mark")) },
   { icon: "code", label: "Inline code", active: () => props.tools.code, press: () => props.run((root) => toggleInline(root, "code")) },
-  { icon: "link", label: "Link", active: () => props.tools.link, press: link },
+  { icon: "link", label: "Link", active: () => props.tools.link, press: () => props.run(askLink) },
 ];
 </script>
 

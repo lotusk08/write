@@ -29,7 +29,7 @@ import {
  * `*italic*`, `~~strike~~`, `==highlight==` and `` `code` `` once closed.
  */
 
-const FLOWING = "blockquote, [data-collapsible-content]";
+const FLOWING = "blockquote, [data-collapsible-content], [data-footnote]";
 
 const FENCE_OPENER = /^(?:`{3,}|~{3,})([^`]*)$/;
 
@@ -87,6 +87,11 @@ function fenceToCode(block: HTMLElement): boolean {
   } else {
     block.replaceWith(pre);
   }
+  if (!pre.nextElementSibling) {
+    const after = document.createElement("p");
+    after.append(document.createElement("br"));
+    pre.after(after);
+  }
   placeCaret(code, false);
   return true;
 }
@@ -142,6 +147,17 @@ function enter(root: HTMLElement): boolean {
   if (block.matches("td, th")) {
     return cellBelow(root, block as HTMLTableCellElement);
   }
+  const pre = block.closest("pre");
+  if (pre) {
+    const before = nodeBefore(range);
+    if (!range.collapsed || !caretAtEnd(pre, range) || before?.nodeName !== "BR") {
+      return false;
+    }
+    before.parentNode?.removeChild(before);
+    continueAfter(pre);
+    notify(root);
+    return true;
+  }
   if (block.matches("[data-collapsible-summary]")) {
     const body = block.parentElement?.querySelector(":scope > [data-collapsible-content]");
     const first = body?.firstElementChild;
@@ -162,9 +178,10 @@ function enter(root: HTMLElement): boolean {
     return true;
   }
   const empty = !block.textContent?.replace(/\u200b/g, "") && !block.querySelector("img, sup");
-  const quote = block.parentElement?.closest("blockquote");
-  if (empty && quote && block === quote.lastElementChild && quote.parentElement) {
-    quote.after(block);
+  const container = block.parentElement;
+  const leaving = container?.matches("blockquote") ? container : container?.closest("[data-collapsible]");
+  if (empty && leaving && container !== root && block === container?.lastElementChild && leaving.parentElement) {
+    leaving.after(block);
     placeCaret(block, false);
     notify(root);
     return true;
@@ -186,7 +203,7 @@ const paragraph: Command = (root) => {
   notify(root);
 };
 
-/** The ⌘ shortcuts the Tiptap editor had, beyond the editor's own ⌘B, ⌘I, ⌘⇧X, ⌘K and undo. */
+/** The ⌘ shortcuts the Tiptap editor had, beyond the editor's own ⌘B, ⌘I, ⌘⇧X, ⌘K and undo (⌘B and ⌘I are taken here in a table cell, where the editor's table handling swallows them). */
 const KEYS: Record<string, Command> = {
   e: (root) => toggleInline(root, "code"),
   "shift+h": (root) => toggleInline(root, "mark"),
@@ -205,6 +222,90 @@ const KEYS: Record<string, Command> = {
   "alt+4": (root) => toggleHeading(root, 4),
 };
 
+/** Keeps the caret where it was across a move of the nodes around it; a moved node collapses any Range inside it. */
+function keepingCaret(move: () => void): void {
+  const range = window.getSelection()?.rangeCount ? window.getSelection()!.getRangeAt(0) : null;
+  const caret = range ? { node: range.startContainer, offset: range.startOffset } : null;
+  move();
+  if (caret?.node.isConnected) {
+    const restored = document.createRange();
+    restored.setStart(caret.node, caret.offset);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(restored);
+  }
+}
+
+/** Tab nests a list item under the one above it and Shift+Tab lifts it out, as the posts nest lists; in code it indents. */
+function tab(root: HTMLElement, out: boolean): boolean {
+  const block = currentTextblock(root);
+  if (!block) {
+    return false;
+  }
+  if (block.closest("pre")) {
+    if (!out) {
+      document.execCommand("insertText", false, "  ");
+    }
+    return true;
+  }
+  const item = block.closest("li");
+  const list = item?.parentElement;
+  if (!item || !list || block.closest("td, th")) {
+    return false;
+  }
+  const nested = (holder: Element) => {
+    const last = holder.lastElementChild;
+    if (last?.tagName === list.tagName) {
+      return last;
+    }
+    const sub = list.cloneNode(false) as HTMLElement;
+    sub.removeAttribute("start");
+    holder.append(sub);
+    return sub;
+  };
+  if (!out) {
+    const previous = item.previousElementSibling;
+    if (previous?.tagName === "LI") {
+      keepingCaret(() => nested(previous).append(item));
+    }
+    return true;
+  }
+  const parentItem = list.parentElement;
+  if (parentItem?.tagName !== "LI" || !root.contains(parentItem)) {
+    return true;
+  }
+  keepingCaret(() => {
+    const rest = [...list.children].slice([...list.children].indexOf(item) + 1);
+    if (rest.length) {
+      nested(item).append(...rest);
+    }
+    parentItem.after(item);
+    if (!list.children.length) {
+      list.remove();
+    }
+  });
+  return true;
+}
+
+/** Backspace at the start of the line under a photo takes the photo, not the line: the browser, even deleting the photo alone, joined the paragraphs either side. */
+function removePhotoBefore(root: HTMLElement): boolean {
+  const range = selectionIn(root);
+  const block = currentTextblock(root);
+  const photo = block?.previousElementSibling;
+  if (!range?.collapsed || !block || !photo?.matches("figure[data-image]")) {
+    return false;
+  }
+  const start = document.createRange();
+  start.setStart(block, 0);
+  start.setEnd(range.startContainer, range.startOffset);
+  if (start.toString() !== "" || start.cloneContents().querySelector("img, br, sup")) {
+    return false;
+  }
+  photo.remove();
+  placeCaret(block, false);
+  notify(root);
+  return true;
+}
+
 /** By the key's place, not its character: ⌥ and ⇧ change the character on a Mac. */
 const keyName = (code: string) => code.replace(/^(?:Key|Digit)/, "").toLowerCase().replace("period", ".").replace("comma", ",");
 
@@ -221,6 +322,20 @@ export function handleKeydown(root: HTMLElement, event: KeyboardEvent): boolean 
     }
     return false;
   }
+  const cellMark = mod && !event.altKey && !event.shiftKey && { KeyB: "bold", KeyI: "italic" }[event.code];
+  if (cellMark && currentTextblock(root)?.matches("td, th")) {
+    event.preventDefault();
+    format(root, cellMark);
+    return true;
+  }
+  if (event.key === "Tab" && !mod && !event.altKey && tab(root, event.shiftKey)) {
+    event.preventDefault();
+    return true;
+  }
+  if (event.key === "Backspace" && !mod && !event.altKey && removePhotoBefore(root)) {
+    event.preventDefault();
+    return true;
+  }
   const key = mod && KEYS[`${event.altKey ? "alt+" : ""}${event.shiftKey ? "shift+" : ""}${keyName(event.code)}`];
   if (key) {
     event.preventDefault();
@@ -234,6 +349,8 @@ type Shortcut = (root: HTMLElement) => void;
 
 const TASK = /^(?:[-*] )?\[[ xX]?\] $/;
 
+const NUMBERED = /^(\d{1,9})[.)] $/;
+
 const SHORTCUTS: [RegExp, Shortcut][] = [
   [/^#{1,2} $/, () => document.execCommand("formatBlock", false, "h2")],
   [/^### $/, () => document.execCommand("formatBlock", false, "h3")],
@@ -241,59 +358,159 @@ const SHORTCUTS: [RegExp, Shortcut][] = [
   [/^(?:>>>|:::) $/, (root) => setCollapsible(root)],
   [/^> $/, (root) => togglePlainQuote(root)],
   [/^[-*] $/, () => document.execCommand("insertUnorderedList")],
-  [/^1[.)] $/, () => document.execCommand("insertOrderedList")],
+  [NUMBERED, () => document.execCommand("insertOrderedList")],
   [TASK, (root) => toggleList(root, "task")],
   [/^(?:---|\*\*\*|___) $/, insertRule],
 ];
 
 const MARKS: [RegExp, string][] = [
-  [/\*\*([^*\s](?:[^*]*[^*\s])?)\*\*$/, "strong"],
-  [/(?<![*\w])\*([^*\s](?:[^*]*[^*\s])?)\*$/, "em"],
-  [/(?<![_\w])_([^_\s](?:[^_]*[^_\s])?)_$/, "em"],
-  [/~~([^~\s](?:[^~]*[^~\s])?)~~$/, "s"],
-  [/==([^=\s](?:[^=]*[^=\s])?)==$/, "mark"],
-  [/`([^`]+)`$/, "code"],
+  [/\*\*([^*\s](?:[^*]*[^*\s])?)\*\*$/u, "strong"],
+  [/(?<![*\p{L}\p{N}])\*([^*\s](?:[^*]*[^*\s])?)\*$/u, "em"],
+  [/(?<![_\p{L}\p{N}])_([^_\s](?:[^_]*[^_\s])?)_$/u, "em"],
+  [/~~([^~\s](?:[^~]*[^~\s])?)~~$/u, "s"],
+  [/==([^=\s](?:[^=]*[^=\s])?)==$/u, "mark"],
+  [/`([^`]+)`$/u, "code"],
 ];
 
-/** A mark typed in Markdown, turned into the mark once its closing character is typed. */
-function markShortcut(root: HTMLElement): boolean {
-  const range = selectionIn(root);
-  const node = range?.startContainer;
-  if (!range?.collapsed || node?.nodeType !== 3 || node.parentElement?.closest("code, pre")) {
-    return false;
+const LINK = /(?<!!)\[([^\]\n]+)\]\(([^()\s]+)\)$/;
+
+const FILEPATH = /^\{:\s*\.filepath\s*\}$/;
+
+/** The marks the browser has a command for, so the change is in its undo history and it stops the mark for what is typed next. */
+const COMMANDS: Record<string, string> = { strong: "bold", em: "italic", s: "strikeThrough" };
+
+/**
+ * A mark made by hand, and the text it was made with. The browser carries the formatting at a mark's end into
+ * what is typed next, so `` `x` y `` went on in code; whatever lands inside it after the shortcut is moved out.
+ */
+const made = new WeakMap<HTMLElement, { mark: Element; text: string }>();
+
+function moveTypingOut(root: HTMLElement): void {
+  const pending = made.get(root);
+  if (!pending) {
+    return;
   }
-  const text = (node as Text).data.slice(0, range.startOffset);
+  const { mark, text } = pending;
+  const now = mark.textContent ?? "";
+  if (!mark.isConnected || now === text) {
+    return;
+  }
+  made.delete(root);
+  if (!now.startsWith(text)) {
+    return;
+  }
+  const outside = document.createTextNode(now.slice(text.length));
+  mark.textContent = text;
+  mark.after(outside);
+  const range = document.createRange();
+  range.setStart(outside, outside.length);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+  notify(root);
+}
+
+/** The Markdown typed just before the caret, if it closes a mark or a link: the tag, its text, its address, and how much it covers. */
+function typedMark(text: string): { tag: string; inner: string; href?: string; length: number } | null {
+  const link = LINK.exec(text);
+  if (link) {
+    return { tag: "a", inner: link[1], href: link[2], length: link[0].length };
+  }
   for (const [pattern, tag] of MARKS) {
     const found = pattern.exec(text);
     if (found) {
-      const mark = document.createElement(tag);
-      mark.textContent = found[1];
-      range.setStart(node, range.startOffset - found[0].length);
-      range.deleteContents();
-      range.insertNode(mark);
-      range.setStartAfter(mark);
-      range.collapse(true);
-      return true;
+      return { tag, inner: found[1], length: found[0].length };
     }
   }
-  return false;
+  return null;
+}
+
+function select(range: Range): void {
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(range);
+}
+
+/**
+ * A mark typed in Markdown, turned into the mark once its closing character is typed: the delimiters go through
+ * `insertText` and bold, italic, strike and links through the browser's own commands, so ⌘Z takes them back.
+ */
+function markShortcut(root: HTMLElement): boolean {
+  const range = selectionIn(root);
+  const node = range?.startContainer;
+  if (!range?.collapsed || node?.nodeType !== 3 || node.parentElement?.closest("code, pre, a")) {
+    return false;
+  }
+  const text = (node as Text).data.slice(0, range.startOffset);
+  const previous = node.previousSibling;
+  if (previous?.nodeName === "CODE" && FILEPATH.test(text)) {
+    (node as Text).deleteData(0, range.startOffset);
+    (previous as Element).classList.add("filepath");
+    const caret = document.createRange();
+    caret.setStart(node, 0);
+    select(caret);
+    made.set(root, { mark: previous as Element, text: previous.textContent ?? "" });
+    return true;
+  }
+  const typed = typedMark(text);
+  if (!typed) {
+    return false;
+  }
+  const replaced = document.createRange();
+  replaced.setStart(node, range.startOffset - typed.length);
+  replaced.setEnd(node, range.startOffset);
+  select(replaced);
+  document.execCommand("insertText", false, typed.inner);
+  const caret = selectionIn(root);
+  if (!caret || caret.startContainer.nodeType !== 3 || caret.startOffset < typed.inner.length) {
+    return true;
+  }
+  const inner = document.createRange();
+  inner.setStart(caret.startContainer, caret.startOffset - typed.inner.length);
+  inner.setEnd(caret.startContainer, caret.startOffset);
+  select(inner);
+  const command = typed.tag === "a" ? "createLink" : COMMANDS[typed.tag];
+  if (command) {
+    document.execCommand(command, false, typed.href);
+    window.getSelection()?.collapseToEnd();
+    if (typed.tag !== "a") {
+      document.execCommand(command);
+    }
+    return true;
+  }
+  const mark = document.createElement(typed.tag);
+  inner.surroundContents(mark);
+  const after = document.createRange();
+  after.setStartAfter(mark);
+  select(after);
+  made.set(root, { mark, text: typed.inner });
+  return true;
 }
 
 /** After the editor has applied a keystroke: Markdown shortcuts, and a new block not inheriting the old one's layout. */
 export function handleInput(root: HTMLElement, event: InputEvent): void {
+  if (!event.isComposing) {
+    moveTypingOut(root);
+  }
   if (liftLists(root)) {
     notify(root);
     return;
   }
   if (event.inputType === "insertParagraph") {
     const block = currentTextblock(root);
-    BLOCK_DATA.forEach((name) => block?.removeAttribute(name));
+    const inherited = BLOCK_DATA.filter((name) => block?.hasAttribute(name));
+    inherited.forEach((name) => block?.removeAttribute(name));
+    const ticked = block?.matches("[data-task-list] > li[data-checked='true']");
+    if (ticked) {
+      block?.setAttribute("data-checked", "false");
+    }
+    if (inherited.length || ticked) {
+      notify(root);
+    }
     return;
   }
   if (event.inputType !== "insertText") {
     return;
   }
-  if (event.data && "*_~=`".includes(event.data)) {
+  if (event.data && "*_~=`)}".includes(event.data)) {
     if (markShortcut(root)) {
       notify(root);
     }
@@ -313,5 +530,14 @@ export function handleInput(root: HTMLElement, event: InputEvent): void {
   shortcut[1](root);
   liftLists(root);
   keepCaretInNewItem(root);
+  const item = currentTextblock(root)?.closest("li");
+  if (shortcut[0] === TASK && /\[[xX]\]/.test(text)) {
+    item?.setAttribute("data-checked", "true");
+  }
+  const start = NUMBERED.exec(text)?.[1];
+  const list = item?.parentElement;
+  if (start && start !== "1" && list?.tagName === "OL") {
+    list.setAttribute("start", String(Number(start)));
+  }
   notify(root);
 }

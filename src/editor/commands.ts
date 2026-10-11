@@ -96,10 +96,10 @@ function unwrap(element: Element): void {
   element.replaceWith(...element.childNodes);
 }
 
-/** Puts the caret in the paragraph after `node`, making one when none follows. */
-export function continueAfter(node: Element): void {
+/** Puts the caret in the paragraph after `node`, making one when none follows (or, `fresh`, unless the one there is empty). */
+export function continueAfter(node: Element, fresh = false): void {
   let next = node.nextElementSibling;
-  if (next?.tagName !== "P") {
+  if (next?.tagName !== "P" || (fresh && !isEmptyParagraph(next))) {
     next = emptyParagraph();
     node.after(next);
   }
@@ -128,26 +128,111 @@ function selectedFigure(root: HTMLElement): HTMLElement | null {
 
 // --------------------------------------------------------------------- inline
 
-/** Wraps the selection in `tag`, or lifts the one the caret is in. */
+/** The word around a collapsed caret, so a mark pressed with nothing selected takes the word, as in Docs. */
+function wordAround(range: Range): Range | null {
+  const node = range.startContainer;
+  if (node.nodeType !== 3) {
+    return null;
+  }
+  const text = (node as Text).data;
+  const word = /[\p{L}\p{N}_'’-]/u;
+  let start = range.startOffset;
+  let end = start;
+  while (start > 0 && word.test(text[start - 1])) {
+    start -= 1;
+  }
+  while (end < text.length && word.test(text[end])) {
+    end += 1;
+  }
+  if (start === end) {
+    return null;
+  }
+  const around = document.createRange();
+  around.setStart(node, start);
+  around.setEnd(node, end);
+  return around;
+}
+
+/** The innermost text blocks a range crosses, each with the part of the range inside it. */
+function blockRanges(root: HTMLElement, range: Range): Range[] {
+  const blocks = [...root.querySelectorAll<HTMLElement>(TEXTBLOCK)].filter(
+    (block) => range.intersectsNode(block) && !block.querySelector(TEXTBLOCK) && !block.closest("pre, figure, [data-transient]"),
+  );
+  return blocks.flatMap((block) => {
+    const part = document.createRange();
+    part.selectNodeContents(block);
+    if (block.contains(range.startContainer)) {
+      part.setStart(range.startContainer, range.startOffset);
+    }
+    if (block.contains(range.endContainer)) {
+      part.setEnd(range.endContainer, range.endOffset);
+    }
+    return part.toString() ? [part] : [];
+  });
+}
+
+/** Takes `mark` off the part of it inside `range`, leaving it on the rest. */
+function liftPart(mark: HTMLElement, range: Range): void {
+  const before = document.createRange();
+  before.setStart(mark, 0);
+  before.setEnd(range.startContainer, range.startOffset);
+  const after = document.createRange();
+  after.setStart(range.endContainer, range.endOffset);
+  after.setEnd(mark, mark.childNodes.length);
+  for (const [part, place] of [
+    [before, "before"],
+    [after, "after"],
+  ] as const) {
+    if (mark.contains(part.startContainer) && mark.contains(part.endContainer) && part.toString()) {
+      const piece = mark.cloneNode(false) as HTMLElement;
+      piece.append(part.extractContents());
+      mark[place](piece);
+    }
+  }
+  unwrap(mark);
+}
+
+/** Wraps the selection in `tag` — the word at a bare caret, every block a selection crosses — or lifts it where it is set. */
 export function toggleInline(root: HTMLElement, tag: string): boolean {
-  const range = selectionIn(root);
+  const selected = selectionIn(root);
+  const range = selected?.collapsed ? wordAround(selected) ?? selected : selected;
   if (!range) {
     return false;
   }
-  const existing = closestIn(root, elementOf(range.commonAncestorContainer), tag);
+  const existing = closestIn(root, elementOf(range.startContainer), tag);
+  const whole = document.createRange();
   if (existing) {
-    unwrap(existing);
+    whole.selectNode(existing);
+  }
+  if (existing && range.compareBoundaryPoints(Range.END_TO_END, whole) <= 0) {
+    if (range.collapsed || range.toString() === existing.textContent) {
+      unwrap(existing);
+    } else {
+      const inside = range.cloneRange();
+      if (!existing.contains(inside.endContainer)) {
+        inside.setEnd(existing, existing.childNodes.length);
+      }
+      liftPart(existing, inside);
+    }
     notify(root);
     return true;
   }
-  const start = closestIn(root, elementOf(range.startContainer), TEXTBLOCK);
-  if (range.collapsed || !start || start !== closestIn(root, elementOf(range.endContainer), TEXTBLOCK)) {
+  const parts = range.collapsed ? [] : blockRanges(root, range);
+  if (!parts.length) {
     return false;
   }
-  const element = document.createElement(tag);
-  element.append(range.extractContents());
-  range.insertNode(element);
-  window.getSelection()?.selectAllChildren(element);
+  const made = parts.map((part) => {
+    const element = document.createElement(tag);
+    element.append(part.extractContents());
+    element.querySelectorAll(tag).forEach(unwrap);
+    part.insertNode(element);
+    return element;
+  });
+  const marked = document.createRange();
+  marked.setStartBefore(made[0]);
+  marked.setEndAfter(made[made.length - 1]);
+  window.getSelection()?.removeAllRanges();
+  window.getSelection()?.addRange(marked);
   notify(root);
   return true;
 }
@@ -187,7 +272,7 @@ export function insertFootnote(root: HTMLElement): boolean {
     number += 1;
   }
   const label = String(number);
-  range.deleteContents();
+  range.collapse(false);
   const ref = fragmentOf(docToHtml({ type: "doc", content: [{ type: "paragraph", content: [{ type: "footnoteRef", attrs: { label } }] }] }))
     .querySelector("sup");
   if (ref) {
@@ -385,6 +470,7 @@ export async function insertImages(
   const stored = await Promise.all(files.map((file) => storeImageFile(file)));
   if (!stillHere()) {
     await Promise.all(stored.map((image) => imageStore.remove(image.id)));
+    window.alert("Not added: the draft changed while the photo was being stored. Add it again.");
     return;
   }
   const inGallery = Boolean(selectedFigure(root)?.closest("[data-gallery]"));
@@ -477,7 +563,7 @@ export function leaveGallery(root: HTMLElement): boolean {
   }
   selectFigure(root, null);
   root.focus({ preventScroll: true });
-  continueAfter(gallery);
+  continueAfter(gallery, true);
   notify(root);
   return true;
 }
@@ -596,8 +682,23 @@ export function inCodeBlock(root: HTMLElement): boolean {
   return Boolean(closestIn(root, anchor(root), "pre"));
 }
 
+/** A code block back to text is one paragraph, a line break per line, as Enter writes; `formatBlock` left a paragraph inside the `<pre>`. */
 export function toggleCodeBlock(root: HTMLElement): void {
-  formatBlock(root, inCodeBlock(root) ? "p" : "pre");
+  const pre = closestIn(root, anchor(root), "pre");
+  if (!pre) {
+    formatBlock(root, "pre");
+    return;
+  }
+  const copy = pre.cloneNode(true) as HTMLElement;
+  copy.querySelectorAll("br").forEach((br) => br.replaceWith("\n"));
+  const paragraph = document.createElement("p");
+  copy.textContent?.replace(/\n$/, "").split("\n").forEach((line, index) => {
+    paragraph.append(...(index ? [document.createElement("br")] : []), line);
+  });
+  paragraph.append(document.createElement("br"));
+  pre.replaceWith(paragraph);
+  placeCaret(paragraph);
+  notify(root);
 }
 
 /** Chromium's list commands leave the list inside the paragraph it was made from, which no parser keeps. */
@@ -652,33 +753,79 @@ function untask(list: Element): void {
   }
 }
 
+/** The selected items of `list` back to paragraphs, the list split around them. */
+function unlist(list: HTMLElement, range: Range): void {
+  const items = [...list.children].filter((item) => item.tagName === "LI");
+  const picked = items.filter((item) => range.intersectsNode(item));
+  const first = items.indexOf(picked[0] ?? items[0]);
+  const last = items.indexOf(picked[picked.length - 1] ?? items[0]);
+  const after = list.cloneNode(false) as HTMLElement;
+  after.append(...items.slice(last + 1));
+  const blocks = items.slice(first, last + 1).flatMap((item) => {
+    const nested = [...item.children].some((child) => /^(P|UL|OL|BLOCKQUOTE|PRE|TABLE|H[1-6])$/.test(child.tagName));
+    if (nested) {
+      return [...item.childNodes].filter((node) => node.nodeType === 1 || node.textContent?.trim());
+    }
+    const paragraph = document.createElement("p");
+    paragraph.append(...item.childNodes);
+    if (!paragraph.lastChild || paragraph.lastChild.nodeName !== "BR") {
+      paragraph.append(document.createElement("br"));
+    }
+    return [paragraph];
+  });
+  items.slice(first, last + 1).forEach((item) => item.remove());
+  list.after(...blocks, ...(after.children.length ? [after] : []));
+  if (!list.children.length) {
+    list.remove();
+  }
+  const caret = blocks.find((node): node is Element => node.nodeType === 1);
+  if (caret) {
+    placeCaret(caret);
+  }
+}
+
+/** One list as another kind, every item kept: the browser's commands converted only the item the caret was in. */
+function relist(list: HTMLElement, kind: ListKind): HTMLElement {
+  const range = window.getSelection()?.rangeCount ? window.getSelection()!.getRangeAt(0) : null;
+  const caret = range && list.contains(range.startContainer) ? { node: range.startContainer, offset: range.startOffset } : null;
+  const next = document.createElement(kind === "ordered" ? "ol" : "ul");
+  for (const name of list.getAttributeNames().filter((name) => name !== "data-task-list" && name !== "start")) {
+    next.setAttribute(name, list.getAttribute(name) ?? "");
+  }
+  next.append(...list.childNodes);
+  list.replaceWith(next);
+  if (caret) {
+    const restored = document.createRange();
+    restored.setStart(caret.node, caret.offset);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(restored);
+  }
+  if (kind === "task") {
+    next.setAttribute("data-task-list", "");
+    for (const item of next.querySelectorAll(":scope > li:not([data-checked])")) {
+      item.setAttribute("data-checked", "false");
+    }
+  } else {
+    untask(next);
+  }
+  return next;
+}
+
 /** The list buttons: a list of the kind asked for, or back to paragraphs when it already is one. */
 export function toggleList(root: HTMLElement, kind: ListKind): void {
+  const range = selectionIn(root);
   const current = closestIn(root, anchor(root), "ul, ol");
-  const currentKind = listKind(root);
-  if (current && currentKind === "task") {
-    untask(current);
-  }
-  if (kind === "task") {
-    if (currentKind === "task") {
-      notify(root);
-      return;
-    }
-    if (!current || current.tagName === "OL") {
-      document.execCommand("insertUnorderedList");
-    }
-  } else if (!(currentKind === "task" && kind === "bullet")) {
+  if (current && range && listKind(root) === kind) {
+    unlist(current, range);
+  } else if (current) {
+    relist(current, kind);
+  } else {
     document.execCommand(kind === "ordered" ? "insertOrderedList" : "insertUnorderedList");
-  }
-  liftLists(root);
-  keepCaretInNewItem(root);
-  if (kind === "task") {
+    liftLists(root);
+    keepCaretInNewItem(root);
     const list = closestIn(root, anchor(root), "ul, ol");
-    list?.setAttribute("data-task-list", "");
-    for (const item of list?.querySelectorAll(":scope > li") ?? []) {
-      if (!item.hasAttribute("data-checked")) {
-        item.setAttribute("data-checked", "false");
-      }
+    if (kind === "task" && list) {
+      relist(list, "task");
     }
   }
   notify(root);
@@ -709,6 +856,11 @@ export function setLink(root: HTMLElement, href: string): void {
     current.setAttribute("href", href);
   } else if (!selectionIn(root)?.collapsed) {
     document.execCommand("createLink", false, href);
+  } else if (selectionIn(root)) {
+    const link = document.createElement("a");
+    link.href = href;
+    link.textContent = href;
+    document.execCommand("insertHTML", false, link.outerHTML);
   }
   notify(root);
 }
