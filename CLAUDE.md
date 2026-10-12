@@ -521,18 +521,35 @@ is a bottom sheet with a sticky footer.
 
 Sizes come from tokens on `:root` in `src/styles.css`. One control height,
 `--control-h`, 34px with a mouse and 44px under `pointer: coarse`, is used by
-`.btn`, `.btn.icon`, `.input`, `.tool`, the toggles, menu tabs and header
-buttons, the rail's delete and checkbox rows; with none, buttons were 32px,
-inputs 34 (38 on touch) and tools 36, so a button beside an input never lined
-up and touch targets fell short of 44 — the password field and the Passkey
-button were two heights. A small type scale and radius tokens replace stray
+`.btn`, `.btn.icon`, `.input`, menu items and header buttons and the rail's
+delete; with none, buttons were 32px, inputs 34 (38 on touch), so a button
+beside an input never lined up — the password field and the Passkey button
+were two heights. Tools (`--tool-size`) are 28px with a mouse and 40px on
+touch: at 44 the phone's dock showed four tools and the bubble ran wide. The
+Language and Publish as toggle keeps its slim pill on touch too, 27px; its
+buttons reach 8px past it above and below (`::before`), so a tap there still
+lands. Raised to 44px it read as a fat knob, the row under it grew, and it
+was taken back by the owner's choice. A checkbox row (`.switch`) is padded
+6px on touch with no gap between rows, so the rows touch and there is no
+dead space, while the checkbox stays on the label's first line; made 44px
+tall and centred, the rows sat 56px apart and a checkbox floated beside
+the middle of its hint. A small type scale and radius tokens replace stray
 px values; the 30px title and the 16px inputs that keep iOS from zooming stay
 as they are. `--faint` is `#6e6e73` light and `#8e8e93` dark, at least 4.5:1
 on every surface (it was 3.44:1 and 4.02:1). With a mouse the toolbar wraps
-onto a second row, where eight tools hid behind a sideways scroll; on a phone
-it stays a strip that snaps per tool behind the edge fade. A selected
-gallery photo shows its caption full width, then ←, → and Remove as tools.
-The gallery strip snaps to each photo. A menu that is only items is
+onto a second row, where eight tools hid behind a sideways scroll, and MD,
+the word count and ⌘ stay on its first row (`align-items: flex-start`);
+centred, they floated between the two. On a phone it stays a strip that
+snaps per tool behind the edge fade. A selected gallery photo shows its
+caption full width, then ←, → and Remove as tools; a photo outside a gallery
+keeps its alt and caption buttons on one row and has no move or remove. Those
+are hidden with the `hidden` attribute, which `[hidden] { display: none
+!important }` makes win over `.tool`'s `display`: without it a single photo
+showed ←, → and Remove, which act on a gallery. A selected photo draws only
+its own ring; the figure's focus outline is off. The photo is a block, so
+no line box's descender sits between it and its buttons. The gallery strip
+snaps to each photo. The publish dialog's Changes and Commit message rows
+carry a chevron, stay on one line and hide their preview while open. A menu that is only items is
 `role="menu"` with focus moved in and ↑ ↓ Home End moving through it
 (`useFloatingMenu.ts`); one that holds a form is a dialog.
 
