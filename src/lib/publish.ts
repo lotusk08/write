@@ -56,7 +56,7 @@ function warningsFor(draft: Draft, photos: PlannedPhoto[], skipped: string[], gu
       .map((photo): PublishWarning => ({
         kind: "alt",
         src: photo.src,
-        text: `A photo has no caption, so it is named ${fileName(photo.path)}. Add one to name it.`,
+        text: `A photo has no alt text, so it is named ${fileName(photo.path)}. Add some to name it.`,
       })),
     ...(skipped.length
       ? [{ kind: "missing" as const, text: `${skipped.length} photo(s) are missing from this browser's storage and will not be uploaded.` }]

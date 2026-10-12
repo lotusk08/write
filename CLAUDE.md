@@ -318,10 +318,14 @@ and Twitch are gone from the blog, so no link makes one, and a post that
 still has one keeps it as a raw block.
 
 A gallery is the blog's ```` ```gallery ```` fence, holding one image per line,
-`![alt](src "caption")`. The caption the card shows is the title, else the
-alt (`caption` in the blog's `src/logics/gallery.js`), and every gallery
-photo in the posts is written with alt alone, so the editor shows that as the
-caption and editing it writes the alt and drops the title. A title is written
+`![alt](src "caption")`. A gallery photo has alt text and a caption apart,
+each its own button under it: the alt describes the photo and names its file,
+the caption is the title in quotes, which the card shows (`setImageAlt`,
+`setImageCaption`). The blog's `caption` in `src/logics/gallery.js` still
+falls back to the alt when there is no title, but a caption is written in
+quotes so it does not depend on that: the editor shows only the title as
+the caption. Until October 2026 the one button wrote the alt and dropped the
+title, so a photo could not have both. A title is written
 in double quotes; `escapeChars` in `src/lib/inline.ts`, the one escaper for
 image and link text, escapes a `"` in it, and in alt the brackets, a
 backtick, `*`, `_`, `<`, `~`, and a backslash wherever markdown would
@@ -488,7 +492,7 @@ address outright.
 
 Publishing is a review before it is a send (`PublishDialog.vue`, the plan
 from `buildPublishPlan`). Review shows, in order: warnings, each with the
-button that fixes it — a photo with no caption (it would be named
+button that fixes it — a photo with no alt text (it would be named
 `<slug>-N`) selects the photo, no description opens the post panel, a photo
 over 8 MB that will not be reduced blocks the publish and names the file, a
 copy with no sha offers *Open the site version*, a photo missing from this
@@ -546,11 +550,16 @@ posts, drafts and pages on `blog` in October 2026, counted through
 quote 30, bullet list 30 | image 40, gallery 7, video 8 | divider 17, code
 block 13, footnote 10, numbered list 3 | inline code 5, file path 5, table 2,
 strike 1, task list 1, superscript 1, subscript 0, highlight 0 | section,
-collapse all and expand all 0. A group goes by its most used tool; a tool
+collapse all and expand all 0. The bubble over selected text is italic,
+bold, link and inline code; highlight, used in no post, left it and is still
+⌘⇧H, `==…==` and the toolbar. A group goes by its most used tool; a tool
 used in a handful of posts goes after the groups, so a phone's first screen
-is italic, link, bold and the headings. A selected gallery photo shows its
-caption full width, then ←, → and Remove as tools; a photo outside a gallery
-keeps its alt and caption buttons on one row and has no move or remove. Those
+is italic, link, bold and the headings. Every photo shows its alt and its
+caption as buttons under it, the alt marked `ALT`: side by side under a photo
+in the text, and in a gallery one per line, the caption first as the card
+shows it, long text cut short with the whole of it as the tooltip; the
+selected gallery photo gets ←, → and Remove under them. A photo outside a
+gallery has no move or remove. Those
 are hidden with the `hidden` attribute, which `[hidden] { display: none
 !important }` makes win over `.tool`'s `display`: without it a single photo
 showed ←, → and Remove, which act on a gallery. A selected photo draws only

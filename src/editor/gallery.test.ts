@@ -5,7 +5,15 @@ import { markdownToDoc } from "../lib/import.ts";
 import { docToMarkdown } from "../lib/markdown.ts";
 import { fullSrc, previewSrc, setSiteUrl } from "../lib/site.ts";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
-import { insertImages, leaveGallery, moveGalleryPhoto, removeGalleryPhoto, selectFigure, setImageText } from "./commands.ts";
+import {
+  insertImages,
+  leaveGallery,
+  moveGalleryPhoto,
+  removeGalleryPhoto,
+  selectFigure,
+  setImageAlt,
+  setImageCaption,
+} from "./commands.ts";
 import { sanitizerOptions } from "./config.ts";
 
 vi.mock("../lib/db.ts", async (original) => ({
@@ -89,10 +97,18 @@ describe("a gallery of a hundred photos", () => {
     expect(removeGalleryPhoto(root)).toBe(false);
   });
 
-  it("writes a caption as alt text and drops the title", () => {
+  it("writes a caption as the title, in quotes, and keeps the alt text apart", () => {
     load('```gallery\n![old](/assets/img/post/a.webp "A title")\n![b](/assets/img/post/b.webp)\n```');
-    setImageText(root, photos()[0], ' Sài Gòn "đêm" [1] ');
-    expect(stable()).toBe('```gallery\n![Sài Gòn "đêm" \\[1\\]](/assets/img/post/a.webp)\n![b](/assets/img/post/b.webp)\n```');
+    setImageCaption(root, photos()[0], ' Sài Gòn "đêm" [1] ');
+    setImageCaption(root, photos()[1], "Two small birds");
+    expect(stable()).toBe(
+      '```gallery\n![old](/assets/img/post/a.webp "Sài Gòn \\"đêm\\" [1]")\n![b](/assets/img/post/b.webp "Two small birds")\n```',
+    );
+    setImageAlt(root, photos()[0], " Một con đường [1] ");
+    setImageCaption(root, photos()[1], "  ");
+    expect(stable()).toBe(
+      '```gallery\n![Một con đường \\[1\\]](/assets/img/post/a.webp "Sài Gòn \\"đêm\\" [1]")\n![b](/assets/img/post/b.webp)\n```',
+    );
   });
 
   it("leaves the gallery for the paragraph after it when typing starts", () => {

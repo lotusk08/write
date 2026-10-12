@@ -2310,6 +2310,10 @@ textarea {
     min-height: var(--tool-size);
   }
 
+  .editor-gallery-strip .editor-image-alt {
+    min-height: 32px;
+  }
+
   .editor-image-tools {
     margin-top: 2px;
   }
@@ -2525,8 +2529,28 @@ textarea {
   flex-wrap: wrap;
 }
 
-.editor-gallery-strip .editor-image.is-selected .editor-image-caption {
-  flex-basis: 100%;
+.editor-image-alt:not(.editor-image-caption, .is-empty)::before {
+  margin-right: 5px;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-xs);
+  content: "ALT";
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  vertical-align: 1px;
+}
+
+.editor-gallery-strip .editor-image-alt {
+  min-width: 0;
+  flex: 1 0 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.editor-gallery-strip .editor-image-caption {
+  order: -1;
 }
 
 .editor-image-edit {

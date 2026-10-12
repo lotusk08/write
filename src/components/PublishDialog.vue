@@ -163,7 +163,7 @@ const megabytes = (bytes: number) =>
 const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
 const FIXES: Partial<Record<PublishWarning["kind"], [string, (warning: PublishWarning) => void]>> = {
-  alt: ["Add caption", (warning) => warning.src && emit("fixPhoto", warning.src)],
+  alt: ["Add alt text", (warning) => warning.src && emit("fixPhoto", warning.src)],
   description: ["Add", () => emit("editPost")],
   existing: ["Change title or date", () => emit("editPost")],
   unguarded: ["Open the site version", () => emit("reopen")],

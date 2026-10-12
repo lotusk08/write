@@ -609,14 +609,26 @@ export function removeGalleryPhoto(root: HTMLElement): boolean {
   return true;
 }
 
-/** Sets a photo's alt text — inside a gallery the caption its card shows, so a title there gives way to it. */
-export function setImageText(root: HTMLElement, figure: HTMLElement, value: string): void {
+/** Sets a photo's alt text, which describes it and names its file; it is never the caption. */
+export function setImageAlt(root: HTMLElement, figure: HTMLElement, value: string): void {
   const img = figure.querySelector("img");
   if (!img) {
     return;
   }
   img.setAttribute("alt", value.trim());
-  if (figure.closest("[data-gallery]")) {
+  notify(root);
+}
+
+/** Sets a gallery photo's caption, its title — `![alt](src "caption")` — which the card shows under it. */
+export function setImageCaption(root: HTMLElement, figure: HTMLElement, value: string): void {
+  const img = figure.querySelector("img");
+  if (!img) {
+    return;
+  }
+  const caption = value.trim();
+  if (caption) {
+    img.setAttribute("title", caption);
+  } else {
     img.removeAttribute("title");
   }
   notify(root);

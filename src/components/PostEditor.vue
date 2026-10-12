@@ -14,7 +14,8 @@ import {
   placeCaret,
   removeGalleryPhoto,
   selectFigure,
-  setImageText,
+  setImageAlt,
+  setImageCaption,
   toggleSection,
   toggleTask,
 } from "../editor/commands.ts";
@@ -240,7 +241,10 @@ function onClick(event: MouseEvent): void {
   refreshTools();
 }
 
-/** A gallery photo's caption is the alt text its card shows; any other photo's is the line written under it. */
+/**
+ * Every photo has alt text and a caption, apart. A gallery photo's caption is its title, which the card shows; any
+ * other photo's is the line written under it.
+ */
 function photoTool(element: HTMLElement, button: Element): void {
   const figure = button.closest<HTMLElement>("figure[data-image]");
   const img = figure?.querySelector("img");
@@ -251,13 +255,15 @@ function photoTool(element: HTMLElement, button: Element): void {
   if (button.classList.contains("editor-image-edit")) {
     selectFigure(element, figure);
     editPhoto(Number((button as HTMLElement).dataset.step) as -1 | 0 | 1);
-  } else if (!button.classList.contains("editor-image-caption") || gallery) {
-    const value = window.prompt(
-      gallery ? "Caption, shown on the card" : "Alt text (describes the image)",
-      (gallery && img.getAttribute("title")) || (img.getAttribute("alt") ?? ""),
-    );
+  } else if (!button.classList.contains("editor-image-caption")) {
+    const value = window.prompt("Alt text — describes the photo and names its file", img.getAttribute("alt") ?? "");
     if (value !== null) {
-      setImageText(element, figure, value);
+      setImageAlt(element, figure, value);
+    }
+  } else if (gallery) {
+    const value = window.prompt("Caption, shown under the photo", img.getAttribute("title") ?? "");
+    if (value !== null) {
+      setImageCaption(element, figure, value);
     }
   } else {
     editCaption(element, figure);
