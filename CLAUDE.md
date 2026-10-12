@@ -536,11 +536,19 @@ tried and taken back. The box is `flex: none`, or a long hint (PDF's)
 squeezed it and its row sat a few pixels left of the others. A small type scale and radius tokens replace stray
 px values; the 30px title and the 16px inputs that keep iOS from zooming stay
 as they are. `--faint` is `#6e6e73` light and `#8e8e93` dark, at least 4.5:1
-on every surface (it was 3.44:1 and 4.02:1). With a mouse the toolbar wraps
-onto a second row, where eight tools hid behind a sideways scroll, and MD,
-the word count and ⌘ stay on its first row (`align-items: flex-start`);
-centred, they floated between the two. On a phone it stays a strip that
-snaps per tool behind the edge fade. A selected gallery photo shows its
+on every surface (it was 3.44:1 and 4.02:1). The toolbar is one line that
+scrolls sideways behind an edge fade, on a phone snapping per tool; a mouse
+wheel over it scrolls it sideways and, at either end, hands the wheel back to
+the page. Wrapped onto a second row it was taken back by the owner's choice.
+Its order is how much the blog uses each tool — posts using it, of the 89
+posts, drafts and pages on `blog` in October 2026, counted through
+`parsePost`: italic 61, link 32, bold 20 | H2 43, H3 23, H4 9 | callouts 44,
+quote 30, bullet list 30 | image 40, gallery 7, video 8 | divider 17, code
+block 13, footnote 10, numbered list 3 | inline code 5, file path 5, table 2,
+strike 1, task list 1, superscript 1, subscript 0, highlight 0 | section,
+collapse all and expand all 0. A group goes by its most used tool; a tool
+used in a handful of posts goes after the groups, so a phone's first screen
+is italic, link, bold and the headings. A selected gallery photo shows its
 caption full width, then ←, → and Remove as tools; a photo outside a gallery
 keeps its alt and caption buttons on one row and has no move or remove. Those
 are hidden with the `hidden` attribute, which `[hidden] { display: none

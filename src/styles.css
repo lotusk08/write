@@ -2566,28 +2566,6 @@ textarea {
   }
 }
 
-@media (pointer: fine) and (width > 640px) {
-  .toolbar {
-    flex-wrap: wrap;
-    row-gap: 2px;
-    overflow: visible;
-    mask-image: none;
-  }
-
-  .card-dock {
-    align-items: flex-start;
-  }
-
-  .card-dock .status,
-  .card-dock .source-note {
-    line-height: var(--tool-size);
-  }
-
-  .card-dock > .tool-sep {
-    margin-block: calc((var(--tool-size) - 16px) / 2);
-  }
-}
-
 @media (pointer: coarse) {
   .bubble {
     padding: 3px;
