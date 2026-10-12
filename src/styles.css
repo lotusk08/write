@@ -309,6 +309,7 @@ textarea {
 
 .share-row {
   display: flex;
+  min-width: 0;
   align-items: center;
   gap: 6px;
 }
@@ -323,7 +324,32 @@ textarea {
 .share-row .btn {
   height: 28px;
   flex: none;
+  padding: 0 10px;
+  border: none;
   border-radius: var(--radius-xs);
+  background: var(--sunken);
+  font-size: var(--text-2xs);
+  font-weight: 300;
+}
+
+.share-row .btn:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.share-panel .peer {
+  border-radius: var(--radius-xs);
+  background: var(--sunken);
+  font-size: var(--text-2xs);
+  font-weight: 300;
+}
+
+.share-panel .notice {
+  padding: 7px 10px;
+  border: none;
+  border-radius: var(--radius-xs);
+  margin: 0;
+  font-size: var(--text-2xs);
+  font-weight: 300;
 }
 
 .share-row .btn.icon {
@@ -332,7 +358,6 @@ textarea {
 
 .peer.is-you {
   padding-right: 10px;
-  box-shadow: inset 0 0 0 1px var(--border-strong);
   cursor: text;
 }
 

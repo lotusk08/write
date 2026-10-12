@@ -1036,7 +1036,11 @@ been created (`shareAndCopy` in `App.vue`). While shared, the menu's Share
 section is one row: your own chip with your name as a field in it, marked
 (you), then a copy-link button and Stop (Leave on a joined copy); anyone
 else here is listed under it. The name, the list, the link and the buttons
-used to be four blocks. The link itself is not shown: it is the site's address and a random
+used to be four blocks. The chips, the two buttons and an error there are
+drawn like the main buttons — borderless on `--sunken`, a 4px corner, light
+`--text-2xs` text (the name field stays 16px on touch, below which iOS zooms
+in) — and the row may shrink (`min-width: 0`), so a long name scrolls inside
+its chip rather than pushing Stop out of the panel. The link itself is not shown: it is the site's address and a random
 token, nothing to read or edit. The password guards
 the blog, and a share room holds no credential: the draft is copied into a
 `ShareRoom` Durable Object and the app hands back `?share=<token>`, and that
