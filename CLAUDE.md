@@ -570,8 +570,8 @@ bold, link and inline code; highlight, used in no post, left it and is still
 used in a handful of posts goes after the groups, so a phone's first screen
 is italic, link, bold and the headings. Every photo shows its alt and its
 caption as buttons under it, the alt marked `ALT`: side by side under a photo
-in the text, and in a gallery one per line, the caption first as the card
-shows it, long text cut short with the whole of it as the tooltip; the
+in the text, and in a gallery one per line, alt first by the owner's choice,
+long text cut short with the whole of it as the tooltip; the
 selected gallery photo gets ←, → and Remove under them. A photo outside a
 gallery has no move or remove. Those
 are hidden with the `hidden` attribute, which `[hidden] { display: none
@@ -1010,10 +1010,11 @@ the draft is shared. A field says what it is by its placeholder (and its
 `aria-label`), not a label above it. Its footer is one row of five equal
 buttons, icon above label — Publish, Share, Export, Copy (the Markdown) and
 View (the mindmap) — borderless tiles on `--sunken` with a 4px corner and
-`--text-xs` labels, Publish filled with the accent; *Open a draft from the
-site* sits under them and asks the same password as Publish. Export is four
-columns with no border, a format's icon above its tick, labelled one step
-smaller still (`--text-2xs`), its description the tooltip; the Export button waits for a tick. It had three tabs — Post,
+light (300) `--text-2xs` labels, Publish filled with the accent; *Open a
+draft from the site* sits under them and asks the same password as Publish.
+Export is four columns with no border, a format's icon above its tick,
+labelled lighter and smaller still (`--text-3xs`, 10px); a ticked format
+colours only its icon and its tick, its description the tooltip; the Export button waits for a tick. It had three tabs — Post,
 Export, Share — each with its own footer, section headings and labels, and
 the site's drafts opened from the rail, out of reach in focus mode. A
 section is reached by id (`openMenuAt`): a publish error about the address
@@ -1032,10 +1033,10 @@ editing on and copies the link; on, it copies the link again. The clipboard
 write starts while the tap still counts, with the link as a promise
 (`ClipboardItem`), since Safari refuses a write made after the room has
 been created (`shareAndCopy` in `App.vue`). While shared, the menu's Share
-section is one row of who is here, your own chip first with your name as a
-field in it, marked (you) — the name and the list used to be two blocks
-saying the same thing — and under it Copy link and Stop (Leave on a joined
-copy). The link itself is not shown: it is the site's address and a random
+section is one row: your own chip with your name as a field in it, marked
+(you), then a copy-link button and Stop (Leave on a joined copy); anyone
+else here is listed under it. The name, the list, the link and the buttons
+used to be four blocks. The link itself is not shown: it is the site's address and a random
 token, nothing to read or edit. The password guards
 the blog, and a share room holds no credential: the draft is copied into a
 `ShareRoom` Durable Object and the app hands back `?share=<token>`, and that

@@ -22,7 +22,7 @@ const onBlur = () => {
     <p v-if="state.error" class="notice warn">{{ state.error }}</p>
 
     <template v-if="state.sharing">
-      <div class="peers" role="group" aria-label="Here now">
+      <div class="share-row">
         <label class="peer is-you" title="Your name, as the others see it — tap to change it">
           <span class="peer-dot" :style="{ background: mine }" />
           <input
@@ -37,16 +37,15 @@ const onBlur = () => {
           />
           <span class="peer-you">(you)</span>
         </label>
-        <span v-for="peer in others" :key="peer.key" class="peer">
-          <span class="peer-dot" :style="{ background: peer.color }" />
-          {{ peer.name }}
-        </span>
-      </div>
-
-      <div class="share-actions">
-        <button type="button" class="btn" :disabled="!state.link" title="Copy the share link" @click="emit('copy')">
-          <Icon name="copy" />
-          Copy link
+        <button
+          type="button"
+          class="btn icon"
+          :disabled="!state.link"
+          title="Copy the share link"
+          aria-label="Copy the share link"
+          @click="emit('copy')"
+        >
+          <Icon name="link" />
         </button>
         <button
           type="button"
@@ -57,6 +56,13 @@ const onBlur = () => {
         >
           {{ state.owner ? "Stop" : "Leave" }}
         </button>
+      </div>
+
+      <div v-if="others.length > 0" class="peers" role="group" aria-label="Also here">
+        <span v-for="peer in others" :key="peer.key" class="peer">
+          <span class="peer-dot" :style="{ background: peer.color }" />
+          {{ peer.name }}
+        </span>
       </div>
     </template>
   </div>
