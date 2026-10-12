@@ -3,15 +3,15 @@
   --font-prose: var(--font-ui);
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace;
 
-  --bg: #f7f7f8;
+  --bg: #f5f5f7;
   --panel: #fff;
-  --hover: #f1f1f2;
-  --sunken: #f4f4f5;
-  --text: #0d0d0d;
-  --muted: #5c5c5e;
-  --faint: #6e6e73;
-  --border: #e6e6e8;
-  --border-strong: #d5d5d9;
+  --hover: #ececef;
+  --sunken: #f2f2f4;
+  --text: #0b0b0c;
+  --muted: #545458;
+  --faint: #6a6a6f;
+  --border: #e3e3e7;
+  --border-strong: #c9c9cf;
   --accent: #6a00f5;
   --accent-text: #fff;
   --accent-soft: #f2ebfe;
@@ -27,6 +27,7 @@
   --radius-lg: 14px;
   --radius-pill: 999px;
 
+  --text-2xs: 10.5px;
   --text-xs: 11.5px;
   --text-sm: 12px;
   --text-md: 13px;
@@ -47,19 +48,19 @@
 }
 
 :root[data-theme="dark"] {
-  --bg: #0d0d0d;
-  --panel: #171717;
-  --hover: #232323;
-  --sunken: #1f1f1f;
-  --text: #f2f2f2;
-  --muted: #a3a3a6;
-  --faint: #8e8e93;
-  --border: #272727;
-  --border-strong: #3a3a3a;
-  --accent: #a882ff;
+  --bg: #000;
+  --panel: #0e0e0f;
+  --hover: #1c1c1e;
+  --sunken: #161618;
+  --text: #ebebf0;
+  --muted: #a8a8ae;
+  --faint: #8d8d93;
+  --border: #262628;
+  --border-strong: #3a3a3c;
+  --accent: #b294ff;
   --accent-text: #14091f;
-  --accent-soft: #241a38;
-  --ring: rgb(168 130 255 / 22%);
+  --accent-soft: #1e1533;
+  --ring: rgb(178 148 255 / 24%);
   --danger: #f2837c;
   --shadow-card: 0 1px 2px rgb(0 0 0 / 40%);
   --shadow-pop: 0 8px 24px rgb(0 0 0 / 45%), 0 2px 6px rgb(0 0 0 / 35%);
@@ -205,7 +206,6 @@ textarea {
 }
 
 .foot-actions .btn.is-active {
-  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   background: var(--accent-soft);
   color: var(--accent);
 }
@@ -228,13 +228,29 @@ textarea {
 
 .foot-actions .btn {
   height: auto;
-  min-height: var(--control-h);
+  min-height: 40px;
   flex-direction: column;
   justify-content: center;
-  gap: 2px;
-  padding: 5px 4px;
-  font-size: var(--text-sm);
+  gap: 3px;
+  padding: 6px 2px 5px;
+  border: none;
+  border-radius: var(--radius-xs);
+  background: var(--sunken);
+  font-size: var(--text-xs);
+  line-height: 1.1;
   white-space: nowrap;
+}
+
+.foot-actions .btn:hover:not(:disabled) {
+  background: var(--hover);
+}
+
+.foot-actions .btn.primary {
+  background: var(--accent);
+}
+
+.foot-actions .btn.primary:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--accent) 86%, #000);
 }
 
 .export-formats {
@@ -251,7 +267,7 @@ textarea {
   border-radius: var(--radius);
   color: var(--muted);
   cursor: pointer;
-  font-size: var(--text-xs);
+  font-size: var(--text-2xs);
   transition: background 120ms ease, color 120ms ease;
 }
 
@@ -288,16 +304,46 @@ textarea {
   gap: 14px;
 }
 
-.share-link {
+.share-actions {
   display: flex;
-  gap: 8px;
+  gap: 6px;
 }
 
-.share-link .input {
-  min-width: 0;
+.share-actions .btn:first-child {
   flex: 1;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
+  justify-content: center;
+}
+
+.share-actions .btn {
+  border-radius: var(--radius-xs);
+}
+
+.peer.is-you {
+  padding-right: 10px;
+  box-shadow: inset 0 0 0 1px var(--border-strong);
+  cursor: text;
+}
+
+.peer.is-you:focus-within {
+  box-shadow: inset 0 0 0 1px var(--accent), 0 0 0 3px var(--ring);
+}
+
+.peer-name {
+  min-width: 0;
+  max-width: 180px;
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  outline: none;
+}
+
+.peer-name::placeholder {
+  color: var(--placeholder);
+}
+
+.peer-you {
+  color: var(--faint);
 }
 
 .peers {
@@ -2378,6 +2424,11 @@ textarea {
 
   .site-drafts-open {
     min-height: 36px;
+  }
+
+  .peer.is-you {
+    min-height: 36px;
+    font-size: 16px;
   }
 
   .btn.ghost.site-drafts-open:hover:not(:disabled) {

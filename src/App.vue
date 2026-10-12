@@ -1028,6 +1028,7 @@ onBeforeUnmount(() => {
       @settings="updateSettings"
       @share-name="renameShare"
       @share="() => void shareAndCopy()"
+      @share-copy="() => void copyShareLink()"
       @share-disable="() => void (current?.shareOwner ? disableShare() : leaveSharedDraft())"
       @publish="() => void openPublish()"
       @site="(path) => ((menuOpen = false), void importPost(path))"

@@ -33,6 +33,7 @@ const emit = defineEmits<{
   settings: [patch: Partial<Settings>];
   shareName: [name: string];
   share: [];
+  shareCopy: [];
   shareDisable: [];
   publish: [];
   site: [path: string];
@@ -167,7 +168,12 @@ onBeforeUnmount(stop);
           <ExportPanel :chosen="chosen" :exporting="exporting" @change="(next) => (chosen = next)" />
         </Section>
         <Section v-if="share.sharing || share.error" id="menu-share">
-          <SharePanel :state="share" @name="(name) => emit('shareName', name)" @disable="emit('shareDisable')" />
+          <SharePanel
+            :state="share"
+            @name="(name) => emit('shareName', name)"
+            @copy="emit('shareCopy')"
+            @disable="emit('shareDisable')"
+          />
         </Section>
       </div>
 

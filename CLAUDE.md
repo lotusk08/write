@@ -547,8 +547,14 @@ by the owner's choice: packed tight with the box on the first line, it was
 tried and taken back. The box is `flex: none`, or a long hint (PDF's)
 squeezed it and its row sat a few pixels left of the others. A small type scale and radius tokens replace stray
 px values; the 30px title and the 16px inputs that keep iOS from zooming stay
-as they are. `--faint` is `#6e6e73` light and `#8e8e93` dark, at least 4.5:1
-on every surface (it was 3.44:1 and 4.02:1). The toolbar is one line that
+as they are. The colours are tuned for an OLED phone: dark is true black
+(`--bg: #000`) with near-black panels (`#0e0e0f`) set apart by their border,
+and text at `#ebebf0` rather than white, which glared on black; light is a
+grey page (`#f5f5f7`) under white panels with a little more contrast in the
+greys. Every text colour, `--faint` included, is 4.5:1 or more on every
+surface in both (`--faint` was 3.44:1 and 4.02:1 before the first pass), and
+`theme-color` follows the page. Placeholders in the editor are 30% of the
+text colour (`--placeholder`). The toolbar is one line that
 scrolls sideways behind an edge fade, on a phone snapping per tool; a mouse
 wheel over it scrolls it sideways and, at either end, hands the wheel back to
 the page. Wrapped onto a second row it was taken back by the owner's choice.
@@ -1003,10 +1009,11 @@ slug and date; the two options side by side), then Export, then Share while
 the draft is shared. A field says what it is by its placeholder (and its
 `aria-label`), not a label above it. Its footer is one row of five equal
 buttons, icon above label — Publish, Share, Export, Copy (the Markdown) and
-View (the mindmap) — with *Open a draft from the site* under it, which asks
-the same password as Publish. Export is four columns with no border, a
-format's icon above its tick in the smallest text, its description the
-tooltip; the Export button waits for a tick. It had three tabs — Post,
+View (the mindmap) — borderless tiles on `--sunken` with a 4px corner and
+`--text-xs` labels, Publish filled with the accent; *Open a draft from the
+site* sits under them and asks the same password as Publish. Export is four
+columns with no border, a format's icon above its tick, labelled one step
+smaller still (`--text-2xs`), its description the tooltip; the Export button waits for a tick. It had three tabs — Post,
 Export, Share — each with its own footer, section headings and labels, and
 the site's drafts opened from the rail, out of reach in focus mode. A
 section is reached by id (`openMenuAt`): a publish error about the address
@@ -1025,8 +1032,11 @@ editing on and copies the link; on, it copies the link again. The clipboard
 write starts while the tap still counts, with the link as a promise
 (`ClipboardItem`), since Safari refuses a write made after the room has
 been created (`shareAndCopy` in `App.vue`). While shared, the menu's Share
-section holds your name, who is here, the link and Stop (Leave on a joined
-copy), each a placeholder rather than a label. The password guards
+section is one row of who is here, your own chip first with your name as a
+field in it, marked (you) — the name and the list used to be two blocks
+saying the same thing — and under it Copy link and Stop (Leave on a joined
+copy). The link itself is not shown: it is the site's address and a random
+token, nothing to read or edit. The password guards
 the blog, and a share room holds no credential: the draft is copied into a
 `ShareRoom` Durable Object and the app hands back `?share=<token>`, and that
 token is the whole credential for joining — the link opens the same live
