@@ -69,11 +69,10 @@ onBeforeUnmount(() => {
 });
 
 const buttons: { icon: IconName; label: string; active: () => boolean; press: () => void }[] = [
-  { icon: "bold", label: "Bold", active: () => props.tools.bold, press: () => props.run((root) => format(root, "bold")) },
   { icon: "italic", label: "Italic", active: () => props.tools.italic, press: () => props.run((root) => format(root, "italic")) },
-  { icon: "highlight", label: "Highlight", active: () => props.tools.highlight, press: () => props.run((root) => toggleInline(root, "mark")) },
-  { icon: "code", label: "Inline code", active: () => props.tools.code, press: () => props.run((root) => toggleInline(root, "code")) },
+  { icon: "bold", label: "Bold", active: () => props.tools.bold, press: () => props.run((root) => format(root, "bold")) },
   { icon: "link", label: "Link", active: () => props.tools.link, press: () => props.run(askLink) },
+  { icon: "code", label: "Inline code", active: () => props.tools.code, press: () => props.run((root) => toggleInline(root, "code")) },
 ];
 </script>
 
