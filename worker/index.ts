@@ -149,6 +149,16 @@ const SECURITY_HEADERS: Record<string, string> = {
   "x-robots-tag": "noindex",
 };
 
+/**
+ * A page's policy carries a fresh nonce. The app has no inline script, but Cloudflare's Bot Fight Mode injects one
+ * into every page (JavaScript Detections) and stamps it with the nonce it reads from this header; without one the
+ * browser refused it and logged an error on every load.
+ */
+function nonced(policy: string): string {
+  const nonce = btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(16))));
+  return policy.replace("script-src 'self'", `script-src 'self' 'nonce-${nonce}'`);
+}
+
 function secured(response: Response): Response {
   if (response.status === 101) {
     return response;
@@ -156,6 +166,9 @@ function secured(response: Response): Response {
   const marked = new Response(response.body, response);
   for (const [name, value] of Object.entries(SECURITY_HEADERS)) {
     marked.headers.set(name, value);
+  }
+  if (marked.headers.get("content-type")?.startsWith("text/html")) {
+    marked.headers.set("content-security-policy", nonced(SECURITY_HEADERS["content-security-policy"]));
   }
   return marked;
 }

@@ -154,6 +154,22 @@ describe("worker hardening", () => {
     }
   });
 
+  it("gives every page a fresh script nonce for the script Cloudflare injects, and no answer one", async () => {
+    const assets = {
+      ...(env as object),
+      ASSETS: { fetch: async () => new Response("<!doctype html>", { headers: { "content-type": "text/html; charset=utf-8" } }) },
+    } as never;
+    const nonce = async () =>
+      /script-src 'self' 'nonce-([A-Za-z0-9+/=]{24})'/.exec(
+        (await worker.fetch(new Request("https://write.test/"), assets)).headers.get("content-security-policy") ?? "",
+      )?.[1];
+    const first = await nonce();
+    expect(first).toBeTruthy();
+    expect(await nonce()).not.toBe(first);
+    const answer = await worker.fetch(new Request("https://write.test/api/config"), env);
+    expect(answer.headers.get("content-security-policy")).not.toContain("nonce-");
+  });
+
   it("hands the share's owner a key and passes it on when the share ends", async () => {
     const seen: Request[] = [];
     const share = {

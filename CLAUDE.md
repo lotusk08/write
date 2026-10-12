@@ -67,7 +67,15 @@ any https address, `frame-src` only YouTube's no-cookie host; inline styles
 allowed because mermaid writes them, and `connect-src https:` so the Word
 export can fetch photos from other sites), plus `Referrer-Policy`,
 `nosniff`, `X-Frame-Options: DENY` and `noindex` (`secured` in
-`worker/index.ts`). A WebSocket upgrade is passed through untouched.
+`worker/index.ts`). A WebSocket upgrade is passed through untouched. A page's
+`script-src` also carries a fresh nonce (`nonced`): the app has no inline
+script, but Bot Fight Mode makes Cloudflare inject one into every page
+(JavaScript Detections, which cannot be turned off under it), and Cloudflare
+stamps it with the nonce it reads from this header. Without one Safari
+refused it and logged an error on every load. The viewport meta carries
+`interactive-widget=resizes-content` only where `navigator.virtualKeyboard`
+exists (`main.ts`), which is Chromium: Safari logged the key it does not know
+as an error, and pins the shell to the visual viewport anyway.
 
 `401` is reserved for that password and nothing else — it is the app's cue to
 forget what it stored and ask again, so GitHub's own 401 and 403 are reported
