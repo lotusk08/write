@@ -51,14 +51,14 @@ const pick = (path: string) => {
   <button
     ref="anchor"
     type="button"
-    class="btn icon ghost"
+    :class="['btn icon', { 'is-active': open }]"
     title="Open a draft from the site"
     aria-label="Open a draft from the site"
     aria-haspopup="dialog"
     :aria-expanded="open"
     @click="toggle"
   >
-    <Icon name="download" />
+    <Icon name="folder" />
   </button>
   <Teleport to="body">
     <div v-if="open" ref="list" class="menu floating draft-list" role="dialog" aria-label="Drafts on the site">

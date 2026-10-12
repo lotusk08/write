@@ -997,13 +997,33 @@ every draft by title, each row 44px, scrolling inside the visible band; a deck
 of one still opens its draft directly. The open tab's delete button is 44px
 there, and only shows on hover with a mouse.
 
+The menu (`EditorPopover.vue`) is one panel, no tabs: the post's fields
+(topics and language, cover, slug and date, options), then Export, then Share
+while the draft is shared. Its footer is Publish with the site's drafts beside
+it (a folder button, since both ask the password), then one row of four
+buttons, icon above label: Share, Export, Copy (the Markdown) and View (the
+mindmap). Export is four columns, a format's icon above its tick, its
+description the tooltip; the Export button waits for a tick. It had three
+tabs — Post, Export, Share — each with its own footer, and the site's drafts
+opened from the rail, out of reach in focus mode. A section is reached by id
+(`openMenuAt`): a publish error about the address opens it at Post file,
+tapping your name in the dock at Share. A tap in the drafts list, which
+floats over the menu, does not close it, and Escape there closes the list
+alone.
+
 The menu sheet covers the ⌘ button that opened it, so on a phone it carries
 its own close button, and closing it from inside — that button or Escape —
 hands focus back to ⌘.
 
 ## Sharing a draft
 
-The Share tab holds one switch and a name — no password. The password guards
+Sharing is the menu's Share button — no password. Off, it turns shared
+editing on and copies the link; on, it copies the link again. The clipboard
+write starts while the tap still counts, with the link as a promise
+(`ClipboardItem`), since Safari refuses a write made after the room has
+been created (`shareAndCopy` in `App.vue`). While shared, the menu's Share
+section holds your name, who is here, the link and Stop (Leave on a joined
+copy). The password guards
 the blog, and a share room holds no credential: the draft is copied into a
 `ShareRoom` Durable Object and the app hands back `?share=<token>`, and that
 token is the whole credential for joining — the link opens the same live
@@ -1030,7 +1050,7 @@ by the thousand, and crawlers are told to stay out entirely
 `X-Robots-Tag: noindex`, so a share link posted somewhere public does not
 end up rendered into a search index). The limiter is best-effort and
 per-colo — a brake, not a wall; Bot Fight Mode in the Cloudflare dashboard
-sits in front of all of it if one is ever needed. Turning the switch off
+sits in front of all of it if one is ever needed. Stop
 (or deleting the draft — that always ends its room now) deletes the room and
 closes every connection with code 4404, which each participant's app reads as
 the cue to drop the token and carry on with its local copy — autosave ran the
@@ -1046,20 +1066,20 @@ edit changes by the smallest splice between the old text and the new, so two
 people typing in different places merge. A remote change is read back to a
 draft and handed to the editor, which keeps the caret where it was. There are
 no remote carets: text-editor-vue has no collaboration layer to draw them, so
-who is here is the Share tab's list. A room created before the editor changed
+who is here is the Share section's list. A room created before the editor changed
 held a ProseMirror fragment instead; joining one finds the text empty and
-writes the local draft into it. The name above the switch is how you are listed: kept
+writes the local draft into it. The name in the Share section is how you are listed: kept
 per device, prefilled with a random two-word name so nobody has to invent
 one, and applied live through awareness when edited mid-session — not the
 old author setting, which defaulted the same on every device and once filled
 a room with names all reading "steve". Clearing the field keeps the last name
 rather than rerolling a random one mid-edit, and blur puts it back. Who is in
-the room is read out of awareness into the Share tab, and while a session
-runs the dock shows your own name and colour — tapping it opens the
-Share tab.
+the room is read out of awareness into the Share section, and while a session
+runs the dock shows your own name and colour — tapping it opens the menu
+at Share.
 
-The switch does not mean the same thing on every device. The draft that
-turned sharing on carries `shareOwner`, and only there does switching off
+Stop does not mean the same thing on every device. The draft that
+turned sharing on carries `shareOwner`, and only there does it
 end the room; on a copy joined through the link it just leaves — the token
 dropped, the local copy kept, the room still live for the others — and
 deleting a draft follows the same rule, so a guest tidying their rail cannot
@@ -1072,8 +1092,8 @@ a phone reopening a shared draft offline, which used to get an empty editor.
 That works only because those bytes carry the room's own struct IDs: an
 update rebuilt from the draft's JSON would mint new IDs and duplicate every
 node on merge, which is why the JSON copy must never be used to seed. The
-switch itself shows the state it is heading to while the request runs rather
-than snapping back until the token lands. A room keeps its document in
+Share button reads Sharing… while the room is made, and the section shows
+the state it is heading to rather than snapping back until the token lands. A room keeps its document in
 1 MB pieces (`chunks` and `doc:0`, `doc:1`, …), because a SQLite-backed
 Durable Object limits the size of a single stored value — 2 MB, as far as
 could be told, where a seed may be twice that — and wrangler's local runtime
@@ -1132,8 +1152,8 @@ commit's reads that depend only on the head — the stale checks, the folder
 listing, the commit, `redirects.txt` — run together. A push landing at the same moment is "Someone published at
 the same moment. Publish again." rather than GitHub's 422.
 
-The blog's own drafts open from the rail's download button, beside the
-"+": a list of every file in `src/drafts` (`GET /api/drafts`, password or
+The blog's own drafts open from the folder button beside Publish in the
+menu: a list of every file in `src/drafts` (`GET /api/drafts`, password or
 session, one GraphQL read like `/api/images`: the title from front matter,
 the date from the file name, newest first; titles read as YAML strings,
 `yamlScalar`, so an escaped quote does not show its backslash), each row

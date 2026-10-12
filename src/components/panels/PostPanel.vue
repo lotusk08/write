@@ -127,7 +127,7 @@ const onAltBlur = (event: FocusEvent) => {
     </div>
   </Section>
 
-  <Section title="Post file">
+  <Section id="menu-file" title="Post file">
     <div class="field">
       <label for="meta-slug">Slug</label>
       <input id="meta-slug" class="input" :value="slug" @input="emit('slug', ($event.target as HTMLInputElement).value)" />

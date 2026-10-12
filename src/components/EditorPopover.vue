@@ -1,12 +1,14 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { PostMeta } from "../../shared/types.ts";
-import { resolvedTheme, type MenuTab, type Settings } from "../lib/settings.ts";
+import { resolvedTheme, type Settings } from "../lib/settings.ts";
 import { PHONE_QUERY, useMediaQuery } from "../lib/viewport.ts";
 import Icon from "./Icon.vue";
 import ExportPanel from "./panels/ExportPanel.vue";
 import PostPanel from "./panels/PostPanel.vue";
+import Section from "./panels/Section.vue";
 import SharePanel from "./panels/SharePanel.vue";
+import SiteDrafts from "./SiteDrafts.vue";
 import type { ExportFormat, ShareState } from "./types.ts";
 
 const props = withDefaults(
@@ -14,7 +16,6 @@ const props = withDefaults(
     open: boolean;
     anchor: HTMLElement | null;
     region: HTMLElement | null;
-    tab: MenuTab;
     meta: PostMeta;
     slug: string;
     settings: Settings;
@@ -26,25 +27,18 @@ const props = withDefaults(
 );
 
 const emit = defineEmits<{
-  tab: [tab: MenuTab];
   close: [];
   meta: [patch: Partial<PostMeta>];
   slug: [slug: string];
   settings: [patch: Partial<Settings>];
   shareName: [name: string];
-  shareEnable: [];
+  share: [];
   shareDisable: [];
-  shareCopy: [];
   publish: [];
+  site: [path: string];
   mindmap: [];
   export: [formats: ExportFormat[]];
 }>();
-
-const TABS: { id: MenuTab; label: string }[] = [
-  { id: "post", label: "Post" },
-  { id: "export", label: "Export" },
-  { id: "share", label: "Share" },
-];
 
 const panel = ref<HTMLDivElement | null>(null);
 const frame = ref<DOMRect | null>(null);
@@ -96,9 +90,10 @@ const onKey = (event: KeyboardEvent) => {
     dismiss();
   }
 };
+/** A tap outside closes the menu, but not one in the site's drafts list, which opens from it and floats beside it. */
 const onDown = (event: PointerEvent) => {
-  const target = event.target as Node;
-  if (panel.value?.contains(target) || props.anchor?.contains(target)) {
+  const target = event.target as Element;
+  if (panel.value?.contains(target) || props.anchor?.contains(target) || target.closest?.(".draft-list")) {
     return;
   }
   emit("close");
@@ -157,19 +152,7 @@ onBeforeUnmount(stop);
         >
           <Icon :name="scheme === 'dark' ? 'sun' : 'moon'" />
         </button>
-        <div class="popover-tabs" role="tablist">
-          <button
-            v-for="item in TABS"
-            :key="item.id"
-            type="button"
-            role="tab"
-            :class="['popover-tab', { 'is-active': tab === item.id }]"
-            :aria-selected="tab === item.id"
-            @click="emit('tab', item.id)"
-          >
-            {{ item.label }}
-          </button>
-        </div>
+        <h2 class="popover-title">Post</h2>
         <button
           type="button"
           :class="['btn icon ghost', { 'is-active': settings.focusMode }]"
@@ -186,90 +169,62 @@ onBeforeUnmount(stop);
       </header>
 
       <div class="popover-body">
-        <PostPanel
-          v-if="tab === 'post'"
-          :meta="meta"
-          :slug="slug"
-          @change="(patch) => emit('meta', patch)"
-          @slug="(value) => emit('slug', value)"
-        />
-        <SharePanel
-          v-else-if="tab === 'share'"
-          :state="share"
-          @name="(name) => emit('shareName', name)"
-          @enable="emit('shareEnable')"
-          @disable="emit('shareDisable')"
-        />
-        <ExportPanel v-else :chosen="chosen" :exporting="exporting" @change="(next) => (chosen = next)" />
+        <PostPanel :meta="meta" :slug="slug" @change="(patch) => emit('meta', patch)" @slug="(value) => emit('slug', value)" />
+        <Section title="Export">
+          <ExportPanel :chosen="chosen" :exporting="exporting" @change="(next) => (chosen = next)" />
+        </Section>
+        <Section v-if="share.sharing || share.error" id="menu-share" title="Share">
+          <SharePanel :state="share" @name="(name) => emit('shareName', name)" @disable="emit('shareDisable')" />
+        </Section>
       </div>
 
       <footer class="popover-foot">
-        <template v-if="tab === 'export'">
-          <div class="foot-row">
-            <button
-              type="button"
-              class="btn primary block"
-              :disabled="exporting || chosen.length === 0"
-              @click="emit('export', chosen)"
-            >
-              <Icon name="download" />
-              {{ exporting ? "Exporting…" : "Export" }}
-            </button>
-            <button
-              type="button"
-              class="btn icon"
-              title="Copy the Markdown to the clipboard — ⌘⇧C"
-              aria-label="Copy the Markdown to the clipboard"
-              :disabled="exporting"
-              @click="emit('export', ['copy'])"
-            >
-              <Icon name="copy" />
-            </button>
-            <button
-              type="button"
-              class="btn icon"
-              title="Open in the mindmap — think.stevehoang.com"
-              aria-label="Open in the mindmap"
-              @click="emit('mindmap')"
-            >
-              <Icon name="mindmap" />
-            </button>
-          </div>
-          <p class="hint publish-target">
-            {{ chosen.length === 0 ? "Choose the format before download" : `${chosen.length} selected` }}
-          </p>
-        </template>
-        <template v-else-if="tab === 'share'">
-          <button
-            type="button"
-            class="btn primary block"
-            :disabled="!share.sharing || !share.link"
-            @click="emit('shareCopy')"
-          >
-            <Icon name="copy" />
-            Copy link
-          </button>
-          <p class="hint publish-target">
-            {{
-              share.busy
-                ? share.sharing
-                  ? "Turning on…"
-                  : "Turning off…"
-                : share.sharing
-                  ? "Live — everyone with the link edits this draft"
-                  : "Not shared"
-            }}
-          </p>
-        </template>
-        <template v-else>
+        <div class="foot-row">
           <button type="button" class="btn primary block" @click="emit('publish')">
             <Icon name="upload" />
             Publish
           </button>
-          <p class="hint publish-target">
-            <span class="mono">{{ publishDir }}/</span>
-          </p>
-        </template>
+          <SiteDrafts @open="(path) => emit('site', path)" />
+        </div>
+        <div class="foot-actions">
+          <button
+            type="button"
+            :class="['btn', { 'is-active': share.sharing }]"
+            :disabled="share.busy"
+            :title="share.sharing ? 'Copy the share link' : 'Share this draft to edit it together, and copy the link'"
+            @click="emit('share')"
+          >
+            <Icon name="people" />
+            {{ share.busy ? "Sharing…" : "Share" }}
+          </button>
+          <button
+            type="button"
+            class="btn"
+            :disabled="exporting || chosen.length === 0"
+            :title="chosen.length === 0 ? 'Tick a format above first' : `Export ${chosen.length} format${chosen.length === 1 ? '' : 's'}`"
+            @click="emit('export', chosen)"
+          >
+            <Icon name="download" />
+            {{ exporting ? "Exporting…" : "Export" }}
+          </button>
+          <button
+            type="button"
+            class="btn"
+            :disabled="exporting"
+            title="Copy the Markdown to the clipboard — ⌘⇧C"
+            @click="emit('export', ['copy'])"
+          >
+            <Icon name="copy" />
+            Copy
+          </button>
+          <button type="button" class="btn" title="View it in the mindmap — think.stevehoang.com" @click="emit('mindmap')">
+            <Icon name="mindmap" />
+            View
+          </button>
+        </div>
+        <p class="hint publish-target">
+          <span class="mono">{{ publishDir }}/</span>
+        </p>
       </footer>
     </div>
   </Teleport>

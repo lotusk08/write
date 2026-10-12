@@ -35,6 +35,8 @@
 
   --control-h: 34px;
   --tool-size: 28px;
+
+  --placeholder: color-mix(in srgb, var(--text) 30%, transparent);
 }
 
 @media (pointer: coarse) {
@@ -158,35 +160,17 @@ textarea {
 .popover-head {
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  padding: 5px 6px 0 12px;
+  gap: 2px;
+  padding: 5px 6px 5px 8px;
   border-bottom: 1px solid var(--border);
 }
 
-.popover-tabs {
-  display: flex;
-  gap: 2px;
-}
-
-.popover-tab {
-  padding: 8px 10px 10px;
-  border: none;
-  border-bottom: 2px solid transparent;
-  margin-bottom: -1px;
-  background: none;
-  color: var(--muted);
-  cursor: pointer;
+.popover-title {
+  flex: 1;
+  margin: 0;
+  padding: 0 6px;
   font-size: var(--text-md);
-  font-weight: 500;
-}
-
-.popover-tab:hover {
-  color: var(--text);
-}
-
-.popover-tab.is-active {
-  border-bottom-color: var(--accent);
-  color: var(--text);
+  font-weight: 600;
 }
 
 .popover-body {
@@ -215,6 +199,79 @@ textarea {
 .foot-row .btn.icon {
   height: auto;
   border: 1px solid var(--border);
+}
+
+.foot-row .btn.icon.is-active,
+.foot-actions .btn.is-active {
+  border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.foot-actions {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.foot-actions .btn {
+  height: auto;
+  min-height: var(--control-h);
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  padding: 5px 4px;
+  font-size: var(--text-sm);
+  white-space: nowrap;
+}
+
+.export-formats {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.export-format {
+  display: grid;
+  justify-items: center;
+  gap: 5px;
+  padding: 10px 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.export-format:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.export-format.is-on {
+  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.export-format-label {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.export-format input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--accent);
+}
+
+.export-format:has(input:focus-visible) {
+  box-shadow: 0 0 0 3px var(--ring);
+  outline: 1px solid var(--accent);
 }
 
 .share-panel {
@@ -439,6 +496,10 @@ textarea {
 
 .draft-list {
   width: min(300px, calc(100vw - 16px));
+}
+
+.menu.floating.draft-list {
+  z-index: 45;
 }
 
 .draft-list button:not(.btn) {
@@ -916,7 +977,8 @@ textarea {
 
 .title-input::placeholder,
 .description-input::placeholder {
-  color: var(--faint);
+  color: var(--placeholder);
+  opacity: 1;
 }
 
 .editor-host .post-body {
@@ -2412,7 +2474,7 @@ textarea {
 
 .editor-host .post-body:has(> p:only-child > br:only-child)::before {
   position: absolute;
-  color: var(--faint);
+  color: var(--placeholder);
   content: "Write in Markdown";
   pointer-events: none;
 }

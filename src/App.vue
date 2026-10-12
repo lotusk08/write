@@ -644,6 +644,39 @@ function renameShare(name: string) {
   }
 }
 
+/**
+ * The menu's Share button: turns shared editing on when it is off, and puts the link on the clipboard. The write
+ * starts while the tap still counts, with the link to come, since Safari refuses a clipboard write made after the
+ * room has been created.
+ */
+async function shareAndCopy() {
+  if (findDraft(currentId.value)?.shareToken) {
+    await copyShareLink();
+    return;
+  }
+  const link = (async () => {
+    await enableShare();
+    const token = findDraft(currentId.value)?.shareToken;
+    if (!token) {
+      throw new Error("Not shared.");
+    }
+    return shareLink(token);
+  })();
+  try {
+    if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+      const text = link.then((value) => new Blob([value], { type: "text/plain" }));
+      await navigator.clipboard.write([new ClipboardItem({ "text/plain": text })]);
+    } else {
+      await navigator.clipboard.writeText(await link);
+    }
+    showToast("Shared — link copied.");
+  } catch {
+    if (findDraft(currentId.value)?.shareToken) {
+      showToast("Shared. Copy the link from the Share section.");
+    }
+  }
+}
+
 async function copyShareLink() {
   const token = findDraft(currentId.value)?.shareToken;
   if (!token) {
@@ -681,10 +714,17 @@ function fixPhoto(src: string) {
   figure?.click();
 }
 
+/** Opens the menu with one of its sections in view, once the menu has drawn it. */
+function openMenuAt(id: string) {
+  menuOpen.value = true;
+  window.requestAnimationFrame(() =>
+    window.requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: "nearest" })),
+  );
+}
+
 function editPost() {
   publishOpen.value = false;
-  updateSettings({ menuTab: "post" });
-  menuOpen.value = true;
+  openMenuAt("menu-file");
 }
 
 async function reopenFromSite(draft: Draft) {
@@ -779,8 +819,7 @@ function focusEnd(event: MouseEvent) {
 }
 
 function openShareTab() {
-  updateSettings({ menuTab: "share" });
-  menuOpen.value = true;
+  openMenuAt("menu-share");
 }
 
 const onKey = (event: KeyboardEvent) => {
@@ -857,7 +896,6 @@ onBeforeUnmount(() => {
       @new="() => void newDraft()"
       @rename="(title) => updateMeta({ title })"
       @delete="(id) => void deleteDraft(id)"
-      @site="(path) => void importPost(path)"
     />
 
     <div ref="mainRegion" class="main">
@@ -978,23 +1016,21 @@ onBeforeUnmount(() => {
       :open="menuOpen"
       :anchor="anchor"
       :region="mainRegion"
-      :tab="settings.menuTab"
       :meta="current.meta"
       :slug="current.slug"
       :settings="settings"
       :share="shareState"
       :exporting="exporting"
       :escape-closes="!publishOpen"
-      @tab="(menuTab) => updateSettings({ menuTab })"
       @close="menuOpen = false"
       @meta="updateMeta"
       @slug="setSlug"
       @settings="updateSettings"
       @share-name="renameShare"
-      @share-enable="() => void enableShare()"
+      @share="() => void shareAndCopy()"
       @share-disable="() => void (current?.shareOwner ? disableShare() : leaveSharedDraft())"
-      @share-copy="() => void copyShareLink()"
       @publish="() => void openPublish()"
+      @site="(path) => ((menuOpen = false), void importPost(path))"
       @mindmap="openMindmap"
       @export="(formats) => void exportAs(formats)"
     />

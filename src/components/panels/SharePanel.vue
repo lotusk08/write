@@ -3,7 +3,7 @@ import { participantName } from "../../lib/participants.ts";
 import type { ShareState } from "../types.ts";
 
 const props = defineProps<{ state: ShareState }>();
-const emit = defineEmits<{ name: [name: string]; enable: []; disable: [] }>();
+const emit = defineEmits<{ name: [name: string]; disable: [] }>();
 
 const onBlur = () => {
   if (!props.state.name.trim()) {
@@ -14,65 +14,55 @@ const onBlur = () => {
 
 <template>
   <div class="share-panel">
-    <ul class="switch-list">
-      <li>
-        <label class="switch">
-          <input
-            type="checkbox"
-            :checked="state.sharing"
-            :disabled="state.busy"
-            @change="state.sharing ? emit('disable') : emit('enable')"
-          />
-          <span>
-            Shared editing
-            <em>
-              {{
-                state.owner
-                  ? "Anyone with the link can open this draft and edit it live"
-                  : "You joined this draft through its link — everyone edits the same live copy"
-              }}
-            </em>
-          </span>
-        </label>
-      </li>
-    </ul>
+    <p v-if="state.error" class="notice warn">{{ state.error }}</p>
 
-    <div class="field">
-      <span class="field-label">Your name</span>
-      <input
-        class="input"
-        :value="state.name"
-        maxlength="40"
-        placeholder="How you are listed to the others"
-        @input="emit('name', ($event.target as HTMLInputElement).value)"
-        @blur="onBlur"
-      />
-    </div>
+    <template v-if="state.sharing">
+      <p class="hint">
+        {{
+          state.busy
+            ? "Turning on…"
+            : state.owner
+              ? "Live — anyone with the link opens this draft and edits it with you."
+              : "You joined this draft through its link — everyone edits the same live copy."
+        }}
+      </p>
 
-    <div v-if="state.sharing && state.peers.length > 0" class="field">
-      <span class="field-label">Here now</span>
-      <div class="peers">
-        <span v-for="peer in state.peers" :key="peer.key" class="peer">
-          <span class="peer-dot" :style="{ background: peer.color }" />
-          {{ peer.name }}{{ peer.you ? " (you)" : "" }}
-        </span>
+      <div class="field">
+        <span class="field-label">Your name</span>
+        <input
+          class="input"
+          :value="state.name"
+          maxlength="40"
+          placeholder="How you are listed to the others"
+          @input="emit('name', ($event.target as HTMLInputElement).value)"
+          @blur="onBlur"
+        />
       </div>
-    </div>
 
-    <div v-if="state.sharing && state.link" class="share-link">
-      <input class="input mono" readonly :value="state.link" @focus="($event.target as HTMLInputElement).select()" />
-    </div>
+      <div v-if="state.peers.length > 0" class="field">
+        <span class="field-label">Here now</span>
+        <div class="peers">
+          <span v-for="peer in state.peers" :key="peer.key" class="peer">
+            <span class="peer-dot" :style="{ background: peer.color }" />
+            {{ peer.name }}{{ peer.you ? " (you)" : "" }}
+          </span>
+        </div>
+      </div>
 
-    <p v-if="state.error" class="hint" style="color: var(--danger)">{{ state.error }}</p>
+      <div v-if="state.link" class="share-link">
+        <input class="input mono" readonly :value="state.link" @focus="($event.target as HTMLInputElement).select()" />
+        <button type="button" class="btn danger" :disabled="state.busy" @click="emit('disable')">
+          {{ state.owner ? "Stop" : "Leave" }}
+        </button>
+      </div>
 
-    <p class="hint">
-      {{
-        state.sharing
-          ? state.owner
-            ? "Everyone edits the same live copy while their tab is open. Turning the switch off ends the link for all of them."
-            : "Everyone edits the same live copy while their tab is open. Turning the switch off just leaves — the share stays live for the others, and this copy stays yours."
-          : "The writing stays private until the switch goes on."
-      }}
-    </p>
+      <p class="hint">
+        {{
+          state.owner
+            ? "Stop ends the link for everyone. Your copy stays here."
+            : "Leave keeps your copy; the share stays live for the others."
+        }}
+      </p>
+    </template>
   </div>
 </template>
