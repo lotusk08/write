@@ -46,12 +46,6 @@ const chosen = ref<ExportFormat[]>([]);
 const sheet = useMediaQuery(PHONE_QUERY);
 
 const scheme = computed(() => resolvedTheme(props.settings.theme));
-const publishDir = computed(() =>
-  (props.settings.publishTarget === "drafts" ? props.settings.draftsDir : props.settings.postsDir).replace(
-    /^\/+|\/+$/g,
-    "",
-  ),
-);
 
 const position = computed(() => {
   const box = frame.value;
@@ -152,7 +146,6 @@ onBeforeUnmount(stop);
         >
           <Icon :name="scheme === 'dark' ? 'sun' : 'moon'" />
         </button>
-        <h2 class="popover-title">Post</h2>
         <button
           type="button"
           :class="['btn icon ghost', { 'is-active': settings.focusMode }]"
@@ -170,23 +163,20 @@ onBeforeUnmount(stop);
 
       <div class="popover-body">
         <PostPanel :meta="meta" :slug="slug" @change="(patch) => emit('meta', patch)" @slug="(value) => emit('slug', value)" />
-        <Section title="Export">
+        <Section>
           <ExportPanel :chosen="chosen" :exporting="exporting" @change="(next) => (chosen = next)" />
         </Section>
-        <Section v-if="share.sharing || share.error" id="menu-share" title="Share">
+        <Section v-if="share.sharing || share.error" id="menu-share">
           <SharePanel :state="share" @name="(name) => emit('shareName', name)" @disable="emit('shareDisable')" />
         </Section>
       </div>
 
       <footer class="popover-foot">
-        <div class="foot-row">
-          <button type="button" class="btn primary block" @click="emit('publish')">
+        <div class="foot-actions">
+          <button type="button" class="btn primary" title="Review, then publish to the blog" @click="emit('publish')">
             <Icon name="upload" />
             Publish
           </button>
-          <SiteDrafts @open="(path) => emit('site', path)" />
-        </div>
-        <div class="foot-actions">
           <button
             type="button"
             :class="['btn', { 'is-active': share.sharing }]"
@@ -222,9 +212,7 @@ onBeforeUnmount(stop);
             View
           </button>
         </div>
-        <p class="hint publish-target">
-          <span class="mono">{{ publishDir }}/</span>
-        </p>
+        <SiteDrafts @open="(path) => emit('site', path)" />
       </footer>
     </div>
   </Teleport>

@@ -6,6 +6,7 @@ import { isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
 import type { Language } from "../../lib/draft.ts";
 import { convertedSrc, displaySrc } from "../../lib/site.ts";
 import { rememberValue, tidyEdited } from "../../lib/text.ts";
+import Icon from "../Icon.vue";
 import Toggle from "../Toggle.vue";
 import TokenInput from "../TokenInput.vue";
 import type { ToggleOption } from "../types.ts";
@@ -83,25 +84,27 @@ const onAltBlur = (event: FocusEvent) => {
 </script>
 
 <template>
-  <Section title="Taxonomy">
+  <Section>
     <div class="field">
-      <label for="meta-tags">Topics</label>
       <TokenInput
         id="meta-tags"
         :values="meta.tags"
-        placeholder="coffee, travel"
+        placeholder="Topics"
         :suggestions="topics?.tags"
         :max="MAX_TOPICS"
         @change="(tags) => emit('change', { tags })"
       />
     </div>
-    <div class="menu-row">
-      <span class="field-label">Language</span>
-      <Toggle label="Language" :options="LANGUAGES" :value="meta.lang" @change="(lang) => emit('change', { lang })" />
-    </div>
+    <Toggle
+      class="toggle-wide"
+      label="Language"
+      :options="LANGUAGES"
+      :value="meta.lang"
+      @change="(lang) => emit('change', { lang })"
+    />
   </Section>
 
-  <Section title="Cover image">
+  <Section>
     <div class="field post-cover">
       <figure v-if="coverUrl" class="cover-card">
         <img :src="coverUrl" :alt="meta.cover?.alt ?? ''" @error="onCoverError" />
@@ -110,41 +113,50 @@ const onAltBlur = (event: FocusEvent) => {
           <button type="button" class="btn tiny danger" @click="emit('change', { cover: null })">Remove</button>
         </figcaption>
       </figure>
-      <button v-else type="button" class="cover-empty" @click="coverInput?.click()">Choose an image</button>
+      <button v-else type="button" class="cover-empty" @click="coverInput?.click()">
+        <Icon name="image" />
+        Cover image
+      </button>
       <input ref="coverInput" type="file" accept="image/*" hidden @change="pickCover" />
-      <template v-if="meta.cover">
-        <label for="meta-cover-alt">Alt text</label>
-        <input
-          id="meta-cover-alt"
-          class="input"
-          placeholder="Describes the image"
-          :value="meta.cover.alt"
-          @input="setAlt(($event.target as HTMLInputElement).value)"
-          @focus="rememberValue($event.target as HTMLInputElement)"
-          @blur="onAltBlur"
-        />
-      </template>
+      <input
+        v-if="meta.cover"
+        id="meta-cover-alt"
+        class="input"
+        placeholder="Cover alt text"
+        aria-label="Cover alt text"
+        :value="meta.cover.alt"
+        @input="setAlt(($event.target as HTMLInputElement).value)"
+        @focus="rememberValue($event.target as HTMLInputElement)"
+        @blur="onAltBlur"
+      />
     </div>
   </Section>
 
-  <Section id="menu-file" title="Post file">
+  <Section id="menu-file">
     <div class="field">
-      <label for="meta-slug">Slug</label>
-      <input id="meta-slug" class="input" :value="slug" @input="emit('slug', ($event.target as HTMLInputElement).value)" />
+      <input
+        id="meta-slug"
+        class="input"
+        placeholder="Slug"
+        aria-label="Slug"
+        :value="slug"
+        @input="emit('slug', ($event.target as HTMLInputElement).value)"
+      />
     </div>
     <div class="field">
-      <label for="meta-date">Date</label>
       <input
         id="meta-date"
         class="input numeric"
+        placeholder="Date"
+        aria-label="Date"
         :value="meta.date"
         @input="emit('change', { date: ($event.target as HTMLInputElement).value })"
       />
     </div>
   </Section>
 
-  <Section title="Options">
-    <ul class="switch-list">
+  <Section>
+    <ul class="switch-list switch-pair">
       <li v-for="option in OPTIONS" :key="option.key">
         <label class="switch">
           <input

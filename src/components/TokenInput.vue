@@ -181,6 +181,7 @@ const focusField = () => document.getElementById(props.id)?.focus();
       class="token-input"
       :value="draft"
       :placeholder="values.length ? '' : placeholder"
+      :aria-label="placeholder"
       :disabled="full"
       role="combobox"
       aria-autocomplete="list"

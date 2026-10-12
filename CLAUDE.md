@@ -997,19 +997,22 @@ every draft by title, each row 44px, scrolling inside the visible band; a deck
 of one still opens its draft directly. The open tab's delete button is 44px
 there, and only shows on hover with a mouse.
 
-The menu (`EditorPopover.vue`) is one panel, no tabs: the post's fields
-(topics and language, cover, slug and date, options), then Export, then Share
-while the draft is shared. Its footer is Publish with the site's drafts beside
-it (a folder button, since both ask the password), then one row of four
-buttons, icon above label: Share, Export, Copy (the Markdown) and View (the
-mindmap). Export is four columns, a format's icon above its tick, its
-description the tooltip; the Export button waits for a tick. It had three
-tabs — Post, Export, Share — each with its own footer, and the site's drafts
-opened from the rail, out of reach in focus mode. A section is reached by id
-(`openMenuAt`): a publish error about the address opens it at Post file,
-tapping your name in the dock at Share. A tap in the drafts list, which
-floats over the menu, does not close it, and Escape there closes the list
-alone.
+The menu (`EditorPopover.vue`) is one panel, no tabs and no headings: the
+post's fields (topics, then the language as a full-width toggle; the cover;
+slug and date; the two options side by side), then Export, then Share while
+the draft is shared. A field says what it is by its placeholder (and its
+`aria-label`), not a label above it. Its footer is one row of five equal
+buttons, icon above label — Publish, Share, Export, Copy (the Markdown) and
+View (the mindmap) — with *Open a draft from the site* under it, which asks
+the same password as Publish. Export is four columns with no border, a
+format's icon above its tick in the smallest text, its description the
+tooltip; the Export button waits for a tick. It had three tabs — Post,
+Export, Share — each with its own footer, section headings and labels, and
+the site's drafts opened from the rail, out of reach in focus mode. A
+section is reached by id (`openMenuAt`): a publish error about the address
+opens it at the slug and date, tapping your name in the dock at Share. A tap
+in the drafts list, which floats over the menu, does not close it, and
+Escape there closes the list alone.
 
 The menu sheet covers the ⌘ button that opened it, so on a phone it carries
 its own close button, and closing it from inside — that button or Escape —
@@ -1023,7 +1026,7 @@ write starts while the tap still counts, with the link as a promise
 (`ClipboardItem`), since Safari refuses a write made after the room has
 been created (`shareAndCopy` in `App.vue`). While shared, the menu's Share
 section holds your name, who is here, the link and Stop (Leave on a joined
-copy). The password guards
+copy), each a placeholder rather than a label. The password guards
 the blog, and a share room holds no credential: the draft is copied into a
 `ShareRoom` Durable Object and the app hands back `?share=<token>`, and that
 token is the whole credential for joining — the link opens the same live

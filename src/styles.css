@@ -165,43 +165,45 @@ textarea {
   border-bottom: 1px solid var(--border);
 }
 
-.popover-title {
-  flex: 1;
-  margin: 0;
-  padding: 0 6px;
-  font-size: var(--text-md);
-  font-weight: 600;
+.popover-head > :first-child {
+  margin-right: auto;
 }
 
 .popover-body {
   flex: 1;
-  padding: 14px 16px 18px;
+  padding: 12px 16px 16px;
   overflow-y: auto;
+}
+
+.popover-body .section + .section {
+  padding-top: 12px;
+  margin-top: 12px;
+}
+
+.popover-body .field {
+  margin-bottom: 8px;
+}
+
+.popover-body .section > .field:last-child {
+  margin-bottom: 0;
+}
+
+.toggle-wide {
+  width: 100%;
+}
+
+.switch-pair {
+  grid-template-columns: 1fr 1fr;
 }
 
 .popover-foot {
   display: grid;
-  gap: 10px;
-  padding: 11px 16px 13px;
+  gap: 6px;
+  padding: 10px 12px 8px;
   border-top: 1px solid var(--border);
   background: var(--panel);
 }
 
-.foot-row {
-  display: flex;
-  gap: 8px;
-}
-
-.foot-row .btn.primary {
-  flex: 1;
-}
-
-.foot-row .btn.icon {
-  height: auto;
-  border: 1px solid var(--border);
-}
-
-.foot-row .btn.icon.is-active,
 .foot-actions .btn.is-active {
   border-color: color-mix(in srgb, var(--accent) 40%, var(--border));
   background: var(--accent-soft);
@@ -211,7 +213,17 @@ textarea {
 .foot-actions {
   display: grid;
   gap: 6px;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+}
+
+.site-drafts-open {
+  width: 100%;
+  height: auto;
+  min-height: 28px;
+  justify-content: center;
+  padding: 4px 8px;
+  color: var(--muted);
+  font-size: var(--text-sm);
 }
 
 .foot-actions .btn {
@@ -234,14 +246,13 @@ textarea {
 .export-format {
   display: grid;
   justify-items: center;
-  gap: 5px;
-  padding: 10px 4px 8px;
-  border: 1px solid var(--border);
+  gap: 4px;
+  padding: 6px 2px;
   border-radius: var(--radius);
   color: var(--muted);
   cursor: pointer;
-  font-size: var(--text-sm);
-  transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
+  font-size: var(--text-xs);
+  transition: background 120ms ease, color 120ms ease;
 }
 
 .export-format:hover {
@@ -250,9 +261,7 @@ textarea {
 }
 
 .export-format.is-on {
-  border-color: color-mix(in srgb, var(--accent) 45%, var(--border));
-  background: var(--accent-soft);
-  color: var(--text);
+  color: var(--accent);
 }
 
 .export-format-label {
@@ -277,10 +286,6 @@ textarea {
 .share-panel {
   display: grid;
   gap: 14px;
-}
-
-.share-panel .field {
-  margin-bottom: 0;
 }
 
 .share-link {
@@ -1554,15 +1559,6 @@ textarea {
   margin-top: 18px;
 }
 
-.section-title {
-  margin: 0 0 12px;
-  color: var(--muted);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-}
-
 .mono {
   font-family: var(--font-mono);
   font-size: var(--text-sm);
@@ -1705,8 +1701,13 @@ textarea {
 }
 
 .cover-empty {
+  display: flex;
   width: 100%;
-  padding: 26px 12px;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: var(--control-h);
+  padding: 6px 12px;
   border: 1px dashed var(--border-strong);
   border-radius: var(--radius);
   background: none;
@@ -1833,11 +1834,6 @@ textarea {
 
 .publish-as {
   margin-bottom: 14px;
-}
-
-.publish-target {
-  margin-top: -2px;
-  text-align: center;
 }
 
 .notice.ok {
@@ -2378,6 +2374,14 @@ textarea {
 
   .editor-image-tools {
     margin-top: 2px;
+  }
+
+  .site-drafts-open {
+    min-height: 36px;
+  }
+
+  .btn.ghost.site-drafts-open:hover:not(:disabled) {
+    background: none;
   }
 
   .publish-where a {
