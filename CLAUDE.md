@@ -334,10 +334,12 @@ under it (`setImageAlt`, `setImageCaption`); a photo with no title has no
 caption, since the blog never shows an alt as one. Until October 2026 the
 gallery's one button wrote the alt and dropped the title, so a photo could
 not have both, and a photo outside a gallery took its caption as an italic
-line under it, which the caption button made; the blog's 140 such lines
-became titles that month. A photo that still has the line (one whose
-caption holds a link, under a legacy row, or beside a title of its own)
-keeps it, edited in place, and the stylesheet hides its caption button. A title is written
+line under it, which the caption button made; every such line on the blog
+became a title that month. The blog reads a lone photo's title as inline
+Markdown, so a link written in one stays a link, and gives a light/dark
+pair, one picture, the caption its one titled photo carries. A photo that
+still has the line, in a draft from before, keeps it, edited in place, and
+the stylesheet hides its caption button. A title is written
 in double quotes; `escapeChars` in `src/lib/inline.ts`, the one escaper for
 image and link text, escapes a `"` in it, and in alt the brackets, a
 backtick, `*`, `_`, `<`, `~`, and a backslash wherever markdown would
