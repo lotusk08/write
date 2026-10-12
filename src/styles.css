@@ -1679,7 +1679,7 @@ textarea {
   width: 15px;
   height: 15px;
   flex: none;
-  margin: 1px 0 0;
+  margin-top: 1px;
   accent-color: var(--accent);
 }
 
@@ -2291,6 +2291,7 @@ textarea {
   .publish-details summary,
   .publish-progress,
   .menu button:not(.btn),
+  .switch,
   .btn.tiny {
     min-height: var(--control-h);
   }
@@ -2301,12 +2302,8 @@ textarea {
     content: "";
   }
 
-  .switch-list {
-    gap: 0;
-  }
-
   .switch {
-    padding-block: 6px;
+    align-items: center;
   }
 
   .editor-image-alt {

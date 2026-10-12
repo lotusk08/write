@@ -529,11 +529,11 @@ touch: at 44 the phone's dock showed four tools and the bubble ran wide. The
 Language and Publish as toggle keeps its slim pill on touch too, 27px; its
 buttons reach 8px past it above and below (`::before`), so a tap there still
 lands. Raised to 44px it read as a fat knob, the row under it grew, and it
-was taken back by the owner's choice. A checkbox row (`.switch`) is padded
-6px on touch with no gap between rows, so the rows touch and there is no
-dead space, while the checkbox stays on the label's first line; made 44px
-tall and centred, the rows sat 56px apart and a checkbox floated beside
-the middle of its hint. A small type scale and radius tokens replace stray
+was taken back by the owner's choice. A checkbox row (`.switch`) is 44px
+tall on touch with its box centred on the label and hint, 12px between rows,
+by the owner's choice: packed tight with the box on the first line, it was
+tried and taken back. The box is `flex: none`, or a long hint (PDF's)
+squeezed it and its row sat a few pixels left of the others. A small type scale and radius tokens replace stray
 px values; the 30px title and the 16px inputs that keep iOS from zooming stay
 as they are. `--faint` is `#6e6e73` light and `#8e8e93` dark, at least 4.5:1
 on every surface (it was 3.44:1 and 4.02:1). With a mouse the toolbar wraps
