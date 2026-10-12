@@ -604,7 +604,9 @@ of the panel. An empty field shows the eight most used; typing narrows them to
 the ones whose title or slug starts with it, then the ones containing it, with
 diacritics folded so `tet` finds `Tết` (`fold` in `src/lib/text.ts`, the one
 folding `slugify` uses too). What the post already carries is never
-offered. A chip is picked on click, with the pointer's mousedown and
+offered. The field's text box has no width of its own (`width: 0`, growing
+to fill the row): at its browser default it pushed the menu sideways on a
+320px phone. A chip is picked on click, with the pointer's mousedown and
 pointerdown cancelled so the input keeps focus and its blur does not eat the
 tap. Picking on pointerdown instead would add a tag for every scroll of the
 sheet that happened to start on a chip. Arrow keys move through the row and Enter takes the one lit;
