@@ -1,6 +1,6 @@
 import type { JSONContent } from "../editor/doc.ts";
 import type { PostMeta } from "../../shared/types.ts";
-import { EMBED_LIQUID, EMBED_TAG, embedPlatform } from "../editor/blog.ts";
+import { EMBED_LIQUID, EMBED_TAG, NOTE_CLASSES, embedPlatform, noteOfClass } from "../editor/blog.ts";
 import { ENTITY, type InlineToken, entityText, inlineTokens } from "./inline.ts";
 import { languageOf } from "./topics.ts";
 
@@ -794,7 +794,7 @@ const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const BULLET = /^(\s*)([-*+])\s+(.*)$/;
 const ORDERED = /^(\s*)(\d+)[.)]\s+(.*)$/;
 const LIST_START = /^ {0,3}(?:[-*+]|\d+[.)])\s+/;
-const NOTE = /^\{:\s*\.(?:note-)?(tip|info|important|warning|danger|author)\s*\}\s*$/;
+const NOTE = new RegExp(`^\\{:\\s*\\.(${Object.values(NOTE_CLASSES).join("|")})\\s*\\}\\s*$`);
 const BLOCK_IAL = /^ {0,3}\{:[^}\n]*\}\s*$/;
 const TABLE_DIVIDER = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
 const SETEXT = /^ {0,3}(=+|-+)[^\S\n]*$/;
@@ -882,11 +882,23 @@ function summaryText(html: string): JSONContent[] {
   return text ? [{ type: "text", text }] : [];
 }
 
+/** Blocks that may sit directly under the line before them, as a list under its lead-in does; a paragraph never is one. */
+const HUGGING = new Set(["bulletList", "orderedList", "taskList", "blockquote", "codeBlock", "table", "heading", "gallery"]);
+
 function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[] {
   const out: JSONContent[] = [];
   let i = 0;
   let pending: string | null = null;
   let pendingAt = 0;
+  let openedAt = 0;
+  let openedLine = 0;
+
+  const hug = () => {
+    const block = out[openedAt];
+    if (block && openedAt > 0 && lines[openedLine - 1]?.trim() && HUGGING.has(block.type ?? "") && !block.attrs?.lazy) {
+      block.attrs = { ...block.attrs, joinPrevious: true };
+    }
+  };
 
   const keep = (value: string) => {
     out.push({ type: "rawBlock", content: [{ type: "text", text: value }] });
@@ -907,7 +919,10 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
 
   while (i < lines.length) {
     settle();
+    hug();
     const line = lines[i];
+    openedAt = out.length;
+    openedLine = i;
 
     if (!line.trim()) {
       i += 1;
@@ -1047,7 +1062,7 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
       let note: string | null = null;
       const attribute = i < lines.length ? NOTE.exec(lines[i].trim()) : null;
       if (attribute) {
-        note = attribute[1];
+        note = noteOfClass(attribute[1]);
         i += 1;
       }
       out.push({
@@ -1186,6 +1201,7 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
   }
 
   settle(true);
+  hug();
   return rowAttributes(out);
 }
 

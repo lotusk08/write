@@ -25,7 +25,7 @@ describe("text that looks like Markdown", () => {
     [["+ x"], "\\+ x"],
     [["---"], "\\---"],
     [["> q"], "\\> q"],
-    [["{: .note-info}"], "\\{: .note-info}"],
+    [["{: .info}"], "\\{: .info}"],
     [["a | b"], "a \\| b"],
     [["&copy; &amp; &#169; &foo;"], "\\&copy; \\&amp; \\&#169; &foo;"],
     [["Title", "==="], "Title\n\\==="],

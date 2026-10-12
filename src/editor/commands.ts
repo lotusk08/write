@@ -1,5 +1,5 @@
 import { imageStore, LOCAL_PREFIX, storeImageFile } from "../lib/db.ts";
-import { withoutRowClasses, type NoteType } from "./blog.ts";
+import type { NoteType } from "./blog.ts";
 import { docToHtml } from "./bridge.ts";
 import type { JSONContent } from "./doc.ts";
 
@@ -237,7 +237,7 @@ export function toggleInline(root: HTMLElement, tag: string): boolean {
   return true;
 }
 
-/** The blog's `{: .filepath}` code: plain code gains the class, a file path loses its code. */
+/** The blog's `{: .path}` code: plain code gains the class, a file path loses its code. */
 export function toggleFilepath(root: HTMLElement): boolean {
   const code = closestIn(root, anchor(root), "code");
   if (code && !code.closest("pre")) {
@@ -322,7 +322,7 @@ function wrapInQuote(root: HTMLElement): HTMLElement | null {
   return quote;
 }
 
-/** A callout of the blog's: `{: .note-tip }` and the rest, or `{: .author }`. Picking the current kind takes it off. */
+/** A callout of the blog's: `{: .tip }` and the rest, or `{: .author }`. Picking the current kind takes it off. */
 export function setNote(root: HTMLElement, note: NoteType): boolean {
   const quote = quoteAt(root) ?? wrapInQuote(root);
   if (!quote) {
@@ -504,14 +504,6 @@ export function imageRun(root: HTMLElement): HTMLElement[] {
   return run;
 }
 
-function setIal(figure: HTMLElement, ial: string | null): void {
-  if (ial) {
-    figure.setAttribute("data-ial", ial);
-  } else {
-    figure.removeAttribute("data-ial");
-  }
-}
-
 export function galleryAt(root: HTMLElement): HTMLElement | null {
   return closestIn(root, selectedFigure(root) ?? anchor(root), "[data-gallery]");
 }
@@ -520,7 +512,6 @@ function plainImage(figure: HTMLElement): HTMLElement {
   for (const name of ["data-join", "data-same-line", "data-block-ial"]) {
     figure.removeAttribute(name);
   }
-  setIal(figure, withoutRowClasses(figure.getAttribute("data-ial")));
   return figure;
 }
 

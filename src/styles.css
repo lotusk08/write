@@ -1274,17 +1274,6 @@ textarea {
   font-weight: 600;
 }
 
-.editor-host .post-body [data-block-ial*="c-center"] {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-}
-
-.editor-host .post-body img[data-block-ial*="c-center"] {
-  display: block;
-  margin-inline: auto;
-}
-
 .swatch-label {
   display: flex;
   gap: 8px;

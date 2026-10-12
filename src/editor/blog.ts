@@ -1,21 +1,6 @@
 import { displaySrc } from "../lib/site.ts";
 
-/** The blog's own vocabulary: callouts, rows, galleries and embeds, as the posts write them. */
-
-export const CENTER_ROW = "{: .d-flex .c-center }";
-
-const ROW_CLASSES = ["normal", "gap"];
-
-const IAL_BODY = /^\{:\s*|\s*\}$/g;
-
-export function withoutRowClasses(ial: unknown): string | null {
-  const body = String(ial ?? "")
-    .replace(IAL_BODY, "")
-    .replace(new RegExp(`\\.(?:${ROW_CLASSES.join("|")})(?![\\w-])`, "g"), "")
-    .replace(/\s+/g, " ")
-    .trim();
-  return body ? `{: ${body} }` : null;
-}
+/** The blog's own vocabulary: callouts, galleries and embeds, as the posts write them. */
 
 export const NOTE_TYPES = ["tip", "info", "important", "warning", "danger", "author"] as const;
 
@@ -32,6 +17,20 @@ export const NOTE_LABELS: Record<NoteType, string> = {
 
 export function isNoteType(value: unknown): value is NoteType {
   return (NOTE_TYPES as readonly unknown[]).includes(value);
+}
+
+/** The class each callout is written with on the blog, short as the blog names it: `{: .key }` is Important. */
+export const NOTE_CLASSES: Record<NoteType, string> = {
+  tip: "tip",
+  info: "info",
+  important: "key",
+  warning: "warn",
+  danger: "risk",
+  author: "author",
+};
+
+export function noteOfClass(name: string): NoteType | null {
+  return NOTE_TYPES.find((type) => NOTE_CLASSES[type] === name) ?? null;
 }
 
 const PLATFORMS = ["youtube", "x", "spotify", "audio", "video"] as const;

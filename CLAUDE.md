@@ -223,7 +223,7 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   one step at a time; code and highlight have no command, so the text typed
   straight after one is moved out of the mark, where Chrome kept typing
   inside it. `[t](url)` becomes a link (an image `![a](b)` is left alone),
-  `- [x] ` a ticked task, `3. ` a list starting at 3, `` `x`{: .filepath} `` a
+  `- [x] ` a ticked task, `3. ` a list starting at 3, `` `x`{: .path} `` a
   file path. Tab and Shift+Tab nest and lift list items and Tab indents in a
   code block; Enter on an empty last line leaves a code block or a section,
   and a typed fence leaves a paragraph after the block. And the ⌘ keys beyond the editor's own
@@ -240,9 +240,10 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   are told apart by `data-step` (`-1`, `0`, `1`), not their glyphs; read by
   text, any new button there removed the photo. Chart colours are read from
   the CSS tokens (`render.ts`). A photo's attribute list is previewed only for
-  `.light` and `.dark`, which the blog still draws; `.left`, `.right`,
-  `.shadow`, `.w-*`, `.rounded-*` and `w=`/`h=` are kept in the markdown but
-  no longer shown, since the blog's renderer drops them. Those elements carry `data-transient`, which
+  `.light` and `.dark`, which the blog still draws; any other list it carries
+  is written back as found but not shown. The blog's renderer drops `.left`,
+  `.right`, `.shadow`, `.w-*`, `.rounded-*` and `w=`/`h=`, and no post on the
+  blog writes them any more (taken out in October 2026). Those elements carry `data-transient`, which
   `htmlToDoc` skips. It runs after every load and edit and only touches what
   changed.
 
@@ -301,8 +302,18 @@ the move re-publishes without moving a line.
 
 Body output follows the blog too: headings start at H2, images are committed
 under `public/assets/img/post` and written as `/assets/img/post/…`, and
-blockquotes can carry the site's `{: .note-* }` callout classes, written
-`{: .note-info}` with no space inside, as 128 of the blog's 136 are.
+blockquotes can carry the site's callout classes, written with no space
+inside, `{: .info}`, as the blog's posts write them. The blog names them
+short: `.tip`, `.info`, `.key` (Important), `.warn` (Warning) and `.risk`
+(Danger), with `.author` for an attributed quote; `NOTE_CLASSES` in
+`editor/blog.ts` maps the editor's own kinds to them, and the reader takes
+its pattern from the same map. The editor's kinds keep their long names
+(`important`, `warning`, `danger`), since a saved draft stores them. Until
+October 2026 the blog wrote `.note-info` and the rest, and a file path
+`.filepath`; every post was renamed with the blog, so an old `.note-*`
+list is now read as any other attribute list and written back as found,
+not as a callout. A file path in inline code is `` `x`{: .path} `` on the
+blog; inside the editor it is still a `filepath` mark and `code.filepath`.
 
 Plain text is written so the site reads it as text (`escapePlain` in
 `markdown.ts`). At the start of a line `# `, `##### `, `- `, `+ `, `1. `,
@@ -358,9 +369,10 @@ like any other image, and the toolbar's gallery button turns a run of images
 into one or separates it again. Several photos inserted at once outside a
 gallery become one: the blog retired photo rows (`{: .normal .gap }` under
 `{: .d-flex .c-center }`; every row became a gallery), so the editor has no
-row or centre button. A legacy row still reads and writes back as found, is
-still shown side by side so it reads as one, and making it a gallery strips
-its row classes. A fence that holds anything but image lines
+row or centre button, and no post on the blog has a row left. What the
+editor knew of them (`CENTER_ROW`, the row classes a gallery stripped, the
+centred preview) went in October 2026; a row's attribute lists would now
+be kept as any other list is. A fence that holds anything but image lines
 stays a code block and is written back as found, its whole info string kept in
 the code block's `language`.
 
@@ -686,8 +698,7 @@ draws every one of these lines differently:
   written under three spaces of indent. Which side of the block it was written
   on is a fact about the post, not a formatting choice: one above leaves a
   paragraph of its own in the HTML where one below does not, so `ialAbove`
-  rides on the block and it is written back where it was found. A legacy
-  row's `{: .d-flex .c-center }` is a row's whichever side it sits.
+  rides on the block and it is written back where it was found.
 - A list marker indented less than the item above it starts the next item of
   that list, however little it is indented; only one indented as far as that
   item's own text opens a list inside it.
@@ -803,15 +814,27 @@ Things that took a bug to learn, and that a change here can quietly undo:
 - A list marker indented four spaces or more is not a list — it continues the
   block above. Tabs indent by columns, not by one character.
 - An image and the line under it are one paragraph, and the blog styles that
-  line as a caption; a row of images is one paragraph too. `joinPrevious` keeps
-  those together on the way out. A run is a row only where one of its photos
-  says so — `{: .d-flex .c-center }`, which nothing writes any more — and
-  reading a row out of `.gap` alone
-  invented one for a run of photos whose own list belonged to the quote around
-  them. The marker belongs
-  on the last image of the run — Kramdown reads the list under the last line as
-  the whole paragraph's, and `rowAttributes` in `import.ts` is what puts it
+  line as a caption; a run of images is one paragraph too. `joinPrevious`
+  keeps those together on the way out. An attribute list written under the
+  run belongs on its last image — Kramdown reads the list under the last line
+  as the whole paragraph's, and `rowAttributes` in `import.ts` is what puts it
   back there.
+- A block written directly under the line above it, with no blank line
+  between, is written back that way: a list under its lead-in, a quote under
+  a list item's text, code, a table or a heading under a paragraph
+  (`HUGGING` in `import.ts` marks them `joinPrevious`), at the top of a post
+  as much as inside a quote or a list item. The writer put a blank line
+  before every one, so `> A list:` over `> - one` gained a `>` line, and a
+  quote under an item's text a blank line inside the item. A paragraph is
+  never marked: under a list an edit could leave it, it would be read as
+  more of the last item. Nor is a rule, written back as `---` and so a
+  heading of the paragraph above it, nor raw HTML, some of which cannot
+  break a paragraph. And a numbered list that does not count from 1 is never
+  written under a paragraph (`canHug` in `markdown.ts`), joined or nested,
+  since markdown reads it as more of the paragraph. With it 43 of the blog's
+  89 posts, drafts and pages are written back byte for byte, up from 38,
+  none moved further from its source, and all 89 render on the blog exactly
+  as their source does.
 - A Kramdown attribute list attaches to whichever neighbour is not separated
   from it by a blank line, and it is parsed with quoted values taken whole —
   the base64 inside `lqip="…"` contains things that look like classes and

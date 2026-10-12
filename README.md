@@ -40,7 +40,7 @@ browser.
   quoting, empty fields omitted — so re-publishing a post never moves a line
   of its front matter.
 - **Quotes and callouts.** A plain quote has its own button; quotes can carry
-  the blog's five note styles, exported as `{: .note-info}` and friends, plus
+  the blog's five note styles, exported as `{: .info}` and friends, plus
   its centred `{: .author}` attribution.
 - **Shortcuts.** Markdown as you type (`**bold**`, `[text](url)`, `- [x] `,
   `---` …) and the ⌘ keys the old editor had; Tab nests list items.
@@ -48,7 +48,7 @@ browser.
   bold and italic and dropping fonts and colours; pasted Markdown becomes
   formatting.
   Body headings start at H2, since the title lives in front matter.
-- **The blog's own formats.** `{: .filepath}` code, the ```` ```gallery ````
+- **The blog's own formats.** `{: .path}` code, the ```` ```gallery ````
   fence, made from a run of photos with one button (several photos added at
   once become one), its photos added, moved and removed in place, and
   `<EmbedYoutube id="…" />` players are first-class here — paste a YouTube, X

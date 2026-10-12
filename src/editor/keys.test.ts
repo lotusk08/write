@@ -111,7 +111,7 @@ describe("quotes", () => {
   });
 
   it("⌘⇧B quotes, and a callout loses its kind", () => {
-    load("> a tip\n{: .note-tip}");
+    load("> a tip\n{: .tip}");
     caretAfter("a tip");
     handleKeydown(root, new KeyboardEvent("keydown", { metaKey: true, shiftKey: true, code: "KeyB", key: "B" }));
     expect(markdown()).toBe("> a tip");
@@ -173,14 +173,14 @@ describe("marks typed in Markdown", () => {
     expect(root.querySelector("a")).toBeNull();
   });
 
-  it("`x`{: .filepath} makes the code a file path", () => {
+  it("`x`{: .path} makes the code a file path", () => {
     raw("open `a/b`");
     caretAfter("`a/b`");
     typed("`");
-    root.querySelector("code")?.after("{: .filepath}");
-    caretAfter("{: .filepath}");
+    root.querySelector("code")?.after("{: .path}");
+    caretAfter("{: .path}");
     typed("}");
-    expect(markdown()).toBe("open `a/b`{: .filepath}");
+    expect(markdown()).toBe("open `a/b`{: .path}");
   });
 
   it("leaves snake_case_names, spaced stars, half-closed bold and Vietnamese mid-word marks alone", () => {

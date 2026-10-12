@@ -27,7 +27,7 @@ describe("bridge", () => {
     ["marks", "**bold** *italic* ~~gone~~ <u>under</u> <mark>lit</mark> m<sup>2</sup> H<sub>2</sub>O `code`"],
     ["nested marks and links", "*[Title](https://example.com)* and [*Title*](https://example.com \"t\")"],
     ["bold inside italic", "*__both__* and ***swap***"],
-    ["file path", "Open `src/main.ts`{: .filepath} now"],
+    ["file path", "Open `src/main.ts`{: .path} now"],
     ["raw inline", "*a *b* c* and <span>tag</span>"],
     ["lists", "- one\n- two\n  - nested\n\n3. three\n4. four"],
     ["task lists", "- [ ] todo\n- [x] done\n- plain"],
@@ -36,7 +36,6 @@ describe("bridge", () => {
     ["mermaid", "```mermaid\ngraph TD\nA-->B\n```"],
     ["tables", "| a | b |\n|:--|--:|\n| 1 | 2 |\n| 3 | 4 |"],
     ["images and captions", "![alt](/assets/img/post/a.jpg \"Title\")\n*A caption*"],
-    ["image rows", "![a](/a.jpg){: .normal .gap }\n![b](/b.jpg){: .normal .gap }\n{: .d-flex .c-center }"],
     ["galleries", "```gallery\n![a](/a.jpg \"one\")\n![b](/b.jpg)\n```"],
     ["embeds", "<EmbedYoutube id=\"dQw4w9WgXcQ\" />\n\n<EmbedVideo src=\"/v.mp4\" />"],
     ["footnotes", "A claim[^1].\n\n[^1]: The source."],
@@ -95,6 +94,63 @@ describe("bridge", () => {
   it("reads what the browser types: <b>, <i>, <div> lines and placeholder breaks", () => {
     const doc = htmlToDoc("<div>one <b>two</b> <i>three</i></div><div><br></div><p>four<br></p>");
     expect(docToMarkdown(doc)).toBe("one **two** *three*\n\nfour");
+  });
+
+  it.each([
+    ["tip", "tip"],
+    ["info", "info"],
+    ["key", "important"],
+    ["warn", "warning"],
+    ["risk", "danger"],
+    ["author", "author"],
+  ])("reads {: .%s } as the %s callout and writes it back", (name, note) => {
+    const markdown = `> said\n{: .${name}}`;
+    expect(markdownToDoc(markdown).content?.[0].attrs?.note).toBe(note);
+    expect(roundTrip(markdown)).toBe(markdown);
+  });
+
+  it.each([
+    ["a callout holding a list and a file path", "> A list:\n> - one with `a/b`{: .path}\n> - two\n{: .info}"],
+    ["a callout holding a plain quote", "> Outer\n>\n> > Inner\n{: .warn}"],
+    ["a callout holding code", "> Code:\n>\n> ```js\n> const a = 1;\n> ```\n{: .tip}"],
+    ["a callout holding a photo", '> A photo:\n>\n> ![Cua](/assets/img/post/cua.webp "Cua")\n{: .key}'],
+    ["a callout inside a list item", "- An item\n  > Inside\n  {: .info}\n- Next"],
+    ["a file path in a heading, a link, a table and a footnote", "## Head `src/a.js`{: .path}\n\n[`l/p`{: .path}](https://example.com) and a note[^1].\n\n| file | n |\n| --- | --- |\n| `t/x`{: .path} | 1 |\n\n[^1]: Has `f/p`{: .path}."],
+    ["a code block without line numbers in a list", "- Code:\n\n  ```text\n  plain\n  ```\n  {: .nolines}"],
+    ["the social row", '[LinkedIn](https://x.com){: icon="linkedin"}\n[GitHub](https://y.com){: icon="square-github"}\n{: .social}'],
+  ])("keeps %s as written", (_name, markdown) => {
+    expect(roundTrip(markdown)).toBe(docToMarkdown(markdownToDoc(markdown)));
+    expect(docToMarkdown(markdownToDoc(markdown))).toContain(markdown.match(/\{: \.(?:info|warn|tip|key|path|nolines|social)\}/)![0]);
+  });
+
+  it.each([
+    ["a list under its lead-in, inside a quote", "> A list:\n> - one\n> - two\n{: .info}"],
+    ["a quote under an item's text", "- An item\n  > Inside\n  {: .info}\n- Next"],
+    ["code under a paragraph", "Run:\n```sh\nls\n```"],
+    ["a heading under a paragraph", "Text\n## Head"],
+    ["a table under a paragraph", "Para\n| a | b |\n| --- | --- |\n| 1 | 2 |"],
+    ["a quote under a list", "- a\n> quote"],
+  ])("writes %s back without a blank line", (_name, markdown) => {
+    expect(docToMarkdown(markdownToDoc(markdown))).toBe(markdown);
+    expect(roundTrip(markdown)).toBe(markdown);
+  });
+
+  it("never joins a rule to the paragraph above, which would make it a heading", () => {
+    expect(roundTrip("Text\n***")).toBe("Text\n\n---");
+  });
+
+  it("keeps a numbered list that does not count from 1 off the paragraph above it", () => {
+    expect(roundTrip("## Steps\n3. three\n4. four")).toBe("## Steps\n3. three\n4. four");
+    expect(roundTrip("- Item\n\n  3. three\n  4. four")).toBe("- Item\n\n  3. three\n  4. four");
+    const moved = markdownToDoc("## Steps\n3. three");
+    moved.content?.splice(0, 1, { type: "paragraph", content: [{ type: "text", text: "Lead" }] });
+    expect(docToMarkdown(moved)).toBe("Lead\n\n3. three");
+  });
+
+  it("keeps an old {: .note-info } as it was written, not as a callout", () => {
+    const markdown = "> said\n{: .note-info }";
+    expect(markdownToDoc(markdown).content?.[0].attrs?.note).toBeNull();
+    expect(roundTrip(markdown)).toBe(markdown);
   });
 });
 

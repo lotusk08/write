@@ -163,7 +163,7 @@ const pickFiles = (event: Event) => {
         :active="tools.code && !tools.filepath"
         @press="run((root) => toggleInline(root, 'code'))"
       />
-      <ToolButton icon="file" title="File path — the blog's {: .filepath}" :active="tools.filepath" @press="run(toggleFilepath)" />
+      <ToolButton icon="file" title="File path — the blog's {: .path}" :active="tools.filepath" @press="run(toggleFilepath)" />
       <ToolButton icon="table" title="Insert table" @press="run((root) => insertTable(root))" />
       <ToolButton icon="strike" title="Strikethrough" :active="tools.strike" @press="run((root) => format(root, 'strikeThrough'))" />
       <ToolButton icon="taskList" title="Task list" :active="tools.list === 'task'" @press="run((root) => toggleList(root, 'task'))" />

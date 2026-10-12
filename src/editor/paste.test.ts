@@ -52,7 +52,7 @@ describe("paste", () => {
   });
 
   it("parses plain text that is clearly Markdown", () => {
-    expect(markdown(pastedHtml("", "## Title\r\n- a\r\n**bold** text"))).toBe("## Title\n\n- a\n**bold** text");
+    expect(markdown(pastedHtml("", "## Title\r\n- a\r\n**bold** text"))).toBe("## Title\n- a\n**bold** text");
   });
 
   it("pastes other plain text as paragraphs and line breaks, Windows line ends folded", () => {

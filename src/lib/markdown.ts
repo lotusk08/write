@@ -1,6 +1,6 @@
 import type { JSONContent } from "../editor/doc.ts";
 import type { PostMeta } from "../../shared/types.ts";
-import { CENTER_ROW, embedTag } from "../editor/blog.ts";
+import { NOTE_CLASSES, embedTag, isNoteType } from "../editor/blog.ts";
 import { ENTITY, autolinkFor, bareLinks, entityText, escapeChars } from "./inline.ts";
 import { topicSlug } from "./topics.ts";
 
@@ -113,7 +113,7 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
     const longest = Math.max(0, ...[...text.matchAll(/`+/g)].map((run) => run[0].length));
     const fence = "`".repeat(longest + 1);
     const padding = /^`|`$|^[ \n][\s\S]+[ \n]$/.test(text) ? " " : "";
-    const filepath = code.attrs?.filepath ? "{: .filepath}" : "";
+    const filepath = code.attrs?.filepath ? "{: .path}" : "";
     out = `${fence}${padding}${text}${padding}${fence}${filepath}`;
   }
 
@@ -332,6 +332,11 @@ function galleryBlock(node: JSONContent, options: SerializeOptions): string {
   return fenced("gallery", photos.map((photo) => image(photo, options)).join("\n"));
 }
 
+/** A numbered list counting from anything but 1 cannot start under a paragraph: markdown reads it as more of the paragraph. */
+function canHug(node: JSONContent, previous: JSONContent | undefined): boolean {
+  return !(node.type === "orderedList" && Number(node.attrs?.start ?? 1) !== 1 && previous?.type === "paragraph");
+}
+
 function indentedBody(
   children: JSONContent[] | undefined,
   indent: string,
@@ -349,7 +354,8 @@ function indentedBody(
     if (sticks) {
       return text + piece;
     }
-    const hugs = LIST_TYPES.has(child.type ?? "") || Boolean(child.attrs?.joinPrevious);
+    const hugs =
+      (LIST_TYPES.has(child.type ?? "") || Boolean(child.attrs?.joinPrevious)) && canHug(child, children?.[position - 1]);
     return `${text}${hugs ? "\n" : "\n\n"}${piece}`;
   }, "");
 }
@@ -419,37 +425,11 @@ function collapsibleBlock(node: JSONContent, options: SerializeOptions): string 
 
 const ENDS_WITH_IAL = /\n\{:[^}\n]*\}$/;
 
-function joinsRow(nodes: JSONContent[], index: number): boolean {
-  return (
-    nodes[index]?.type === "image" &&
-    Boolean(nodes[index].attrs?.joinPrevious) &&
-    nodes[index - 1]?.type === "image"
-  );
-}
-
 function blockIal(nodes: JSONContent[], index: number): string {
   if (nodes[index].attrs?.ialAbove) {
     return "";
   }
-  const own = nodes[index].attrs?.blockIal ? String(nodes[index].attrs.blockIal) : "";
-  if (!joinsRow(nodes, index) && !joinsRow(nodes, index + 1)) {
-    return own;
-  }
-  if (joinsRow(nodes, index + 1)) {
-    return own === CENTER_ROW ? "" : own;
-  }
-  if (own) {
-    return own;
-  }
-  let first = index;
-  while (joinsRow(nodes, first)) {
-    first -= 1;
-  }
-  const run = nodes.slice(first, index + 1);
-  if (run.some((image) => image.attrs?.ialAbove)) {
-    return "";
-  }
-  return run.some((image) => image.attrs?.blockIal === CENTER_ROW) ? CENTER_ROW : "";
+  return nodes[index].attrs?.blockIal ? String(nodes[index].attrs.blockIal) : "";
 }
 
 function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): string[] {
@@ -487,7 +467,7 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
           .map((line) => (line ? `> ${line}` : ">"))
           .join("\n");
         const name = node.attrs?.note ? String(node.attrs.note) : "";
-        const note = name ? `\n{: ${name === "author" ? ".author" : `.note-${name}`}}` : "";
+        const note = name ? `\n{: .${isNoteType(name) ? NOTE_CLASSES[name] : name}}` : "";
         out.push(quoted + note);
         break;
       }
@@ -548,7 +528,7 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
       out[start] = `${String(node.attrs.blockIal)}\n${out[start]}`;
     }
 
-    if (node.attrs?.joinPrevious && out.length === start + 1 && start > 0) {
+    if (node.attrs?.joinPrevious && out.length === start + 1 && start > 0 && canHug(node, nodes[index - 1])) {
       const piece = out.pop() ?? "";
       if (piece) {
         out[start - 1] =
