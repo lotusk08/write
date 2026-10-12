@@ -172,7 +172,8 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   keeps both, `font-weight: 600` is not bold, Word's list paragraphs become
   lists without their `·` and `1.` markers (nested ones flattened to one
   level), styles, scripts and `javascript:` links are dropped, a figcaption
-  becomes the alt. Plain text that is clearly Markdown is read through
+  becomes the photo's caption, its title (it used to become the alt, and a
+  caption is never the alt). Plain text that is clearly Markdown is read through
   `import.ts` into formatting; a code editor's copy, styled spans only,
   counts as plain text. CRLF is folded. A paste into a heading, mid-line or
   into a list item keeps its structure, and one into a code block goes in as
@@ -326,14 +327,17 @@ and Twitch are gone from the blog, so no link makes one, and a post that
 still has one keeps it as a raw block.
 
 A gallery is the blog's ```` ```gallery ```` fence, holding one image per line,
-`![alt](src "caption")`. A gallery photo has alt text and a caption apart,
-each its own button under it: the alt describes the photo and names its file,
-the caption is the title in quotes, which the card shows (`setImageAlt`,
-`setImageCaption`). The blog's `caption` in `src/logics/gallery.js` still
-falls back to the alt when there is no title, but a caption is written in
-quotes so it does not depend on that: the editor shows only the title as
-the caption. Until October 2026 the one button wrote the alt and dropped the
-title, so a photo could not have both. A title is written
+`![alt](src "caption")`. Every photo, in a gallery or not, has alt text and
+a caption apart, each its own button under it: the alt describes the photo
+and names its file, the caption is the title in quotes, which the blog draws
+under it (`setImageAlt`, `setImageCaption`); a photo with no title has no
+caption, since the blog never shows an alt as one. Until October 2026 the
+gallery's one button wrote the alt and dropped the title, so a photo could
+not have both, and a photo outside a gallery took its caption as an italic
+line under it, which the caption button made; the blog's 140 such lines
+became titles that month. A photo that still has the line (one whose
+caption holds a link, under a legacy row, or beside a title of its own)
+keeps it, edited in place, and the stylesheet hides its caption button. A title is written
 in double quotes; `escapeChars` in `src/lib/inline.ts`, the one escaper for
 image and link text, escapes a `"` in it, and in alt the brackets, a
 backtick, `*`, `_`, `<`, `~`, and a backslash wherever markdown would
@@ -720,8 +724,7 @@ draws every one of these lines differently:
   cannot place is a line it must not delete.
 - What separates two blocks written on one line is theirs to carry: the space
   between an image and the caption beside it is kept in the caption, so a
-  photo with text hard against it comes back hard against it. The caption tool
-  writes that space itself.
+  photo with text hard against it comes back hard against it.
 - Trailing spaces on the last line of a block are kept. markdown-it trims a
   paragraph of its own, so they change nothing there — but lifting an
   attribute list off the end of one leaves the space under it showing.
@@ -1023,6 +1026,14 @@ section is reached by id (`openMenuAt`): a publish error about the address
 opens it at the slug and date, tapping your name in the dock at Share. A tap
 in the drafts list, which floats over the menu, does not close it, and
 Escape there closes the list alone.
+
+Share, Export and Copy, and the share row's link button, show a check mark
+in the accent for 1.8s once they have worked (*Copied*, *Exported*;
+`justDone` and `finished` in `App.vue`), and a hidden status line says it to
+a screen reader. The toast that said it sat at the foot of the screen, under
+a phone's sheet or away from the button on a desktop, and went unseen; it
+now speaks only when the menu is shut, as after ⌘⇧C. A failure is still a
+toast.
 
 The menu sheet covers the ⌘ button that opened it, so on a phone it carries
 its own close button, and closing it from inside — that button or Escape —

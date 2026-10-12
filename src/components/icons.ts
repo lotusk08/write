@@ -35,6 +35,7 @@ export const ICONS = {
   video: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/>',
   mindmap: '<circle cx="5.5" cy="12" r="2.3"/><circle cx="18.5" cy="5.5" r="1.8"/><circle cx="18.5" cy="12" r="1.8"/><circle cx="18.5" cy="18.5" r="1.8"/><path d="M7.6 10.9c3.6-1.3 5.5-3.7 9.1-4.9M7.8 12h8.9M7.6 13.1c3.6 1.3 5.5 3.7 9.1 4.9"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
+  check: '<path d="m5 12.5 4.5 4.5L19 7"/>',
   upload: '<path d="M12 16V4M7.5 8.5 12 4l4.5 4.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
   download: '<path d="M12 4v12M7.5 11.5 12 16l4.5-4.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/>',
   markdown: '<rect x="2.5" y="5.5" width="19" height="13" rx="2.5"/><path d="M6 15V9l2.5 3L11 9v6M16 9v6M13.5 12.5 16 15l2.5-2.5"/>',

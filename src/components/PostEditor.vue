@@ -6,7 +6,6 @@ import { docToHtml, htmlToDoc } from "../editor/bridge.ts";
 import {
   askLink,
   continueAfter,
-  editCaption,
   insertImages,
   leaveGallery,
   moveGalleryPhoto,
@@ -241,17 +240,13 @@ function onClick(event: MouseEvent): void {
   refreshTools();
 }
 
-/**
- * Every photo has alt text and a caption, apart. A gallery photo's caption is its title, which the card shows; any
- * other photo's is the line written under it.
- */
+/** Every photo has alt text and a caption, apart; the caption is its title, which the blog draws under it. */
 function photoTool(element: HTMLElement, button: Element): void {
   const figure = button.closest<HTMLElement>("figure[data-image]");
   const img = figure?.querySelector("img");
   if (!figure || !img) {
     return;
   }
-  const gallery = figure.closest("[data-gallery]");
   if (button.classList.contains("editor-image-edit")) {
     selectFigure(element, figure);
     editPhoto(Number((button as HTMLElement).dataset.step) as -1 | 0 | 1);
@@ -260,13 +255,11 @@ function photoTool(element: HTMLElement, button: Element): void {
     if (value !== null) {
       setImageAlt(element, figure, value);
     }
-  } else if (gallery) {
+  } else {
     const value = window.prompt("Caption, shown under the photo", img.getAttribute("title") ?? "");
     if (value !== null) {
       setImageCaption(element, figure, value);
     }
-  } else {
-    editCaption(element, figure);
   }
   redecorate();
 }

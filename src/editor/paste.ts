@@ -89,11 +89,7 @@ function clipboardBody(html: string): HTMLElement {
     const img = figure.querySelector("img");
     const caption = figure.querySelector("figcaption")?.textContent?.trim();
     if (img && caption) {
-      if (!img.getAttribute("alt")) {
-        img.setAttribute("alt", caption);
-      } else if (img.getAttribute("alt") !== caption) {
-        img.setAttribute("title", caption);
-      }
+      img.setAttribute("title", caption);
     }
     figure.querySelector("figcaption")?.remove();
   }

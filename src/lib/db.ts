@@ -135,7 +135,7 @@ async function forgetImages(ids: string[]): Promise<void> {
  * Removes stored photos no draft points at any more — a publish repoints its photos to the site, outside the undo
  * history — once a day has passed since they were added, so a photo another open tab can still bring back by undo stays.
  */
-export async function sweepImages(now = Date.now()): Promise<void> {
+async function sweepImages(now = Date.now()): Promise<void> {
   const kept = localIdsIn(await draftStore.all());
   const stale = (await imageStore.all()).filter((image) => !kept.has(image.id) && now - image.addedAt > SWEEP_AGE_MS);
   await forgetImages(stale.map((image) => image.id));

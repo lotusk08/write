@@ -4,12 +4,13 @@ import type { PostMeta } from "../../shared/types.ts";
 import { resolvedTheme, type Settings } from "../lib/settings.ts";
 import { PHONE_QUERY, useMediaQuery } from "../lib/viewport.ts";
 import Icon from "./Icon.vue";
+import type { IconName } from "./icons.ts";
 import ExportPanel from "./panels/ExportPanel.vue";
 import PostPanel from "./panels/PostPanel.vue";
 import Section from "./panels/Section.vue";
 import SharePanel from "./panels/SharePanel.vue";
 import SiteDrafts from "./SiteDrafts.vue";
-import type { ExportFormat, ShareState } from "./types.ts";
+import type { DoneAction, ExportFormat, ShareState } from "./types.ts";
 
 const props = withDefaults(
   defineProps<{
@@ -21,9 +22,10 @@ const props = withDefaults(
     settings: Settings;
     share: ShareState;
     exporting: boolean;
+    done?: DoneAction | null;
     escapeCloses?: boolean;
   }>(),
-  { escapeCloses: true },
+  { done: null, escapeCloses: true },
 );
 
 const emit = defineEmits<{
@@ -47,6 +49,17 @@ const chosen = ref<ExportFormat[]>([]);
 const sheet = useMediaQuery(PHONE_QUERY);
 
 const scheme = computed(() => resolvedTheme(props.settings.theme));
+
+const DONE_TEXT: Record<DoneAction, string> = {
+  share: "Share link copied",
+  link: "Share link copied",
+  export: "Exported",
+  copy: "Markdown copied",
+};
+
+/** A button's icon and label, a tick and what happened while `done` names its action. */
+const icon = (action: DoneAction, name: IconName): IconName => (props.done === action ? "check" : name);
+const label = (action: DoneAction, text: string, result: string) => (props.done === action ? result : text);
 
 const position = computed(() => {
   const box = frame.value;
@@ -171,6 +184,7 @@ onBeforeUnmount(stop);
           <SharePanel
             :state="share"
             @name="(name) => emit('shareName', name)"
+            :copied="done === 'link'"
             @copy="emit('shareCopy')"
             @disable="emit('shareDisable')"
           />
@@ -185,33 +199,33 @@ onBeforeUnmount(stop);
           </button>
           <button
             type="button"
-            :class="['btn', { 'is-active': share.sharing }]"
+            :class="['btn', { 'is-active': share.sharing, 'is-done': done === 'share' }]"
             :disabled="share.busy"
             :title="share.sharing ? 'Copy the share link' : 'Share this draft to edit it together, and copy the link'"
             @click="emit('share')"
           >
-            <Icon name="people" />
-            {{ share.busy ? "Sharing…" : "Share" }}
+            <Icon :name="icon('share', 'people')" />
+            {{ share.busy ? "Sharing…" : label("share", "Share", "Copied") }}
           </button>
           <button
             type="button"
-            class="btn"
+            :class="['btn', { 'is-done': done === 'export' }]"
             :disabled="exporting || chosen.length === 0"
             :title="chosen.length === 0 ? 'Tick a format above first' : `Export ${chosen.length} format${chosen.length === 1 ? '' : 's'}`"
             @click="emit('export', chosen)"
           >
-            <Icon name="download" />
-            {{ exporting ? "Exporting…" : "Export" }}
+            <Icon :name="icon('export', 'download')" />
+            {{ exporting ? "Exporting…" : label("export", "Export", "Exported") }}
           </button>
           <button
             type="button"
-            class="btn"
+            :class="['btn', { 'is-done': done === 'copy' }]"
             :disabled="exporting"
             title="Copy the Markdown to the clipboard — ⌘⇧C"
             @click="emit('export', ['copy'])"
           >
-            <Icon name="copy" />
-            Copy
+            <Icon :name="icon('copy', 'copy')" />
+            {{ label("copy", "Copy", "Copied") }}
           </button>
           <button type="button" class="btn" title="View it in the mindmap — think.stevehoang.com" @click="emit('mindmap')">
             <Icon name="mindmap" />
@@ -219,6 +233,7 @@ onBeforeUnmount(stop);
           </button>
         </div>
         <SiteDrafts @open="(path) => emit('site', path)" />
+        <span class="sr-only" role="status">{{ done ? DONE_TEXT[done] : "" }}</span>
       </footer>
     </div>
   </Teleport>

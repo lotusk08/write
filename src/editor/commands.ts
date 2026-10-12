@@ -619,7 +619,7 @@ export function setImageAlt(root: HTMLElement, figure: HTMLElement, value: strin
   notify(root);
 }
 
-/** Sets a gallery photo's caption, its title — `![alt](src "caption")` — which the card shows under it. */
+/** Sets a photo's caption, its title — `![alt](src "caption")` — which the blog draws under it. */
 export function setImageCaption(root: HTMLElement, figure: HTMLElement, value: string): void {
   const img = figure.querySelector("img");
   if (!img) {
@@ -631,28 +631,6 @@ export function setImageCaption(root: HTMLElement, figure: HTMLElement, value: s
   } else {
     img.removeAttribute("title");
   }
-  notify(root);
-}
-
-/** A photo's caption sits in the paragraph after it, marked as joining it; this finds or makes it. */
-export function editCaption(root: HTMLElement, figure: HTMLElement): void {
-  let last: Element = figure;
-  while (last.nextElementSibling?.hasAttribute("data-join") && last.nextElementSibling.hasAttribute("data-image")) {
-    last = last.nextElementSibling;
-  }
-  const next = last.nextElementSibling;
-  if (next?.tagName === "P" && next.hasAttribute("data-join")) {
-    placeCaret(next);
-    return;
-  }
-  const caption = document.createElement("p");
-  caption.setAttribute("data-join", "");
-  caption.setAttribute("data-same-line", "");
-  caption.append(document.createTextNode(" "));
-  last.after(caption);
-  selectFigure(root, null);
-  placeCaret(caption);
-  document.execCommand("italic");
   notify(root);
 }
 
@@ -854,7 +832,7 @@ export function linkAt(root: HTMLElement): HTMLAnchorElement | null {
 }
 
 /** Links the selection, or changes the link the caret is in; an empty address removes it. */
-export function setLink(root: HTMLElement, href: string): void {
+function setLink(root: HTMLElement, href: string): void {
   const current = linkAt(root);
   if (current) {
     const range = document.createRange();

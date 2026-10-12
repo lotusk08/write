@@ -48,7 +48,7 @@ describe("paste", () => {
   it("keeps a web page's structure but none of its styles, scripts or unsafe links", () => {
     const html = pastedHtml(WEB, "") ?? "";
     expect(html).not.toMatch(/style=|script|javascript:/);
-    expect(markdown(html)).toBe("# Title\n\nText with big and **bold** bad [rel](/rel)\n\n![Cap](https://x.com/a.jpg)");
+    expect(markdown(html)).toBe("# Title\n\nText with big and **bold** bad [rel](/rel)\n\n![](https://x.com/a.jpg \"Cap\")");
   });
 
   it("parses plain text that is clearly Markdown", () => {

@@ -70,8 +70,10 @@ function editButton(step: -1 | 0 | 1, text: string, label: string): HTMLButtonEl
 }
 
 /**
- * The buttons under a photo: alt text and caption, apart. A gallery photo's caption is its title, written
- * `![alt](src "caption")`, which the card shows; the selected one also gets move and remove.
+ * The buttons under a photo: alt text and caption, apart. A photo's caption is its title, written
+ * `![alt](src "caption")`, which the blog draws under it, in a gallery or not; the selected gallery photo also gets
+ * move and remove. A photo whose caption is still the italic line under it has that line edited in place, and the
+ * stylesheet hides the button.
  */
 function imageTools(figure: HTMLElement, img: HTMLImageElement): void {
   let tools = firstTransient(figure, "editor-image-tools");
@@ -92,10 +94,10 @@ function imageTools(figure: HTMLElement, img: HTMLImageElement): void {
   alt.textContent = altText || "Add alt text";
   alt.title = altText;
   alt.classList.toggle("is-empty", !altText);
-  const text = gallery ? (img.getAttribute("title") ?? "") : "";
+  const text = img.getAttribute("title") ?? "";
   caption.textContent = text || "Add caption";
   caption.title = text;
-  caption.classList.toggle("is-empty", gallery && !text);
+  caption.classList.toggle("is-empty", !text);
   for (const edit of edits) {
     edit.hidden = !gallery;
   }

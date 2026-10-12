@@ -764,7 +764,7 @@ const htmlInline: Rule = (state, silent) => {
   return true;
 };
 
-export const NAMED_ENTITIES: Record<string, string> = {
+const NAMED_ENTITIES: Record<string, string> = {
   amp: "&", lt: "<", gt: ">", quot: '"', apos: "'", nbsp: "\u00a0", copy: "©", reg: "®", trade: "™",
   hellip: "…", mdash: "—", ndash: "–", lsquo: "‘", rsquo: "’", ldquo: "“", rdquo: "”", laquo: "«",
   raquo: "»", deg: "°", times: "×", divide: "÷", middot: "·", bull: "•", euro: "€", pound: "£",

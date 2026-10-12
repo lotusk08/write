@@ -9,7 +9,7 @@ import { decoded, servedName, stem, trimSlashes } from "../../shared/paths.ts";
 import type { Settings } from "./settings.ts";
 import { datePrefix, slugify } from "./text.ts";
 
-export interface PlannedPhoto {
+interface PlannedPhoto {
   path: string;
   blob: Blob;
   src: string;

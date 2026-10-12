@@ -8,7 +8,7 @@ import PostEditor from "./components/PostEditor.vue";
 import PublishDialog from "./components/PublishDialog.vue";
 import TocAside from "./components/TocAside.vue";
 import TocBar from "./components/TocBar.vue";
-import type { ExportFormat, ShareState } from "./components/types.ts";
+import type { DoneAction, ExportFormat, ShareState } from "./components/types.ts";
 import { useOutline } from "./components/useOutline.ts";
 import { docToHtml } from "./editor/bridge.ts";
 import type { JSONContent } from "./editor/doc.ts";
@@ -59,6 +59,7 @@ const LABELS: Record<ExportFormat, string> = {
 const SAVE_DEBOUNCE_MS = 600;
 const PARSE_DEBOUNCE_MS = 300;
 const TOAST_MS = 7000;
+const DONE_MS = 1800;
 
 let booting: Promise<{ drafts: Draft[]; settings: Settings; config: AppConfig | null }> | null = null;
 
@@ -92,6 +93,7 @@ const saveState = ref<SaveState>("idle");
 const publishOpen = ref(false);
 const menuOpen = ref(false);
 const toast = ref<Toast>(null);
+const justDone = ref<DoneAction | null>(null);
 const exporting = ref(false);
 const ready = ref(false);
 const source = ref<string | null>(null);
@@ -117,6 +119,7 @@ let writing: Partial<Draft> = {};
 let saveTimer: number | undefined;
 let parseTimer: number | undefined;
 let toastTimer: number | undefined;
+let doneTimer: number | undefined;
 
 const current = computed(() => drafts.value.find((draft) => draft.id === currentId.value) ?? null);
 const dark = computed(() => settings.value.theme === "dark" || (settings.value.theme === "system" && systemDark.value));
@@ -143,6 +146,16 @@ function findDraft(id: string | null): Draft | undefined {
 
 function showToast(message: string, kind: "info" | "error" = "info", href?: string) {
   toast.value = { message, kind, href };
+}
+
+/** A menu action that worked ticks its button for a moment; with the menu shut (⌘⇧C), a toast says so instead. */
+function finished(action: DoneAction, message: string) {
+  window.clearTimeout(doneTimer);
+  justDone.value = action;
+  doneTimer = window.setTimeout(() => (justDone.value = null), DONE_MS);
+  if (!menuOpen.value) {
+    showToast(message);
+  }
 }
 
 function errorText(cause: unknown, fallback?: string): string {
@@ -568,12 +581,10 @@ async function exportAs(formats: ExportFormat[]) {
 
     if (failed.length) {
       showToast(failed.join("; "), "error");
+    } else if (done.length === 1 && done[0] === "copy") {
+      finished("copy", "Markdown copied to clipboard.");
     } else {
-      showToast(
-        done.length === 1 && done[0] === "copy"
-          ? "Markdown copied to clipboard."
-          : `Exported ${done.length} file${done.length === 1 ? "" : "s"}.`,
-      );
+      finished("export", `Exported ${done.length} file${done.length === 1 ? "" : "s"}.`);
     }
   } catch (error) {
     showToast(errorText(error, "Export failed."), "error");
@@ -651,7 +662,7 @@ function renameShare(name: string) {
  */
 async function shareAndCopy() {
   if (findDraft(currentId.value)?.shareToken) {
-    await copyShareLink();
+    await copyShareLink("share");
     return;
   }
   const link = (async () => {
@@ -669,7 +680,7 @@ async function shareAndCopy() {
     } else {
       await navigator.clipboard.writeText(await link);
     }
-    showToast("Shared — link copied.");
+    finished("share", "Shared — link copied.");
   } catch {
     if (findDraft(currentId.value)?.shareToken) {
       showToast("Shared. Copy the link from the Share section.");
@@ -677,14 +688,14 @@ async function shareAndCopy() {
   }
 }
 
-async function copyShareLink() {
+async function copyShareLink(action: DoneAction = "link") {
   const token = findDraft(currentId.value)?.shareToken;
   if (!token) {
     return;
   }
   try {
     await navigator.clipboard.writeText(shareLink(token));
-    showToast("Share link copied.");
+    finished(action, "Share link copied.");
   } catch {
     showToast("Could not reach the clipboard.", "error");
   }
@@ -1021,6 +1032,7 @@ onBeforeUnmount(() => {
       :settings="settings"
       :share="shareState"
       :exporting="exporting"
+      :done="justDone"
       :escape-closes="!publishOpen"
       @close="menuOpen = false"
       @meta="updateMeta"

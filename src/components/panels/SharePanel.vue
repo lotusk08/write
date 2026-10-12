@@ -4,7 +4,7 @@ import { participantColor, participantName } from "../../lib/participants.ts";
 import Icon from "../Icon.vue";
 import type { ShareState } from "../types.ts";
 
-const props = defineProps<{ state: ShareState }>();
+const props = defineProps<{ state: ShareState; copied?: boolean }>();
 const emit = defineEmits<{ name: [name: string]; copy: []; disable: [] }>();
 
 const others = computed(() => props.state.peers.filter((peer) => !peer.you));
@@ -39,13 +39,13 @@ const onBlur = () => {
         </label>
         <button
           type="button"
-          class="btn icon"
+          :class="['btn', 'icon', { 'is-done': copied }]"
           :disabled="!state.link"
-          title="Copy the share link"
-          aria-label="Copy the share link"
+          :title="copied ? 'Link copied' : 'Copy the share link'"
+          :aria-label="copied ? 'Link copied' : 'Copy the share link'"
           @click="emit('copy')"
         >
-          <Icon name="link" />
+          <Icon :name="copied ? 'check' : 'link'" />
         </button>
         <button
           type="button"

@@ -1,4 +1,4 @@
-export type DiffLine = { kind: " " | "+" | "-"; text: string };
+type DiffLine = { kind: " " | "+" | "-"; text: string };
 
 export interface LineDiff {
   added: number;

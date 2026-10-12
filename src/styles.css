@@ -211,6 +211,11 @@ textarea {
   color: var(--accent);
 }
 
+.foot-actions .btn.is-done,
+.share-row .btn.is-done {
+  color: var(--accent);
+}
+
 .foot-actions {
   display: grid;
   gap: 6px;
@@ -2292,6 +2297,15 @@ textarea {
   color: var(--faint);
   font-family: var(--font-mono);
   font-size: var(--text-xs);
+}
+
+.sr-only {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 
 .toast {
