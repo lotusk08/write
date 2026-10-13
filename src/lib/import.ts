@@ -885,6 +885,11 @@ function summaryText(html: string): JSONContent[] {
 /** Blocks that may sit directly under the line before them, as a list under its lead-in does; a paragraph never is one. */
 const HUGGING = new Set(["bulletList", "orderedList", "taskList", "blockquote", "codeBlock", "table", "heading", "gallery"]);
 
+/** A `<br>` as the writer puts one in a heading from H3 down, which has no line of its own to break onto. */
+function isBreakTag(node: JSONContent): boolean {
+  return node.type === "text" && node.text === "<br>" && node.marks?.length === 1 && node.marks[0].type === "rawInline";
+}
+
 function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[] {
   const out: JSONContent[] = [];
   let i = 0;
@@ -1138,10 +1143,12 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
 
     const heading = HEADING.exec(line);
     if (heading) {
+      const level = heading[1].length;
+      const content = parseInline(heading[2], false);
       out.push({
         type: "heading",
-        attrs: { level: heading[1].length },
-        content: parseInline(heading[2], false),
+        attrs: { level },
+        content: level < 3 ? content : content.map((node) => (isBreakTag(node) ? { type: "hardBreak" } : node)),
       });
       i += 1;
       continue;

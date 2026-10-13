@@ -456,7 +456,7 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         out.push(
           level < 3 && text.includes("\n")
             ? `${text}\n${level === 1 ? "===" : "---"}`
-            : `${"#".repeat(level)} ${text}`,
+            : `${"#".repeat(level)} ${text.replace(/\n/g, "<br>")}`,
         );
         break;
       }

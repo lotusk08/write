@@ -135,6 +135,14 @@ describe("bridge", () => {
     expect(roundTrip(markdown)).toBe(markdown);
   });
 
+  it("writes a break in a heading from H3 down as <br>, and reads it back as a break", () => {
+    expect(docToMarkdown(htmlToDoc("<h3>one<br>two</h3>"))).toBe("### one<br>two");
+    expect(markdownToDoc("#### a<br>b").content?.[0].content?.map((node) => node.type)).toEqual(["text", "hardBreak", "text"]);
+    expect(roundTrip("### one<br>two")).toBe("### one<br>two");
+    expect(roundTrip("## a<br>b")).toBe("## a<br>b");
+    expect(roundTrip("### a<br />b")).toBe("### a<br />b");
+  });
+
   it("never joins a rule to the paragraph above, which would make it a heading", () => {
     expect(roundTrip("Text\n***")).toBe("Text\n\n---");
   });

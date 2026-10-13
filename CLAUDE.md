@@ -737,7 +737,13 @@ draws every one of these lines differently:
 - A heading may be written under its text (`---` or `===`). It is read as a
   heading, and written back that way whenever it carries a line break, since
   `##` has nowhere to put one; the site drew such a post as a paragraph and a
-  rule before the parser knew the form.
+  rule before the parser knew the form. From H3 down there is no such form,
+  so a break there is written `<br>` and a `<br>`, written so, is read back as
+  the break; `### one` with `two` on the next line was a heading and a
+  paragraph on the site. `<br />`, and `<br>` in an H1 or H2, stay raw, as
+  written. Dropping the break instead (Shift+Enter in a heading doing
+  nothing, a stray break written as a space) was tried and taken back by
+  the owner's choice.
 - An attribute list with nothing after it is kept as a raw block rather than
   dropped. Parted from a list by a blank line it still names the list on the
   site — markdown-it hands the list the blank line — and a line the editor
