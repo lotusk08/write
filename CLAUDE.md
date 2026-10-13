@@ -208,7 +208,11 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   bubble over selected text (`SelectionBubble.vue`), and the alt-text and
   caption buttons under each photo. `tools.ts` reads what they light up.
   Moving a node collapses any selection inside it, since Ranges are live, so
-  `liftLists` puts the caret back from plain offsets.
+  `liftLists` puts the caret back from plain offsets. Chromium's own list
+  commands rebuild the line's text and leave the caret at its start, so a
+  line typed and then made a list split before its first word at the next
+  Enter (`- ` over `- twoone`); `keepingOffset` puts the caret back as far
+  into the line as it was, when the item holds exactly the line's text.
 - `keys.ts` — Enter, the Markdown shortcuts at the start of a line, and a new
   block shedding the old one's layout attributes. A `<br>` is placed by hand:
   WebKit's `insertLineBreak` writes a bare newline into a `pre-wrap` block.
@@ -225,7 +229,10 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   inside it. `[t](url)` becomes a link (an image `![a](b)` is left alone),
   `- [x] ` a ticked task, `3. ` a list starting at 3, `` `x`{: .path} `` a
   file path. Tab and Shift+Tab nest and lift list items and Tab indents in a
-  code block; Enter on an empty last line leaves a code block or a section,
+  code block. Enter in a code block is a `<br>` placed by hand: under the
+  `<p>` separator Chromium split the `<pre>` in two at every Enter, so a
+  typed block came out as one block per line. Enter on an empty last line
+  leaves a code block or a section,
   and a typed fence leaves a paragraph after the block. And the ⌘ keys beyond the editor's own
   ⌘B, ⌘I, ⌘⇧X, ⌘K and undo: ⌘E code, ⌘⇧H highlight, ⌘. and ⌘, super- and
   subscript, ⌘⇧7/8/9 lists, ⌘⇧B quote, ⌘⇧D section, ⌥⌘C code block, ⌥⌘0
@@ -994,7 +1001,12 @@ Things that took a bug to learn, and that a change here can quietly undo:
   the HTML export inlines it from there. A published photo is shown from the
   site (`data-src` keeps the address as written).
 - The file-path button takes `code.filepath` off on its second press; it used
-  to flip the attribute and leave plain `code` behind.
+  to flip the attribute and leave plain `code` behind. On plain text it makes
+  code and gives it the class, found by the selection, which then runs round
+  the new code rather than inside it; looked for round the selection's start,
+  the class went nowhere, plain `` `x` `` was published, and a second press
+  wrapped it again. A bare caret takes the whole run of non-space characters,
+  so `src/main.ts` is one path, not `ts`.
 
 In an `.author` quote the site styles the last paragraph as the attribution —
 right-aligned, italic, the dash added by CSS — and the editor now shows the

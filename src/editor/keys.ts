@@ -150,12 +150,16 @@ function enter(root: HTMLElement): boolean {
   const pre = block.closest("pre");
   if (pre) {
     const before = nodeBefore(range);
-    if (!range.collapsed || !caretAtEnd(pre, range) || before?.nodeName !== "BR") {
-      return false;
+    if (range.collapsed && caretAtEnd(pre, range) && before?.nodeName === "BR") {
+      before.parentNode?.removeChild(before);
+      continueAfter(pre);
+      notify(root);
+      return true;
     }
-    before.parentNode?.removeChild(before);
-    continueAfter(pre);
-    notify(root);
+    if (!range.collapsed) {
+      range.deleteContents();
+    }
+    insertBreak(root, pre, range);
     return true;
   }
   if (block.matches("[data-collapsible-summary]")) {

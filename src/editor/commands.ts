@@ -129,13 +129,12 @@ function selectedFigure(root: HTMLElement): HTMLElement | null {
 // --------------------------------------------------------------------- inline
 
 /** The word around a collapsed caret, so a mark pressed with nothing selected takes the word, as in Docs. */
-function wordAround(range: Range): Range | null {
+function wordAround(range: Range, word = /[\p{L}\p{N}_'’-]/u): Range | null {
   const node = range.startContainer;
   if (node.nodeType !== 3) {
     return null;
   }
   const text = (node as Text).data;
-  const word = /[\p{L}\p{N}_'’-]/u;
   let start = range.startOffset;
   let end = start;
   while (start > 0 && word.test(text[start - 1])) {
@@ -237,9 +236,10 @@ export function toggleInline(root: HTMLElement, tag: string): boolean {
   return true;
 }
 
-/** The blog's `{: .path}` code: plain code gains the class, a file path loses its code. */
+/** The blog's `{: .path}` code: plain code gains the class, a file path loses its code, and plain text becomes a file path, a bare caret taking the whole path round it. */
 export function toggleFilepath(root: HTMLElement): boolean {
-  const code = closestIn(root, anchor(root), "code");
+  const range = selectionIn(root);
+  const code = closestIn(root, anchor(root), "code") ?? (range && codeCovering(root, range));
   if (code && !code.closest("pre")) {
     if (code.classList.contains("filepath")) {
       unwrap(code);
@@ -249,12 +249,31 @@ export function toggleFilepath(root: HTMLElement): boolean {
     notify(root);
     return true;
   }
+  const path = range?.collapsed ? wordAround(range, /\S/u) : null;
+  if (path) {
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(path);
+  }
   if (!toggleInline(root, "code")) {
     return false;
   }
-  closestIn(root, anchor(root), "code")?.classList.add("filepath");
+  const made = selectionIn(root);
+  for (const element of root.querySelectorAll("code")) {
+    if (made?.intersectsNode(element) && !element.closest("pre")) {
+      element.classList.add("filepath");
+    }
+  }
   notify(root);
   return true;
+}
+
+/** The inline code a selection is exactly, as it is once one has been made: the selection then runs round it, not inside it. */
+function codeCovering(root: HTMLElement, range: Range): HTMLElement | null {
+  if (range.collapsed) {
+    return null;
+  }
+  const covered = [...root.querySelectorAll<HTMLElement>("code")].filter((code) => range.intersectsNode(code));
+  return covered.length === 1 && covered[0].textContent === range.toString() ? covered[0] : null;
 }
 
 export function insertFootnote(root: HTMLElement): boolean {
@@ -792,6 +811,57 @@ function relist(list: HTMLElement, kind: ListKind): HTMLElement {
   return next;
 }
 
+/** Chromium's list commands rebuild the line's text and put the caret at its start, so a typed line made a list and Enter then split it before its first word; the caret goes back as far into the line as it was. */
+function keepingOffset(root: HTMLElement, run: () => void): void {
+  const range = selectionIn(root);
+  const block = currentTextblock(root);
+  const line = range?.collapsed && block ? lineAround(block, range) : null;
+  run();
+  const item = closestIn(root, anchor(root), "li");
+  if (!line || !item || item.textContent !== line.before + line.after) {
+    return;
+  }
+  const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT);
+  let left = line.before.length;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    const length = node.nodeValue?.length ?? 0;
+    if (left <= length) {
+      window.getSelection()?.collapse(node, left);
+      return;
+    }
+    left -= length;
+  }
+}
+
+/** The text of the caret's line, either side of it: a block's lines are parted by `<br>`, and the list commands make each its own item. */
+function lineAround(block: HTMLElement, range: Range): { before: string; after: string } {
+  const walker = document.createTreeWalker(block, NodeFilter.SHOW_TEXT | NodeFilter.SHOW_ELEMENT);
+  let before = "";
+  let after = "";
+  let past = false;
+  for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+    if (node.nodeName === "BR") {
+      if (past) {
+        break;
+      }
+      before = "";
+    } else if (node.nodeType === 3) {
+      const value = node.nodeValue ?? "";
+      if (node === range.startContainer) {
+        before += value.slice(0, range.startOffset);
+        after += value.slice(range.startOffset);
+        past = true;
+      } else if (past || range.comparePoint(node, 0) >= 0) {
+        after += value;
+        past = true;
+      } else {
+        before += value;
+      }
+    }
+  }
+  return { before, after };
+}
+
 /** The list buttons: a list of the kind asked for, or back to paragraphs when it already is one. */
 export function toggleList(root: HTMLElement, kind: ListKind): void {
   const range = selectionIn(root);
@@ -801,7 +871,7 @@ export function toggleList(root: HTMLElement, kind: ListKind): void {
   } else if (current) {
     relist(current, kind);
   } else {
-    document.execCommand(kind === "ordered" ? "insertOrderedList" : "insertUnorderedList");
+    keepingOffset(root, () => document.execCommand(kind === "ordered" ? "insertOrderedList" : "insertUnorderedList"));
     liftLists(root);
     keepCaretInNewItem(root);
     const list = closestIn(root, anchor(root), "ul, ol");

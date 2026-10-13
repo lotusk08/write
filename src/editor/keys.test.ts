@@ -5,7 +5,7 @@ import { markdownToDoc } from "../lib/import.ts";
 import { docToMarkdown } from "../lib/markdown.ts";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
 import { embedFromUrl } from "./blog.ts";
-import { insertFootnote, toggleCodeBlock, toggleInline, toggleList, togglePlainQuote } from "./commands.ts";
+import { insertFootnote, toggleCodeBlock, toggleFilepath, toggleInline, toggleList, togglePlainQuote } from "./commands.ts";
 import { sanitizerOptions } from "./config.ts";
 import { handleInput, handleKeydown } from "./keys.ts";
 
@@ -50,7 +50,7 @@ function selectText(text: string): void {
 
 const WRAPS: Record<string, string> = { bold: "b", italic: "i", strikeThrough: "strike", createLink: "a" };
 
-/** happy-dom has no `execCommand`: the few the shortcuts use, as Chrome does them (bold is `<b>`, a bare caret sets nothing). */
+/** happy-dom has no `execCommand`: the few the shortcuts use, as Chrome does them (bold is `<b>`, a bare caret sets nothing, a list leaves the caret at the start of its line). */
 function execCommand(command: string, _ui?: boolean, value?: string): boolean {
   const range = window.getSelection()?.getRangeAt(0);
   if (!range) {
@@ -79,6 +79,8 @@ function execCommand(command: string, _ui?: boolean, value?: string): boolean {
     item.append(...block.childNodes);
     list.append(item);
     block.replaceWith(list);
+    const start = item.firstChild ?? item;
+    window.getSelection()?.collapse(start, 0);
     return true;
   }
   const tag = WRAPS[command];
@@ -296,11 +298,57 @@ describe("toolbar commands", () => {
     expect(markdown()).toBe("a\n\n- [ ] b");
   });
 
+  it("a list made from a typed line keeps the caret where it was", () => {
+    raw("one");
+    caretAfter("one");
+    toggleList(root, "bullet");
+    const range = window.getSelection()!.getRangeAt(0);
+    expect([range.startContainer.nodeValue, range.startOffset]).toEqual(["one", 3]);
+  });
+
+  it("a file path made from plain text is a file path, and a second press takes it off", () => {
+    load("alpha beta gamma");
+    selectText("beta");
+    toggleFilepath(root);
+    expect(markdown()).toBe("alpha `beta`{: .path} gamma");
+    toggleFilepath(root);
+    expect(markdown()).toBe("alpha beta gamma");
+  });
+
+  it("a file path at a bare caret takes the whole path round it", () => {
+    load("open src/main.ts now");
+    caretAfter("src/ma");
+    toggleFilepath(root);
+    expect(markdown()).toBe("open `src/main.ts`{: .path} now");
+  });
+
   it("a code block comes off as one paragraph, a line break per line", () => {
     load("```\nl1\nl2\n```");
     caretAfter("l1");
     toggleCodeBlock(root);
     expect(markdown()).toBe("l1\nl2");
+  });
+});
+
+describe("Enter in a code block", () => {
+  const enter = () => handleKeydown(root, new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
+
+  it("breaks the line inside the block rather than splitting it in two", () => {
+    load("```js\nab\n```");
+    caretAfter("a");
+    expect(enter()).toBe(true);
+    expect(markdown()).toBe("```js\na\nb\n```");
+    expect(root.querySelectorAll("pre")).toHaveLength(1);
+  });
+
+  it("leaves the block on an empty last line", () => {
+    load("```js\nab\n```");
+    caretAfter("ab");
+    enter();
+    expect(root.querySelectorAll("pre")).toHaveLength(1);
+    enter();
+    expect(markdown()).toBe("```js\nab\n```");
+    expect(window.getSelection()!.getRangeAt(0).startContainer.parentElement?.closest("pre")).toBeNull();
   });
 });
 
