@@ -51,6 +51,11 @@ describe("paste", () => {
     expect(markdown(html)).toBe("# Title\n\nText with big and **bold** bad [rel](/rel)\n\n![](https://x.com/a.jpg \"Cap\")");
   });
 
+  it("drops a highlight, which has no tool to take it off again", () => {
+    expect(markdown(pastedHtml("<p>a <mark>found</mark> c</p>", "a found c"))).toBe("a found c");
+    expect(markdown(pastedHtml("<p>a <b><mark>found</mark></b> c</p>", "a found c"))).toBe("a **found** c");
+  });
+
   it("parses plain text that is clearly Markdown", () => {
     expect(markdown(pastedHtml("", "## Title\r\n- a\r\n**bold** text"))).toBe("## Title\n- a\n**bold** text");
   });

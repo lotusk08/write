@@ -171,7 +171,7 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   bold and the blocks inside it stay blocks, a span both bold and italic
   keeps both, `font-weight: 600` is not bold, Word's list paragraphs become
   lists without their `·` and `1.` markers (nested ones flattened to one
-  level), styles, scripts and `javascript:` links are dropped, a figcaption
+  level), styles, scripts, highlights and `javascript:` links are dropped, a figcaption
   becomes the photo's caption, its title (it used to become the alt, and a
   caption is never the alt). Plain text that is clearly Markdown is read through
   `import.ts` into formatting; a code editor's copy, styled spans only,
@@ -595,10 +595,11 @@ quote 30, bullet list 30 | image 40, gallery 7, video 8 | divider 17, code
 block 13, footnote 10, numbered list 3 | inline code 5, file path 5, table 2,
 strike 1, task list 1, superscript 1, subscript 0 | section, collapse all
 and expand all 0. The bubble over selected text is italic, bold, link and
-inline code. Highlight, used in no post, is gone: the blog draws a `<mark>`
-as plain text since October 2026, so it has no button, no ⌘⇧H and no
-`==…==` here; a `<mark>` a post or a paste carries is still read and written
-back as found. A group goes by its most used tool; a tool
+inline code. Highlight, used in no post, is gone (October 2026): no button,
+no ⌘⇧H and no `==…==`. The blog dropped its `<mark>` style with it, so one
+written by hand shows the browser's yellow there. A `<mark>` a post carries
+is still read and written back as found; a pasted one is dropped, its text
+kept (`pastedHtml`), since nothing here could take it off again. A group goes by its most used tool; a tool
 used in a handful of posts goes after the groups, so a phone's first screen
 is italic, link, bold and the headings. Every photo shows its alt and its
 caption as buttons under it, the alt marked `ALT`: side by side under a photo

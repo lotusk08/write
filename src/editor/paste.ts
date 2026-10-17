@@ -5,7 +5,7 @@ import { insertEmbed, notify } from "./commands.ts";
 import { markdownToDoc } from "../lib/import.ts";
 
 const BLOCKS = "address, article, aside, blockquote, details, div, dl, figure, footer, h1, h2, h3, h4, h5, h6, header, hr, li, ol, p, pre, section, table, ul";
-const SEMANTIC = "a, b, strong, i, em, u, s, del, strike, mark, sup, sub, code, pre, h1, h2, h3, h4, h5, h6, ul, ol, li, table, blockquote, img, hr";
+const SEMANTIC = "a, b, strong, i, em, u, s, del, strike, sup, sub, code, pre, h1, h2, h3, h4, h5, h6, ul, ol, li, table, blockquote, img, hr";
 const BOLD = /font-weight:\s*(?:bold|[7-9]00)/i;
 const NOT_BOLD = /font-weight:\s*(?:normal|[1-4]00)/i;
 const STYLES: [RegExp, string][] = [
@@ -79,7 +79,7 @@ function clipboardBody(html: string): HTMLElement {
     inner.append(...span.childNodes);
     span.replaceWith(outer);
   }
-  body.querySelectorAll("a u").forEach(unwrap);
+  body.querySelectorAll("a u, mark").forEach(unwrap);
   for (const element of [...body.querySelectorAll("*")].reverse()) {
     if (!element.matches(BLOCKS) && element.querySelector(`:scope > :is(${BLOCKS})`)) {
       unwrap(element);

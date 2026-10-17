@@ -153,7 +153,7 @@ describe("marks typed in Markdown", () => {
     expect(markdown()).toBe("say **b** c");
   });
 
-  it("leaves ==text== as typed, since the blog draws a highlight as plain text", () => {
+  it("leaves ==text== as typed, highlight being no tool any more", () => {
     raw("say ==bright==");
     caretAfter("==bright==");
     typed("=");
