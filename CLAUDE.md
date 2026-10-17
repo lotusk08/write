@@ -178,7 +178,7 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   counts as plain text. CRLF is folded. A paste into a heading, mid-line or
   into a list item keeps its structure, and one into a code block goes in as
   text, newlines included (WebKit's `insertText` split the block at each).
-  One YouTube, X or Spotify link (or an audio or video file address) pasted
+  One YouTube or X link (or an audio or video file address) pasted
   alone, as a full `http(s)` address with nothing selected, becomes its
   embed; a bare word never does, since `embedFromUrl` reads any eleven
   characters as a YouTube id. A single line, inline HTML and code go in
@@ -192,7 +192,7 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   how the editor learns its content changed under it. Any DOM change made
   while a key or a paste is handled must call it too: missed, the editor
   wrote back its stale copy and the caret jumped to the top, which is what
-  Enter in a ticked task did. Highlight and inline code take off only the
+  Enter in a ticked task did. Inline code takes off only the
   part of a mark selected, apply to the word at a collapsed caret, and format
   each block of a selection that crosses several. A link with nothing
   selected inserts the address as its own link; the bubble's link button
@@ -219,12 +219,12 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   The paragraph separator is set to `<p>`, or WebKit opens a `<div>` after a
   heading. It also holds what the Tiptap editor did and the Vue one first
   lost: `[ ]` for a task list (in a bullet item too) and `---` for a divider,
-  `**bold**`, `*italic*`/`_italic_`, `~~strike~~`, `==highlight==` and
+  `**bold**`, `*italic*`/`_italic_`, `~~strike~~` and
   `` `code` `` turned into the mark as the closing character is typed (never
   inside code, never mid-word: a word is `\p{L}\p{N}`, so `Hồ_Chí_` and
   `ồ*b*` stay plain where an ASCII `\w` made them italic). Bold, italic,
   strike and links go through the browser's own commands, so ⌘Z undoes each
-  one step at a time; code and highlight have no command, so the text typed
+  one step at a time; code has no command, so the text typed
   straight after one is moved out of the mark, where Chrome kept typing
   inside it. `[t](url)` becomes a link (an image `![a](b)` is left alone),
   `- [x] ` a ticked task, `3. ` a list starting at 3, `` `x`{: .path} `` a
@@ -234,7 +234,7 @@ Tiptap, so drafts saved before the change open unchanged and `import.ts` and
   typed block came out as one block per line. Enter on an empty last line
   leaves a code block or a section,
   and a typed fence leaves a paragraph after the block. And the ⌘ keys beyond the editor's own
-  ⌘B, ⌘I, ⌘⇧X, ⌘K and undo: ⌘E code, ⌘⇧H highlight, ⌘. and ⌘, super- and
+  ⌘B, ⌘I, ⌘⇧X, ⌘K and undo: ⌘E code, ⌘. and ⌘, super- and
   subscript, ⌘⇧7/8/9 lists, ⌘⇧B quote, ⌘⇧D section, ⌥⌘C code block, ⌥⌘0
   paragraph, ⌥⌘1–4 headings (1 is H2, as the blog has no H1). Keys are read
   by `event.code`, since ⌥ and ⇧ change the character on a Mac. The plain
@@ -264,14 +264,14 @@ a click in the item's margin) rather than the editor's checklist with its
 `bridge.test.ts` renders, sanitizes (with the editor's own `sanitizeHtml`) and
 reads back every post, draft and page in `../stevehoang.com` (or `BLOG_DIR`),
 and checks the Markdown written from the result is the Markdown written from
-the parse. All 89 pass; treat a failure as a regression. Without the blog
+the parse. All 96 on `blog` pass (October 2026); treat a failure as a regression. Without the blog
 checked out beside this repository that half of the suite is skipped.
 
 Not carried over from Tiptap: remote carets in a shared draft, and Tiptap's
 typography input rules (the site's own
 typographer handles quotes and dashes). The editor's undo is the browser's,
 so what the blog's tools change on the DOM by hand — lists, quotes,
-sections, galleries, photos, code and highlight, a paste of several blocks —
+sections, galleries, photos, code, a paste of several blocks —
 is outside it; `insertHTML` would put them in, but Chrome rewrote `<code>`
 as a styled span.
 
@@ -326,7 +326,7 @@ Plain text is written so the site reads it as text (`escapePlain` in
 `markdown.ts`). At the start of a line `# `, `##### `, `- `, `+ `, `1. `,
 `2020. `, `>`, `{:` and `---` are escaped, and so is a line of `===` or
 `---` under one, which the site reads as a heading; `|` is escaped
-everywhere, since the blog's `content.js` makes any line with a pipe a table
+everywhere, since the blog's `content.ts` makes any line with a pipe a table
 row; `&` only before what would be an entity, and entities are decoded when a
 post is read, as markdown-it does. A paragraph saying `a | b`, `1. not a
 list` or `&copy;` used to be a table, a list or a © on the site while the
@@ -338,11 +338,13 @@ An embed is one of the blog's components — `<EmbedYoutube id="…" />`, and
 `src=` rather than `id=` for `EmbedVideo` and `EmbedAudio`. A Liquid include is
 still read, so a post written before the move opens here and is converted the
 next time it is published; nothing writes one again. A component carrying more
-than the one prop the editor models (`compact`, `types`, `title` …) is kept as
+than the one prop the editor models (`types`, `title` …) is kept as
 a raw block instead, which is written back exactly as it was found. The
-embeds are the blog's five — YouTube, X, Spotify, audio and video; Bilibili
-and Twitch are gone from the blog, so no link makes one, and a post that
-still has one keeps it as a raw block.
+embeds are the blog's four — YouTube, X, audio and video; Spotify (October
+2026), Bilibili and Twitch are gone from the blog, so no link makes one, and
+a post that still has one keeps it as a raw block. A draft that stored a
+Spotify player before still writes its `<EmbedSpotify id="…" />`, which the
+blog no longer draws.
 
 A gallery is the blog's ```` ```gallery ```` fence, holding one image per line,
 `![alt](src "caption")`. Every photo, in a gallery or not, has alt text and
@@ -384,7 +386,7 @@ stays a code block and is written back as found, its whole info string kept in
 the code block's `language`.
 
 Images are published in the format they arrived in, named from it. The blog's
-build converts them — `convert-images.js` runs first, writes WebP and repoints
+build converts them — `convert-images.ts` runs first, writes WebP and repoints
 the post that referenced them, gallery fences included — because that is the one end
 with a real encoder: WebKit has none behind its canvas, so converting here
 never worked from an iPhone, which is where most of these photos come from.
@@ -393,10 +395,13 @@ This is an editor, so a photo is kept exactly as it arrived: the draft stores
 the original file, untouched, and shows it from there. Size is the one thing
 handled, and only at the push (`shrinkImage` in `src/lib/images.ts`): a photo
 wider than 3840px (4K) or heavier than 4 MB is reduced until it is neither;
-one within both is uploaded byte for byte. 3840 is `MAX_WIDTH` in the blog's
-`convert-images.js`, the width the build would cut it to anyway, and the
-repository keeps a photo as large as the site may ever show (it was 1920, and
-the photos cut to 1760 before it had to be dug out of git history). A JPEG is
+one within both is uploaded byte for byte. 3840 is more than the site shows:
+the blog's build cuts every photo to 1920 (`MAX_WIDTH` in its
+`convert-images.ts`; a 4K cap there was tried on 11 October 2026 and taken
+back by the owner's choice). The app keeps 3840 all the same, by the owner's
+choice, so the repository keeps a photo as large as the site may ever show
+(it was 1920, and the photos cut to 1760 before it had to be dug out of git
+history). A JPEG is
 drawn at 3840 or its own width, whichever is less, at quality 0.95, then 0.9
 and down by 0.05 to 0.7, the floor, and then drawn 15% narrower each time
 until it fits; a PNG has no quality to give, so only its width steps down.
@@ -465,7 +470,7 @@ clash takes `-2`, `-3` …, and the worker checks again against the
 commit it builds on and refuses a name already there. Names used to be
 numbered past only what the post's own text used, so a removed photo's name
 came back: the new `slug-3.jpg` either sat beside the old `slug-3.webp`,
-which `convert-images.js` takes as already converted, so readers got the 4K
+which `convert-images.ts` takes as already converted, so readers got the 4K
 JPEG, or replaced the old file at an address the site caches for 30 days.
 
 A published photo whose name no longer follows its alt is renamed in the
@@ -485,7 +490,7 @@ rename whose old file is removed adds `old new` to the blog's
 `.webp` name for a `.jpg` or `.png` the build converts (`servedName` in
 `shared/paths.ts`), as are the names a commit creates — percent-encoded, a line that pointed at `old` repointed to `new`, a line
 whose source this commit creates dropped, the file kept sorted and unique.
-A file kept for another post gets no line. The blog's `scripts/redirects.js`
+A file kept for another post gets no line. The blog's `scripts/redirects.ts`
 turns each line into a 301 in `_redirects`, the narrower copies included,
 and follows a chain to its last name, so once the site deploys the old
 address reaches the photo; `vite preview` reads no `_redirects`, so there it
@@ -496,7 +501,7 @@ undo does not bring the `local:` address back; in the Markdown source view it
 is the text that is repointed.
 
 The site does not serve what was pushed: the host builds `blog` itself, and
-`convert-images.js` writes the WebP, deletes the file it was made from and
+`convert-images.ts` writes the WebP, deletes the file it was made from and
 repoints the post in that build's checkout. The repository keeps the photo as
 published, and the draft here, once published, points at a JPEG the site does
 not serve. The image node tries the WebP when the original 404s, which is what
@@ -588,10 +593,12 @@ posts, drafts and pages on `blog` in October 2026, counted through
 `parsePost`: italic 61, link 32, bold 20 | H2 43, H3 23, H4 9 | callouts 44,
 quote 30, bullet list 30 | image 40, gallery 7, video 8 | divider 17, code
 block 13, footnote 10, numbered list 3 | inline code 5, file path 5, table 2,
-strike 1, task list 1, superscript 1, subscript 0, highlight 0 | section,
-collapse all and expand all 0. The bubble over selected text is italic,
-bold, link and inline code; highlight, used in no post, left it and is still
-⌘⇧H, `==…==` and the toolbar. A group goes by its most used tool; a tool
+strike 1, task list 1, superscript 1, subscript 0 | section, collapse all
+and expand all 0. The bubble over selected text is italic, bold, link and
+inline code. Highlight, used in no post, is gone: the blog draws a `<mark>`
+as plain text since October 2026, so it has no button, no ⌘⇧H and no
+`==…==` here; a `<mark>` a post or a paste carries is still read and written
+back as found. A group goes by its most used tool; a tool
 used in a handful of posts goes after the groups, so a phone's first screen
 is italic, link, bold and the headings. Every photo shows its alt and its
 caption as buttons under it, the alt marked `ALT`: side by side under a photo
@@ -681,13 +688,13 @@ half, so the label broke over two lines and then ran out from under the knob.
 back. Editing a published post must not change what the blog renders, so the two
 are checked against the real corpus rather than by eye: parse every post in
 `../stevehoang.com/src/posts`, re-serialise it, render both versions with the
-blog's own markdown-it pipeline (`scripts/markdown/index.js` — the renderer the
+blog's own markdown-it pipeline (`scripts/markdown/index.ts` — the renderer the
 site ships, so there is nothing to configure to match it) and compare the HTML.
 The corpus that matters is the published one, which is on the `blog` branch.
 
-**All 77 render byte for byte**, and each settles after one pass — write a post
+**All 85 render byte for byte**, and each settles after one pass — write a post
 back twice and the second is the first. So does every draft and page beside
-them, 89 files in all. Treat any of that as a regression. The ones that used to
+them, 96 files in all (`blog`, October 2026). Treat any of that as a regression. The ones that used to
 differ were each a place where this parser had been written against kramdown,
 which the site no longer runs, and they are worth knowing because markdown-it
 draws every one of these lines differently:
@@ -804,7 +811,7 @@ draws every one of these lines differently:
   they stand for. The line-start, `|` and `&` escapes under *Publishing
   format* are the only others.
 
-All 89 files also render on the site exactly as their source does since the
+All 96 files also render on the site exactly as their source does since the
 plain-text escaping (87 before: two quote lines had lost a `\|`).
 
 Things that took a bug to learn, and that a change here can quietly undo:
@@ -822,7 +829,7 @@ Things that took a bug to learn, and that a change here can quietly undo:
   section survives the Markdown source view instead of coming back as raw
   HTML.
 - A table whose every line is a row of pipes, with no header line — how the
-  blog's `content.js` draws one — opens as a table and is written back as it
+  blog's `content.ts` draws one — opens as a table and is written back as it
   was.
 - A list marker indented four spaces or more is not a list — it continues the
   block above. Tabs indent by columns, not by one character.
@@ -847,7 +854,8 @@ Things that took a bug to learn, and that a change here can quietly undo:
   since markdown reads it as more of the paragraph. With it 43 of the blog's
   89 posts, drafts and pages are written back byte for byte, up from 38,
   none moved further from its source, and all 89 render on the blog exactly
-  as their source does.
+  as their source does. The 43 counts bodies, front matter aside; of the 96
+  files on `blog` later in October 2026 it is still 43.
 - A Kramdown attribute list attaches to whichever neighbour is not separated
   from it by a blank line, and it is parsed with quoted values taken whole —
   the base64 inside `lqip="…"` contains things that look like classes and
@@ -933,7 +941,7 @@ Things that took a bug to learn, and that a change here can quietly undo:
   text put "null" in the description of every post that had none, and writing
   it back quoted made it permanent. Quoted `"null"` is still text.
 - Front matter is read to the value js-yaml's core schema gives — what the
-  blog's `matter.js` reads — not to the line it sits on. A field may run on
+  blog's `matter.ts` reads — not to the line it sits on. A field may run on
   over indented lines: a block scalar (`|`, `>`, with `+`/`-` and an
   indentation digit, folded and chomped as YAML does), a quoted string folded
   across lines, a plain one wrapped, a flow list across lines. Reading

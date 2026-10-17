@@ -26,7 +26,7 @@ import {
  * of pipes in the Markdown. A line that is only a fence opener becomes a code
  * block, and the Markdown shortcuts at the start of a line (`#`, `>`, `>>>`,
  * `-`, `1.`, `[ ]`, `---`) turn it into what they write, as do `**bold**`,
- * `*italic*`, `~~strike~~`, `==highlight==` and `` `code` `` once closed.
+ * `*italic*`, `~~strike~~` and `` `code` `` once closed.
  */
 
 const FLOWING = "blockquote, [data-collapsible-content], [data-footnote]";
@@ -210,7 +210,6 @@ const paragraph: Command = (root) => {
 /** The ⌘ shortcuts the Tiptap editor had, beyond the editor's own ⌘B, ⌘I, ⌘⇧X, ⌘K and undo (⌘B and ⌘I are taken here in a table cell, where the editor's table handling swallows them). */
 const KEYS: Record<string, Command> = {
   e: (root) => toggleInline(root, "code"),
-  "shift+h": (root) => toggleInline(root, "mark"),
   ".": (root) => format(root, "superscript"),
   ",": (root) => format(root, "subscript"),
   "shift+7": (root) => toggleList(root, "ordered"),
@@ -372,7 +371,6 @@ const MARKS: [RegExp, string][] = [
   [/(?<![*\p{L}\p{N}])\*([^*\s](?:[^*]*[^*\s])?)\*$/u, "em"],
   [/(?<![_\p{L}\p{N}])_([^_\s](?:[^_]*[^_\s])?)_$/u, "em"],
   [/~~([^~\s](?:[^~]*[^~\s])?)~~$/u, "s"],
-  [/==([^=\s](?:[^=]*[^=\s])?)==$/u, "mark"],
   [/`([^`]+)`$/u, "code"],
 ];
 

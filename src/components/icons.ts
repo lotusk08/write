@@ -7,7 +7,6 @@ export const ICONS = {
   italic: '<path d="M14 5h-4M14 19h-4M15 5l-6 14"/>',
   strike: '<path d="M4 12h16"/><path d="M16 7.5C16 6 14.2 5 12 5S8 6 8 7.5s1.8 2.3 4 2.8"/><path d="M8 16.5C8 18 9.8 19 12 19s4-1 4-2.5"/>',
   code: '<path d="m9 7-5 5 5 5M15 7l5 5-5 5"/>',
-  highlight: '<path d="m15 5 4 4-8.5 8.5H6v-4.5z"/><path d="M4 21h16"/>',
   link: '<path d="M10 13a4 4 0 0 0 5.7.3l3-3a4 4 0 1 0-5.7-5.7L11.5 6"/><path d="M14 11a4 4 0 0 0-5.7-.3l-3 3a4 4 0 1 0 5.7 5.7l1.4-1.4"/>',
   bulletList: '<path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1.1"/><circle cx="4.5" cy="12" r="1.1"/><circle cx="4.5" cy="18" r="1.1"/>',
   orderedList: '<path d="M10 6h10M10 12h10M10 18h10"/><path d="M4 4.5h1.2V9M3.4 9h2.6"/><path d="M3.5 15.2c0-.9 2.3-1 2.3.2s-2.3 1.6-2.3 3h2.5"/>',

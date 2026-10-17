@@ -33,7 +33,7 @@ export function noteOfClass(name: string): NoteType | null {
   return NOTE_TYPES.find((type) => NOTE_CLASSES[type] === name) ?? null;
 }
 
-const PLATFORMS = ["youtube", "x", "spotify", "audio", "video"] as const;
+const PLATFORMS = ["youtube", "x", "audio", "video"] as const;
 
 const FILE_PLATFORMS = new Set(["audio", "video"]);
 
@@ -76,10 +76,6 @@ export function embedFromUrl(value: string): { platform: string; id: string } | 
   if (x) {
     return { platform: "x", id: x[1] };
   }
-  const spotify = /spotify\.com\/(?:embed\/)?track\/(\w+)/.exec(url);
-  if (spotify) {
-    return { platform: "spotify", id: spotify[1] };
-  }
   return /^[\w-]{11}$/.test(url) ? { platform: "youtube", id: url } : null;
 }
 
@@ -87,8 +83,6 @@ export function embedUrl(platform: string, id: string): string | null {
   switch (platform) {
     case "x":
       return `https://x.com/i/status/${id}`;
-    case "spotify":
-      return `https://open.spotify.com/track/${id}`;
     default:
       if (/^https?:\/\//i.test(id)) {
         return id;

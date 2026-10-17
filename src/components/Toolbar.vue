@@ -78,13 +78,13 @@ onBeforeUnmount(() => {
 });
 
 const embed = () => {
-  const url = window.prompt("Link to embed: a YouTube video, an X post, a Spotify track, or an audio or video file", "");
+  const url = window.prompt("Link to embed: a YouTube video, an X post, or an audio or video file", "");
   if (!url?.trim()) {
     return;
   }
   const found = embedFromUrl(url);
   if (!found) {
-    window.alert(`The blog can't embed this link:\n${url}\n\nIt embeds YouTube videos, X posts, Spotify tracks, and audio or video files (.mp3, .mp4 …).`);
+    window.alert(`The blog can't embed this link:\n${url}\n\nIt embeds YouTube videos, X posts, and audio or video files (.mp3, .mp4 …).`);
     return;
   }
   props.run((root) => insertEmbed(root, found));
@@ -137,7 +137,7 @@ const pickFiles = (event: Event) => {
         :disabled="!tools.canGallery"
         @press="run(tools.gallery ? unsetGallery : setGallery)"
       />
-      <ToolButton icon="video" title="Embed a video — YouTube, X, Spotify…" @press="embed" />
+      <ToolButton icon="video" title="Embed a video — YouTube, X, a video or audio file" @press="embed" />
     </div>
 
     <span class="tool-sep" />
@@ -174,7 +174,6 @@ const pickFiles = (event: Event) => {
         @press="run((root) => format(root, 'superscript'))"
       />
       <ToolButton icon="subscript" title="Subscript — H₂O" :active="tools.subscript" @press="run((root) => format(root, 'subscript'))" />
-      <ToolButton icon="highlight" title="Highlight" :active="tools.highlight" @press="run((root) => toggleInline(root, 'mark'))" />
     </div>
 
     <span class="tool-sep" />

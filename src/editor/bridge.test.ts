@@ -49,6 +49,12 @@ describe("bridge", () => {
     expect(roundTrip(markdown)).toBe(expected);
   });
 
+  it("keeps a Spotify player, which the blog no longer draws, as the raw line it was", () => {
+    const markdown = 'Song\n\n<EmbedSpotify id="4uLU6hMCjMI75M1A2tKUQC" />\n\nAfter';
+    expect(markdownToDoc(markdown).content?.[1].type).toBe("rawBlock");
+    expect(roundTrip(markdown)).toBe(markdown);
+  });
+
   it("writes every gallery as a plain gallery fence", () => {
     const photos = '![a](/a.jpg "one")\n![b](/b.jpg)';
     expect(roundTrip(`\`\`\`gallery deck\n${photos}\n\`\`\``)).toBe(`\`\`\`gallery\n${photos}\n\`\`\``);

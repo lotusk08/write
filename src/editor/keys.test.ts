@@ -132,15 +132,14 @@ describe("marks typed in Markdown", () => {
     ["*soft*", "i"],
     ["_soft_", "i"],
     ["~~gone~~", "strike"],
-    ["==bright==", "mark"],
     ["`code`", "code"],
   ] as const) {
     it(`${written} becomes <${tag}>`, () => {
       raw(`say ${written}`);
       caretAfter(written);
       typed(written.slice(-1));
-      expect(root.querySelector(tag)?.textContent).toBe(written.replace(/[*_~=`]/g, ""));
-      expect(markdown()).toContain(tag === "i" ? "*soft*" : tag === "mark" ? "<mark>bright</mark>" : written);
+      expect(root.querySelector(tag)?.textContent).toBe(written.replace(/[*_~`]/g, ""));
+      expect(markdown()).toContain(tag === "i" ? "*soft*" : written);
     });
   }
 
@@ -154,7 +153,15 @@ describe("marks typed in Markdown", () => {
     expect(markdown()).toBe("say **b** c");
   });
 
-  it("types on outside a code or highlight it just made", () => {
+  it("leaves ==text== as typed, since the blog draws a highlight as plain text", () => {
+    raw("say ==bright==");
+    caretAfter("==bright==");
+    typed("=");
+    expect(root.querySelector("mark")).toBeNull();
+    expect(markdown()).toBe("say ==bright==");
+  });
+
+  it("types on outside a code it just made", () => {
     raw("say `x`");
     caretAfter("`x`");
     typed("`");
@@ -211,6 +218,17 @@ describe("⌘ shortcuts", () => {
     window.getSelection()?.addRange(range);
     handleKeydown(root, new KeyboardEvent("keydown", { metaKey: true, code: "KeyE", key: "e" }));
     expect(markdown()).toBe("`word`");
+  });
+
+  it("has no ⌘⇧H highlight", () => {
+    load("word");
+    const range = document.createRange();
+    range.selectNodeContents(root.querySelector("p") as HTMLElement);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    const event = new KeyboardEvent("keydown", { metaKey: true, shiftKey: true, code: "KeyH", key: "H" });
+    expect(handleKeydown(root, event)).toBe(false);
+    expect(markdown()).toBe("word");
   });
 
   it("leaves the editor's own ⌘B to it", () => {
@@ -359,5 +377,9 @@ describe("embeds from a link", () => {
     expect(embedFromUrl("https://youtu.be/dQw4w9WgXcQ")).toEqual({ platform: "youtube", id: "dQw4w9WgXcQ" });
     expect(embedFromUrl("https://www.bilibili.com/video/BV1xx411c7mD")).toBeNull();
     expect(embedFromUrl("abcdefg")).toBeNull();
+  });
+
+  it("makes no Spotify player, which the blog no longer draws", () => {
+    expect(embedFromUrl("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC")).toBeNull();
   });
 });

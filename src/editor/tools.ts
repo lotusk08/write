@@ -21,7 +21,6 @@ export interface ToolState {
   strike: boolean;
   superscript: boolean;
   subscript: boolean;
-  highlight: boolean;
   code: boolean;
   filepath: boolean;
   link: boolean;
@@ -42,7 +41,6 @@ export function emptyTools(): ToolState {
     strike: false,
     superscript: false,
     subscript: false,
-    highlight: false,
     code: false,
     filepath: false,
     link: false,
@@ -79,7 +77,6 @@ export function readTools(root: HTMLElement): ToolState {
     strike: typing && isFormatted("strikeThrough"),
     superscript: typing && isFormatted("superscript"),
     subscript: typing && isFormatted("subscript"),
-    highlight: inside("mark"),
     code: inside("code") && !inside("pre"),
     filepath: inside("code.filepath"),
     link: Boolean(linkAt(root)),

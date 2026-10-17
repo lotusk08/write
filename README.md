@@ -51,9 +51,10 @@ browser.
 - **The blog's own formats.** `{: .path}` code, the ```` ```gallery ````
   fence, made from a run of photos with one button (several photos added at
   once become one), its photos added, moved and removed in place, and
-  `<EmbedYoutube id="…" />` players are first-class here — paste a YouTube, X
-  or Spotify link and the right component is written for you. Any other attribute list a post carries is kept exactly as written, so
-  editing a post does not rewrite lines you did not touch.
+  `<EmbedYoutube id="…" />` players are first-class here — paste a YouTube or X
+  link, or an audio or video file's address, and the right component is
+  written for you. Any other attribute list a post carries is kept exactly as
+  written, so editing a post does not rewrite lines you did not touch.
 - **Seeing what the blog will render.** Mermaid diagrams and Chart.js charts are
   drawn live above their source; embedded videos play in
   place. The libraries load only when a post actually uses them.
