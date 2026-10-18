@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import type { AppConfig, PostMeta, PublishResult } from "../shared/types.ts";
+import { fileDate } from "../shared/paths.ts";
 import DraftRail from "./components/DraftRail.vue";
 import EditorPopover from "./components/EditorPopover.vue";
 import Icon from "./components/Icon.vue";
@@ -422,7 +423,7 @@ async function onPinned(written: PinWritten[]) {
 }
 
 function dateOf(path: string): { date?: string } {
-  const date = /(\d{4}-\d{2}-\d{2})-[^/]*$/.exec(path)?.[1];
+  const date = fileDate(path);
   return date ? { date } : {};
 }
 

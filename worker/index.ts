@@ -20,7 +20,7 @@ import type {
 } from "../shared/types.ts";
 
 import { frontMatter } from "../shared/front.ts";
-import { decoded, servedName, stem, trimSlashes } from "../shared/paths.ts";
+import { decoded, fileDate, servedName, stem, trimSlashes } from "../shared/paths.ts";
 import { readPin } from "../shared/pin.ts";
 import { redirectSources, REDIRECTS_PATH } from "../shared/redirects.ts";
 import {
@@ -535,7 +535,7 @@ export function siteFile(path: string, text: string): SiteFile {
   const plain = (raw: string) => !/^["']/.test(raw);
   const value = (raw: string) => (plain(raw) ? raw.replace(/(?:^|[ \t])#.*$/, "").trim() : yamlScalar(raw));
   const written = value(field("date"));
-  const named = /(\d{4}-\d{2}-\d{2})-[^/]*$/.exec(path)?.[1] ?? "";
+  const named = fileDate(path);
   const pin = field("pin");
   return {
     path,
