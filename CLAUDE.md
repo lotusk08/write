@@ -307,10 +307,10 @@ repository: `title`, `description` when there is one, `date`, `lang`, `tags`,
 is `false`, `true` or a place, `2` or `3` (`writtenPin` in `shared/pin.ts`),
 as the blog reads it since October 2026: `true` puts a post in the first
 place free after the newest one, a number names the place (`pinOf` and
-`homeOrder` in the blog's `src/logics/utils.ts`). That is the blog's `main`;
-its `blog` branch, which the host builds, reads it so from its next merge of
-`main`, and until then a `2` or `3` stops its build (`pin should be true or
-false`) and a `true` stands ahead of the newest post (`pinnedFirst`). There
+`homeOrder` in the blog's `src/logics/utils.ts`), on `main` and, since its
+merge of 18 October 2026, on `blog`, which the host builds; before it, `blog`
+stopped its build on a `2` or `3` (`pin should be true or false`) and stood a
+`true` ahead of the newest post (`pinnedFirst`). There
 is no `author` and no `categories`. The blog never read `author`, and
 categories became topics and a language; both are dropped when a post is read,
 as `math` and `mermaid` are. A new post is dated in the blog's zone, +0700,
