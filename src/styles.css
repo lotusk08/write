@@ -177,8 +177,9 @@ textarea {
   overflow-y: auto;
 }
 
-.popover-body .section + .section {
+.section + .section {
   padding-top: 12px;
+  border-top: 1px solid var(--border);
   margin-top: 12px;
 }
 
@@ -188,10 +189,6 @@ textarea {
 
 .popover-body .section > .field:last-child {
   margin-bottom: 0;
-}
-
-.toggle-wide {
-  width: 100%;
 }
 
 .post-toc {
@@ -222,7 +219,7 @@ textarea {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
-.site-drafts-open {
+.site-open {
   width: 100%;
   height: auto;
   min-height: 28px;
@@ -232,6 +229,18 @@ textarea {
   font-size: var(--text-sm);
 }
 
+/* The menu's main buttons, and the share row and its error drawn like them. */
+.foot-actions .btn,
+.share-row .btn,
+.share-panel .peer,
+.share-panel .notice {
+  border: none;
+  border-radius: var(--radius-xs);
+  background: var(--sunken);
+  font-size: var(--text-2xs);
+  font-weight: 300;
+}
+
 .foot-actions .btn {
   height: auto;
   min-height: 40px;
@@ -239,25 +248,8 @@ textarea {
   justify-content: center;
   gap: 3px;
   padding: 6px 2px 5px;
-  border: none;
-  border-radius: var(--radius-xs);
-  background: var(--sunken);
-  font-size: var(--text-2xs);
-  font-weight: 300;
   line-height: 1.1;
   white-space: nowrap;
-}
-
-.foot-actions .btn:hover:not(:disabled) {
-  background: var(--hover);
-}
-
-.foot-actions .btn.primary {
-  background: var(--accent);
-}
-
-.foot-actions .btn.primary:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--accent) 86%, #000);
 }
 
 .export-formats {
@@ -330,31 +322,11 @@ textarea {
   height: 28px;
   flex: none;
   padding: 0 10px;
-  border: none;
-  border-radius: var(--radius-xs);
-  background: var(--sunken);
-  font-size: var(--text-2xs);
-  font-weight: 300;
-}
-
-.share-row .btn:hover:not(:disabled) {
-  background: var(--hover);
-}
-
-.share-panel .peer {
-  border-radius: var(--radius-xs);
-  background: var(--sunken);
-  font-size: var(--text-2xs);
-  font-weight: 300;
 }
 
 .share-panel .notice {
   padding: 7px 10px;
-  border: none;
-  border-radius: var(--radius-xs);
   margin: 0;
-  font-size: var(--text-2xs);
-  font-weight: 300;
 }
 
 .share-row .btn.icon {
@@ -376,7 +348,6 @@ textarea {
   padding: 0;
   border: none;
   background: none;
-  font: inherit;
   outline: none;
 }
 
@@ -434,17 +405,8 @@ textarea {
   gap: 12px;
 }
 
-.menu-row + .menu-row {
-  margin-top: 8px;
-}
-
 .menu-row > .field-label {
   flex-shrink: 0;
-}
-
-.btn.block {
-  width: 100%;
-  justify-content: center;
 }
 
 .rail {
@@ -587,20 +549,20 @@ textarea {
   color: var(--danger);
 }
 
-.draft-list {
+.file-list {
   width: min(300px, calc(100vw - 16px));
 }
 
-.menu.floating.draft-list {
+.menu.file-list {
   z-index: 45;
 }
 
-.draft-list button:not(.btn) {
+.file-list button:not(.btn) {
   min-height: 44px;
   gap: 10px;
 }
 
-.draft-list-title {
+.file-list-title {
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -608,7 +570,7 @@ textarea {
   white-space: nowrap;
 }
 
-.draft-list button[aria-current] {
+.file-list button[aria-current] {
   background: var(--hover);
   font-weight: 600;
 }
@@ -659,20 +621,9 @@ textarea {
 }
 
 .site-home-pin,
-.site-row.is-changed .draft-list-title,
+.site-row.is-changed .file-list-title,
 .site-home li.is-changed {
   color: var(--accent);
-}
-
-.site-home .btn.icon {
-  border-color: transparent;
-  background: none;
-  color: var(--muted);
-}
-
-.site-home .btn.icon:hover:not(:disabled) {
-  background: var(--hover);
-  color: var(--text);
 }
 
 .site-row {
@@ -699,10 +650,6 @@ textarea {
 
 .btn.site-pin.is-on {
   color: var(--accent);
-}
-
-.btn.site-pin.is-idle {
-  color: var(--faint);
 }
 
 .btn.site-pin[aria-expanded="true"] {
@@ -865,7 +812,7 @@ textarea {
   margin-bottom: 14px;
 }
 
-.field > label:not(.switch),
+.field > label,
 .field-label {
   color: var(--muted);
   font-size: var(--text-sm);
@@ -877,12 +824,6 @@ textarea {
   color: var(--faint);
   font-size: var(--text-sm);
   line-height: 1.5;
-}
-
-.row {
-  display: grid;
-  gap: 12px;
-  grid-template-columns: 1fr 1fr;
 }
 
 .tool {
@@ -1195,11 +1136,16 @@ textarea {
 }
 
 .editor-host .post-body {
+  position: relative;
+  min-height: 40vh;
+  padding: 0;
+  background: none;
   color: var(--text);
   font-family: var(--font-prose);
   font-size: 16px;
   line-height: 1.7;
   outline: none;
+  white-space: pre-wrap;
 }
 
 .editor-host .post-body > * + * {
@@ -1501,13 +1447,6 @@ textarea {
   font-size: 0.72em;
 }
 
-.block-preview + pre {
-  border-top-left-radius: 0;
-  border-top-right-radius: 0;
-  border-top-color: transparent;
-  margin-top: 0;
-}
-
 .block-preview {
   display: block;
   padding: 16px;
@@ -1716,7 +1655,6 @@ textarea {
   scroll-snap-align: center;
   width: 200px;
   margin: 0;
-  float: none !important;
 }
 
 .editor-host .post-body .editor-gallery-strip .editor-image img {
@@ -1748,12 +1686,6 @@ textarea {
   content: "Image not found in this browser's storage";
   font-family: var(--font-ui);
   font-size: var(--text-md);
-}
-
-.section + .section {
-  padding-top: 18px;
-  border-top: 1px solid var(--border);
-  margin-top: 18px;
 }
 
 .mono {
@@ -1937,14 +1869,6 @@ textarea {
   accent-color: var(--accent);
 }
 
-.switch em {
-  display: block;
-  color: var(--faint);
-  font-size: var(--text-xs);
-  font-style: normal;
-  line-height: 1.45;
-}
-
 .toggle {
   position: relative;
   display: grid;
@@ -2002,16 +1926,12 @@ textarea {
   gap: 8px;
 }
 
-.password-row > * {
-  height: var(--control-h);
-}
-
 .password-row .input {
   min-width: 0;
   flex: 1;
 }
 
-.draft-list .sign-in {
+.site-list .sign-in {
   padding: 6px;
   margin-bottom: 0;
 }
@@ -2022,11 +1942,6 @@ textarea {
 
 .publish-as {
   margin-bottom: 14px;
-}
-
-.notice.ok {
-  border-color: color-mix(in srgb, var(--accent) 25%, var(--border));
-  background: color-mix(in srgb, var(--accent) 5%, var(--panel));
 }
 
 .dialog {
@@ -2352,17 +2267,16 @@ textarea {
 }
 
 .menu {
-  position: absolute;
+  position: fixed;
   z-index: 30;
-  top: calc(100% + 6px);
-  right: 0;
-  left: auto;
-  min-width: 200px;
+  min-width: 168px;
   padding: 5px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--panel);
   box-shadow: var(--shadow-pop);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .menu button:not(.btn) {
@@ -2377,14 +2291,6 @@ textarea {
   cursor: pointer;
   font-size: var(--text-md);
   text-align: left;
-}
-
-.menu.floating {
-  position: fixed;
-  right: auto;
-  min-width: 168px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .menu button:not(.btn):hover {
@@ -2403,12 +2309,6 @@ textarea {
 
 .menu .toggle button:not(.btn):hover {
   background: none;
-}
-
-.menu kbd {
-  color: var(--faint);
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
 }
 
 .sr-only {
@@ -2507,15 +2407,12 @@ textarea {
   }
 
   .dialog-actions {
+    flex-wrap: wrap;
     padding-bottom: max(18px, env(safe-area-inset-bottom));
   }
 
   .publish-card {
     grid-template-columns: 1fr;
-  }
-
-  .dialog-actions {
-    flex-wrap: wrap;
   }
 
   .publish-reason {
@@ -2587,7 +2484,7 @@ textarea {
     margin-top: 2px;
   }
 
-  .site-drafts-open {
+  .site-open {
     min-height: 36px;
   }
 
@@ -2604,7 +2501,7 @@ textarea {
     font-size: 16px;
   }
 
-  .btn.ghost.site-drafts-open:hover:not(:disabled) {
+  .btn.ghost.site-open:hover:not(:disabled) {
     background: none;
   }
 
@@ -2691,15 +2588,6 @@ textarea {
   overflow: visible;
 }
 
-.editor-host .post-body {
-  position: relative;
-  min-height: 40vh;
-  outline: none;
-  padding: 0;
-  background: none;
-  white-space: pre-wrap;
-}
-
 .editor-host .post-body:has(> p:only-child > br:only-child)::before {
   position: absolute;
   color: var(--placeholder);
@@ -2779,6 +2667,8 @@ textarea {
 }
 
 .bubble {
+  position: fixed;
+  z-index: 40;
   display: flex;
   gap: 2px;
   padding: 4px;
@@ -2848,11 +2738,6 @@ textarea {
 
 .editor-image:not(.is-selected) .editor-image-edit {
   display: none;
-}
-
-.bubble.floating {
-  position: fixed;
-  z-index: 40;
 }
 
 .editor-host .post-body .editor-image:has(+ p[data-join]) .editor-image-caption,

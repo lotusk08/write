@@ -34,7 +34,7 @@ const choose = (pick: () => void) => {
     <Icon name="note" />
   </button>
   <Teleport to="body">
-    <div v-if="open" ref="menu" class="menu floating" role="menu" @mousedown.prevent>
+    <div v-if="open" ref="menu" class="menu" role="menu" @mousedown.prevent>
       <button v-for="type in NOTE_TYPES" :key="type" type="button" role="menuitem" @click="choose(() => emit('note', type))">
         <span class="swatch-label">
           <span class="swatch" :data-note="type" />

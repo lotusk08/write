@@ -30,7 +30,9 @@ const KINDS: ToggleOption<Kind>[] = [
   { id: "drafts", label: "Drafts" },
 ];
 
-const BADGES: Record<PinChoice, string> = { off: "", on: "Pin", "2": "2nd", "3": "3rd" };
+const LABELS = new Map(PIN_CHOICES.map((choice) => [choice.id, choice.label]));
+
+const IDLE = "Pinned, but it holds no place: the newest post is first anyway, or both places are taken";
 
 const emit = defineEmits<{ open: [path: string]; pinned: [written: PinWritten[]] }>();
 
@@ -49,6 +51,7 @@ const { password, asking, credential, accepted, signedIn, forget } = useSignIn()
 useFloatingMenu(open, anchor, list);
 
 const posts = computed(() => files.value?.posts ?? []);
+const byPath = computed(() => new Map(posts.value.map((post) => [post.path, post])));
 const shown = computed(() => posts.value.filter((post) => !post.hidden));
 const after = computed(() => withPins(shown.value, changes.value));
 const top = computed(() => homeTop(after.value));
@@ -59,12 +62,17 @@ const rows = computed<SiteFile[]>(() =>
 );
 const pending = computed(() =>
   [...changes.value].map(([path, pin]) => {
-    const title = posts.value.find((post) => post.path === path)?.title || name(path);
-    return `${title} → ${BADGES[choiceOf(pin)] || "unpinned"}`;
+    const post = byPath.value.get(path);
+    return `${post ? titleOf(post) : name(path)} → ${badge(pin) || "unpinned"}`;
   }),
 );
 
 const name = (path: string) => path.split("/").pop() ?? path;
+const titleOf = (file: SiteFile) => file.title || name(file.path);
+/** A pinned post's badge, named as the pin switch names its place; none for a post not pinned. */
+const badge = (pin: Pin) => (pin === false ? "" : LABELS.get(choiceOf(pin)));
+/** Pinned, yet standing at no place on the home page. */
+const idle = (file: SiteFile) => file.pin !== false && !standing.value.has(file.path);
 
 const load = async () => {
   problem.value = "";
@@ -98,9 +106,12 @@ const pick = (path: string) => {
   emit("open", path);
 };
 
-const choose = (post: SiteFile, choice: PinChoice) => {
-  saved.value = null;
-  changes.value = pinChanges(shown.value.includes(post) ? shown.value : [post], post, pinOf(choice));
+const choose = (path: string, choice: PinChoice) => {
+  const post = byPath.value.get(path);
+  if (post) {
+    saved.value = null;
+    changes.value = pinChanges(shown.value.includes(post) ? shown.value : [post], post, pinOf(choice));
+  }
 };
 
 const swapPlaces = () => {
@@ -118,7 +129,7 @@ const save = async () => {
   saving.value = true;
   problem.value = "";
   try {
-    const { commitUrl, written } = await publishPins(changes.value, new Map(posts.value.map((post) => [post.path, post])), credential());
+    const { commitUrl, written } = await publishPins(changes.value, byPath.value, credential());
     accepted();
     files.value = { ...files.value!, posts: withPins(posts.value, changes.value) };
     changes.value = new Map();
@@ -140,7 +151,7 @@ const save = async () => {
   <button
     ref="anchor"
     type="button"
-    :class="['btn ghost site-drafts-open', { 'is-active': open }]"
+    class="btn ghost site-open"
     aria-haspopup="dialog"
     :aria-expanded="open"
     @click="toggle"
@@ -149,20 +160,20 @@ const save = async () => {
     Open from the site
   </button>
   <Teleport to="body">
-    <div v-if="open" ref="list" class="menu floating draft-list site-list" role="dialog" aria-label="Posts and drafts on the site">
+    <div v-if="open" ref="list" class="menu file-list site-list" role="dialog" aria-label="Posts and drafts on the site">
       <p v-if="problem && !changes.size" class="notice warn">
         {{ problem }}
         <button v-if="files" type="button" class="btn tiny" @click="load">Read again</button>
       </p>
       <SignIn
         v-if="asking"
-        id="site-drafts-password"
+        id="site-password"
         v-model="password"
         @submit="load"
         @session="(token) => (signedIn(token), load())"
         @error="(message) => (problem = message)"
       />
-      <Toggle class="toggle-wide site-kind" label="Show" :options="KINDS" :value="kind" @change="(id) => (kind = id)" />
+      <Toggle class="site-kind" label="Show" :options="KINDS" :value="kind" @change="(id) => (kind = id)" />
       <template v-if="!asking && !problem">
         <p v-if="!files" class="notice">Reading the site…</p>
         <p v-else-if="!rows.length" class="notice">The site has no {{ kind }}.</p>
@@ -171,13 +182,13 @@ const save = async () => {
         <ol title="The home page's first three posts">
           <li v-for="(post, index) in top" :key="post.path" :class="{ 'is-changed': changes.has(post.path) }">
             <span class="site-home-place">{{ index + 1 }}</span>
-            <span class="draft-list-title">{{ post.title || name(post.path) }}</span>
+            <span class="file-list-title">{{ titleOf(post) }}</span>
             <Icon v-if="standing.has(post.path)" name="pin" :size="12" class="site-home-pin" />
           </li>
         </ol>
         <button
           type="button"
-          class="btn icon site-swap"
+          class="btn icon ghost"
           :disabled="!swap.size || saving"
           :title="swap.size ? 'Swap the posts pinned 2nd and 3rd' : 'Pin a post 2nd or 3rd to swap the places'"
           aria-label="Swap 2nd and 3rd"
@@ -188,33 +199,29 @@ const save = async () => {
       </div>
       <div v-for="file in rows" :key="file.path" :class="['site-row', { 'is-changed': changes.has(file.path) }]">
         <button type="button" :title="file.path" @click="pick(file.path)">
-          <span class="draft-list-title">{{ file.title || name(file.path) }}</span>
+          <span class="file-list-title">{{ titleOf(file) }}</span>
           <span class="mono">{{ file.hidden ? "hidden" : file.date }}</span>
         </button>
         <button
           v-if="kind === 'posts'"
           type="button"
-          :class="['btn tiny site-pin', { 'is-on': file.pin !== false, 'is-idle': file.pin !== false && !standing.has(file.path) }]"
+          :class="['btn tiny site-pin', { 'is-on': standing.has(file.path) }]"
           :aria-expanded="editing === file.path"
-          :aria-label="`Pin ${file.title || name(file.path)}`"
-          :title="
-            file.pin !== false && !standing.has(file.path)
-              ? 'Pinned, but it holds no place: the newest post is first anyway, or both places are taken'
-              : 'Pin to the home page'
-          "
+          :aria-label="`Pin ${titleOf(file)}`"
+          :title="idle(file) ? IDLE : 'Pin to the home page'"
           :disabled="saving"
           @click="editing = editing === file.path ? null : file.path"
         >
           <Icon name="pin" :size="12" />
-          {{ BADGES[choiceOf(file.pin)] }}
+          {{ badge(file.pin) }}
         </button>
         <Toggle
           v-if="editing === file.path"
-          class="toggle-wide site-pin-choice"
+          class="site-pin-choice"
           label="Pin to home"
           :options="PIN_CHOICES"
           :value="choiceOf(file.pin)"
-          @change="(choice) => choose(posts.find((post) => post.path === file.path)!, choice)"
+          @change="(choice) => choose(file.path, choice)"
         />
       </div>
       <div v-if="changes.size" class="site-save">
