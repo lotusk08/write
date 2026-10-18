@@ -77,6 +77,13 @@ describe("a post's pin line", () => {
     expect(setPin("No front matter\n", 2)).toBeNull();
   });
 
+  it("is written into front matter the editor does not read, an empty one or one opened by --- and spaces", () => {
+    expect(setPin("---\n---\nBody\n", 2)).toBe("---\npin: 2\n---\nBody\n");
+    expect(setPin("---  \ntitle: X\n---\nBody\n", 2)).toBe("---  \ntitle: X\npin: 2\n---\nBody\n");
+    expect(setPin("---\ntitle: X\n---", 3)).toBe("---\ntitle: X\npin: 3\n---");
+    expect(setPin("\ufeff\ufeff---\ntitle: X\n---\n", 3)).toBeNull();
+  });
+
   it("is read back and written as the blog takes it", () => {
     for (const [line, pin] of [["pin: 2", 2], ["pin: 3", 3], ["pin: true", true], ['pin: "2"', false], ["pin: 4", false]] as const) {
       const meta = parsePost(post.replace("pin: false", line)).meta;

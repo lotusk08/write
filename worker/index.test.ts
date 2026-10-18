@@ -166,6 +166,16 @@ describe("the site's posts and drafts", () => {
     expect(siteFile("src/posts/x.md", "No front matter\npin: 2\n").pin).toBe(false);
   });
 
+  it("finds the front matter where the app does", () => {
+    const title = (text: string) => siteFile("src/posts/2026-01-01-x.md", text).title;
+    expect(title("\ufeff---\r\ntitle: Trip\r\n---\r\nText")).toBe("Trip");
+    expect(title("---\ntitle: Trip\n---")).toBe("Trip");
+    expect(title("---\ntitle: Trip\n---  \nText")).toBe("Trip");
+    expect(title("--- \ntitle: Trip\n---\nText")).toBe("");
+    expect(title("---\n---\ntitle: Trip\n")).toBe("");
+    expect(title("\ufeff\ufeff---\ntitle: Trip\n---\n")).toBe("");
+  });
+
   it("orders by the time written, in the site's zone when none is given", () => {
     const time = (date: string) => siteFile("src/posts/2026-01-01-x.md", `---\ndate: ${date}\n---\n`).time;
     expect(time("2026-01-01 10:00")).toBe(time("2026-01-01T03:00:00Z"));
