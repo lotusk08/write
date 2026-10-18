@@ -18,17 +18,19 @@ Vue component (`<EmbedYoutube id="…" />`) instead.
 The blog is reached through this app's own Worker, which holds two secrets: one
 fine-grained GitHub token (Contents: read and write) and a `WRITE_PASSWORD`. No
 GitHub credential ever reaches the browser. What the browser sends is that
-password, as `x-write-password` on every `/api` call — typed once on a device
-and remembered, so publishing is one button rather than a password prompt per
-post — or, signed in with a passkey, a session (`x-write-session`) in its
+password, as `x-write-password` on every `/api` call — typed once a sitting
+and remembered for it, so publishing is one button rather than a password
+prompt per post — or, signed in with a passkey, a session (`x-write-session`) in its
 place.
 
 Reading and writing are not the same privilege, so they are not asked for the
 same way. A published post opens without the password: `src/posts` is on the
-blog already, and the *Edit this post* link should land you in the editor rather
+blog already, and an `?edit=` link should land you in the editor rather
 than at a prompt. Drafts do not — they are the writing nobody has seen — and neither
 does publishing. So the password appears in two places, the publish dialog
-and the list of the blog's posts and drafts, and they are one component (`SignIn.vue`,
+and the list of the blog's posts and drafts (which asks it before it shows
+the posts too, since it lists the drafts beside them and writes pins), and
+they are one component (`SignIn.vue`,
 its state in `useSignIn.ts`): the same field, the same Passkey button, the
 same sizes, and signing in at either one stops the other asking. The drafts
 list once had its own row, a different height, and asked again after a
@@ -264,8 +266,14 @@ a click in the item's margin) rather than the editor's checklist with its
 `bridge.test.ts` renders, sanitizes (with the editor's own `sanitizeHtml`) and
 reads back every post, draft and page in `../stevehoang.com` (or `BLOG_DIR`),
 and checks the Markdown written from the result is the Markdown written from
-the parse. All 96 on `blog` pass (October 2026); treat a failure as a regression. Without the blog
-checked out beside this repository that half of the suite is skipped.
+the parse. It writes each file's front matter back too and reads it again:
+every field the app has a box for comes back the same, and every field it
+has none for is in the file as it was found, line for line. All 96 on `blog`
+pass (October 2026); treat a failure as a regression. Without the blog
+checked out beside this repository that half of the suite is skipped. Only
+`redirect_from` and a page's `layout` of those fields are written on `blog`,
+so `markdown.test.ts` holds the rest the blog reads (`comments`, `hidden`,
+`last_modified_at`, `updated`) and the fields dropped on reading.
 
 Not carried over from Tiptap: remote carets in a shared draft, and Tiptap's
 typography input rules (the site's own
@@ -294,7 +302,10 @@ repository: `title`, `description` when there is one, `date`, `lang`, `tags`,
 is `false`, `true` or a place, `2` or `3` (`writtenPin` in `shared/pin.ts`),
 as the blog reads it since October 2026: `true` puts a post in the first
 place free after the newest one, a number names the place (`pinOf` and
-`homeOrder` in the blog's `src/logics/utils.ts`). There
+`homeOrder` in the blog's `src/logics/utils.ts`). That is the blog's `main`;
+its `blog` branch, which the host builds, reads it so from its next merge of
+`main`, and until then a `2` or `3` stops its build (`pin should be true or
+false`) and a `true` stands ahead of the newest post (`pinnedFirst`). There
 is no `author` and no `categories`. The blog never read `author`, and
 categories became topics and a language; both are dropped when a post is read,
 as `math` and `mermaid` are. A new post is dated in the blog's zone, +0700,
@@ -534,13 +545,19 @@ address outright.
 
 Publishing is a review before it is a send (`PublishDialog.vue`, the plan
 from `buildPublishPlan`). Review shows, in order: warnings, each with the
-button that fixes it — a photo with no alt text (it would be named
-`<slug>-N`) selects the photo, no description opens the post panel, a photo
+button that fixes it — a post with no title, or with a date that is no day
+on the calendar, is blocked, since the blog's build stops on either (its
+front matter schema wants a title that is not blank and a `realDate`), and
+the date's button opens the post panel at the slug and date; a post that
+says `hidden: true` is told the build leaves it out, and gets no live link
+(a draft is never built, so none of these three is checked for one); a
+photo with no alt text (it would be named `<slug>-N`) selects the photo, no description opens the post panel, a photo
 over 8 MB that will not be reduced blocks the publish and names the file, a
 copy with no sha offers *Open the site version*, a photo missing from this
 browser's storage; then Post or Draft with the repo path and the live link;
-a card of the post as readers see it (cover, title, date, description,
-topics); the photos with their final names, sizes and a *reduced* badge
+a card of the post as readers see it (cover, title, date and its pin —
+*Pinned*, *Pinned 2nd* or *Pinned 3rd* — description, topics); the photos
+with their final names, sizes and a *reduced* badge
 (decided from size and width, without shrinking at review time, since a
 48 MP photo takes seconds), shown from their display copies; the renames
 `old → new`; a collapsed line diff against the site's file (`src/lib/diff.ts`,
@@ -572,14 +589,15 @@ delete; with none, buttons were 32px, inputs 34 (38 on touch), so a button
 beside an input never lined up — the password field and the Passkey button
 were two heights. Tools (`--tool-size`) are 28px with a mouse and 40px on
 touch: at 44 the phone's dock showed four tools and the bubble ran wide. A
-toggle (Language, Pin, Publish as) keeps its slim pill on touch too, 27px; its
-buttons reach 8px past it above and below (`::before`), so a tap there still
+toggle (Language, Pin, Publish as, the site list's Posts and Drafts) keeps
+its slim pill on touch too, 27px; its buttons reach 8px past it above and below (`::before`), so a tap there still
 lands. Raised to 44px it read as a fat knob, the row under it grew, and it
-was taken back by the owner's choice. A checkbox row (`.switch`) is 44px
-tall on touch with its box centred on the label and hint, 12px between rows,
-by the owner's choice: packed tight with the box on the first line, it was
-tried and taken back. The box is `flex: none`, or a long hint (PDF's)
-squeezed it and its row sat a few pixels left of the others. A small type scale and radius tokens replace stray
+was taken back by the owner's choice. A checkbox row (`.switch`, the table
+of contents alone since the pin became a toggle) is 44px tall on touch with
+its box centred on its label, by the owner's choice: packed tight with the box on the first line, it was
+tried and taken back. The box is `flex: none`: when Export was a list of
+these rows, a long hint (PDF's) squeezed it and its row sat a few pixels
+left of the others. A small type scale and radius tokens replace stray
 px values; the 30px title and the 16px inputs that keep iOS from zooming stay
 as they are. The colours are tuned for an OLED phone: dark is true black
 (`--bg: #000`) with near-black panels (`#0e0e0f`) set apart by their border,
@@ -1222,12 +1240,14 @@ held during the jump so it does not flicker through every heading passed.
 
 ## Editing a published post
 
-`?edit=<repo path>` — what the blog's own edit button links to — reads the post
+`?edit=<repo path>` — what the blog's edit pen under a post links to — reads the post
 through `/api/source`, which asks no password for anything under `src/posts`, and
 opens it as a draft whose `publishedPath` is that file, so re-publishing lands on the same path rather than making a copy. Images
 already on the blog are not re-encoded or re-uploaded; they are renamed only
 to follow their alt, and a new one is named from its alt, never taking a name
-already in the folder (see *Publishing format*).
+already in the folder (see *Publishing format*). The pen went from the
+blog's `main` in October 2026 and leaves the live site at its next merge into
+`blog`; *Open from the site* (below) opens a post the same way.
 
 A draft remembers the post's blob sha when it is opened or published
 (`publishedSha`, with `publishedPrint`, a SHA-256 of the markdown it would

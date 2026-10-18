@@ -17,7 +17,7 @@ interface PlannedPhoto {
 }
 
 export interface PublishWarning {
-  kind: "alt" | "description" | "missing" | "unguarded" | "size" | "stale" | "existing" | "retry";
+  kind: "title" | "date" | "hidden" | "alt" | "description" | "missing" | "unguarded" | "size" | "stale" | "existing" | "retry";
   text: string;
   src?: string;
   blocks?: boolean;
@@ -41,8 +41,31 @@ export interface PublishPlan {
 const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
-function warningsFor(draft: Draft, photos: PlannedPhoto[], skipped: string[], guarded: boolean): PublishWarning[] {
+/** A date the blog's build reads as a day on the calendar (its `realDate`): one it does not stops the build. */
+function calendarDay(date: string): boolean {
+  const day = /^(\d{4})-(\d{2})-(\d{2})/.exec(date);
+  return day !== null && new Date(Date.UTC(+day[1], +day[2] - 1, +day[3])).toISOString().startsWith(day[0]);
+}
+
+/** `hidden: true` among the fields the app keeps as written, read as the Worker's list of the site's files reads it. */
+const HIDDEN = /^hidden:[ \t]*(?:true|True|TRUE)(?:[ \t]+#.*)?[ \t]*$/;
+
+/** What the blog's build stops on, or leaves out, in a post's front matter; a draft is never built, so none of it applies. */
+function frontMatterWarnings(meta: PostMeta): PublishWarning[] {
   return [
+    ...(meta.title.trim() ? [] : [{ kind: "title" as const, blocks: true, text: "The post has no title, and the site's build stops on one without." }]),
+    ...(calendarDay(meta.date)
+      ? []
+      : [{ kind: "date" as const, blocks: true, text: "The date is not a day on the calendar, and the site's build stops on it. Write it as 2026-10-18 09:00 +0700." }]),
+    ...(meta.extra?.some((line) => HIDDEN.test(line))
+      ? [{ kind: "hidden" as const, text: "The post says hidden: true, so the site's build leaves it out and it will not be live." }]
+      : []),
+  ];
+}
+
+function warningsFor(draft: Draft, photos: PlannedPhoto[], skipped: string[], guarded: boolean, post: boolean): PublishWarning[] {
+  return [
+    ...(post ? frontMatterWarnings(draft.meta) : []),
     ...photos
       .filter((photo) => tooBig(photo.blob))
       .map((photo): PublishWarning => ({
@@ -256,7 +279,7 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
     ? [{ path: draft.publishedPath, sha: draft.publishedSha }]
     : [];
   const expect = [...(draft.publishedPath === markdownPath ? [] : [{ path: markdownPath, sha: "" }]), ...source];
-  const warnings = warningsFor(draft, photos, skippedImages, !draft.publishedPath || source.length > 0);
+  const warnings = warningsFor(draft, photos, skippedImages, !draft.publishedPath || source.length > 0, settings.publishTarget === "posts");
   return {
     slug,
     markdownPath,

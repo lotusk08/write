@@ -4,6 +4,7 @@ import type { AppConfig, PublishResult } from "../../shared/types.ts";
 import { fetchPostSource, PasswordRejected } from "../lib/api.ts";
 import { isLocalSrc, resolveDisplaySrc, type Draft } from "../lib/db.ts";
 import { diffLines, type LineDiff } from "../lib/diff.ts";
+import { choiceOf, PIN_CHOICES } from "../lib/home.ts";
 import { shrinks } from "../lib/images.ts";
 import { buildPublishPlan, defaultCommitMessage, sendPlan, type PublishPlan, type PublishWarning } from "../lib/publish.ts";
 import type { Settings } from "../lib/settings.ts";
@@ -129,10 +130,18 @@ watch(cover, (src) => src && void thumb(src), { immediate: true });
 const isPost = computed(() => props.settings.publishTarget === "posts");
 const updating = computed(() => props.draft.publishedPath === plan.value?.markdownPath);
 const action = computed(() => (!isPost.value ? "Save draft" : updating.value ? "Update post" : "Publish post"));
-const liveUrl = computed(() => (props.config?.siteUrl && plan.value ? `${props.config.siteUrl.replace(/\/+$/, "")}/${plan.value.slug}` : ""));
+const hidden = computed(() => Boolean(plan.value?.warnings.some((warning) => warning.kind === "hidden")));
+const liveUrl = computed(() =>
+  props.config?.siteUrl && plan.value && !hidden.value ? `${props.config.siteUrl.replace(/\/+$/, "")}/${plan.value.slug}` : "",
+);
 const date = computed(() => {
   const day = new Date(`${datePrefix(props.draft.meta.date)}T00:00:00`);
   return Number.isNaN(day.getTime()) ? "" : day.toLocaleDateString(undefined, { dateStyle: "medium" });
+});
+const pinned = computed(() => {
+  const choice = choiceOf(props.draft.meta.pin);
+  const place = PIN_CHOICES.find((each) => each.id === choice);
+  return choice === "off" ? "" : choice === "on" ? "Pinned" : `Pinned ${place?.label ?? choice}`;
 });
 
 const renamedFrom = computed(() =>
@@ -163,6 +172,7 @@ const megabytes = (bytes: number) =>
 const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
 const FIXES: Partial<Record<PublishWarning["kind"], [string, (warning: PublishWarning) => void]>> = {
+  date: ["Change the date", () => emit("editPost")],
   alt: ["Add alt text", (warning) => warning.src && emit("fixPhoto", warning.src)],
   description: ["Add", () => emit("editPost")],
   existing: ["Change title or date", () => emit("editPost")],
@@ -239,7 +249,8 @@ const committing = computed(() => Boolean(plan.value && sent.value >= plan.value
       <p class="publish-done-title">✓ {{ isPost ? "Published" : "Saved" }} <span class="mono">{{ plan?.slug }}</span> to {{ result.branch }}</p>
       <p class="hint">
         {{ plan?.photos.length ?? 0 }} photo(s) uploaded<template v-if="plan?.moved.length">, {{ plan.moved.length }} renamed</template>.
-        <template v-if="isPost">Live in a few minutes, after the site builds.</template>
+        <template v-if="isPost && hidden">Hidden, so the site's build leaves it out.</template>
+        <template v-else-if="isPost">Live in a few minutes, after the site builds.</template>
       </p>
       <p class="publish-links">
         <a :href="result.commitUrl" target="_blank" rel="noreferrer">View commit ↗</a>
@@ -282,7 +293,7 @@ const committing = computed(() => Boolean(plan.value && sent.value >= plan.value
         <img v-if="cover && thumbs.get(cover)" :src="thumbs.get(cover)" alt="" class="publish-cover" />
         <div>
           <p class="publish-title">{{ draft.meta.title || "Untitled" }}</p>
-          <p class="hint">{{ date }}</p>
+          <p class="hint">{{ [date, pinned].filter(Boolean).join(" · ") }}</p>
           <p :class="draft.meta.description ? 'publish-description' : 'hint'">{{ draft.meta.description || "No description" }}</p>
           <p v-if="draft.meta.tags.length" class="publish-tags">
             <span v-for="tag in draft.meta.tags" :key="tag">{{ tag }}</span>

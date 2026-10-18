@@ -6,8 +6,8 @@ Word, and publish straight to the blog repository — text and images in a singl
 commit. Posts already on the blog can be opened here and edited in place.
 
 No token to remember. A small Worker holds the one GitHub token and makes the
-commit; the browser sends a password to reach it, typed once on a device and
-remembered after that, or signs in with a passkey saved the first time. Opening a published post asks for nothing at all — the
+commit; the browser sends a password to reach it, typed once a sitting, or
+signs in with a passkey saved the first time. Opening a published post asks for nothing at all — the
 password is for sending, not for reading. No GitHub credential ever touches the
 browser.
 
@@ -35,13 +35,15 @@ browser.
   shows a lighter copy, and photos no draft uses are cleared after a day. The open draft renames in place on a double-click and carries
   the delete button.
 - **Front matter.** Title, description, slug (made from the title), date,
-  topics, language, cover image, and the `pin` / `toc` switches the blog uses. It is written the
+  topics, language, cover image, the pin (off, pinned, or 2nd or 3rd on the
+  home page) and the `toc` switch the blog uses. A field the app has no box
+  for, such as `redirect_from` or `hidden`, is kept as it was written. It is written the
   way the published posts already are — block sequences, no unnecessary
   quoting, empty fields omitted — so re-publishing a post never moves a line
   of its front matter.
 - **Quotes and callouts.** A plain quote has its own button; quotes can carry
   the blog's five note styles, exported as `{: .info}` and friends, plus
-  its centred `{: .author}` attribution.
+  `{: .author}` for a quote with its author.
 - **Shortcuts.** Markdown as you type (`**bold**`, `[text](url)`, `- [x] `,
   `---` …) and the ⌘ keys the old editor had; Tab nests list items.
 - **Paste.** From Google Docs, Word or a web page, keeping headings, lists,
@@ -60,13 +62,16 @@ browser.
   place. The libraries load only when a post actually uses them.
 - **Markdown when you want it.** The **MD** button in the dock swaps the page
   view for the raw Markdown — exactly what gets published — and back.
-- **Editing published posts.** The blog's *Edit this post* button opens the post
-  here (`?edit=src/posts/…`). Its images are not re-encoded or re-uploaded,
+- **Editing published posts.** *Open from the site* in the menu, or a link to
+  `?edit=src/posts/…`, opens a post here. Its images are not re-encoded or re-uploaded,
   and re-publishing commits back to the file it came from, refusing if the post
   changed on the site since it was opened.
-- **The blog's drafts.** The rail's download button lists the drafts in the
-  blog's `src/drafts`; open one, keep it a draft, or publish it as a post, which
-  moves it out of `src/drafts` in the same commit.
+- **The blog's posts and drafts.** *Open from the site*, under the menu's
+  buttons, lists the posts in the blog's `src/posts` and the drafts in its
+  `src/drafts`; open one, keep a draft a draft, or publish it as a post, which
+  moves it out of `src/drafts` in the same commit. Above the posts stand the
+  home page's first three: pin a post, put it 2nd or 3rd, or swap the two,
+  and save it to the site as one commit that changes only the `pin:` lines.
 - **Export.** Markdown (with front matter), Word `.docx` (images embedded), a
   self-contained HTML file, or Markdown straight to the clipboard.
 - **Review, then publish.** The publish dialog shows what is about to go out
@@ -86,9 +91,9 @@ are editing spells out its title, and the rest tuck behind each other like
 sheets in a deck, showing only their edges. Reaching for a deck fans it back out
 to full size — the drafts above the open one and those below it fan separately.
 The formatting toolbar is docked inside the bottom of the editor frame, and the
-menu at its right end holds front matter on one tab and the ways out on the
-other — download, where it publishes, and the publish button — so nothing sits
-above the page.
+menu at its right end holds, in one panel, the front matter, export and
+sharing, with Publish, Share, Export, Copy and View along its foot — so
+nothing sits above the page.
 
 Shortcuts: `⌘S` save now · `⌘⇧N` new draft · `⌘\` open/close the menu ·
 `⌘⇧C` copy Markdown · plus the usual Markdown input rules (`#`, `-`, `1.`, `>`,
@@ -121,9 +126,9 @@ npm run deploy       # builds, then uploads dist to the `write` Worker
 ```
 
 `write.stevehoang.com` is a custom domain on that Worker, and `wrangler.jsonc`
-holds the route — so the deploy lands on the name the blog's *Edit this post*
-button links to, with nothing to attach by hand. The Worker has no `main`: it
-serves `dist` and runs no code of its own.
+holds the route — so the deploy lands on the name an `?edit=` link points at,
+with nothing to attach by hand. The Worker's code is `worker/index.ts`: it
+answers `/api` and serves `dist` for everything else.
 
 Deploy anywhere else — a Pages project of the same name included — and the
 domain stays on the Worker, serving whatever was last pushed to it. That is the
