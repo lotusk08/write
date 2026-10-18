@@ -79,6 +79,29 @@ describe("buildPublishPlan", () => {
     expect(plan.warnings.map((warning) => warning.kind)).toContain("description");
   });
 
+  it("stops a post the site's build would stop on: no title, or a date that is no day", async () => {
+    const meta = (patch: Record<string, unknown>) => draft({ meta: { ...draft({}).meta, ...patch } });
+    const blocking = async (patch: Record<string, unknown>, target: Settings["publishTarget"] = "posts") =>
+      (await buildPublishPlan(meta(patch), { ...settings, publishTarget: target })).warnings
+        .filter((warning) => warning.blocks)
+        .map((warning) => warning.kind);
+    expect(await blocking({})).toEqual([]);
+    expect(await blocking({ date: "2026-10-18 09:00 +0700" })).toEqual([]);
+    expect(await blocking({ date: "2026-10-18" })).toEqual([]);
+    expect(await blocking({ title: " " })).toEqual(["title"]);
+    expect(await blocking({ date: "2026-02-30 09:00 +0700" })).toEqual(["date"]);
+    expect(await blocking({ date: "yesterday" })).toEqual(["date"]);
+    expect(await blocking({ date: " 2026-10-18" })).toEqual(["date"]);
+    expect(await blocking({ title: "", date: "" }, "drafts")).toEqual([]);
+  });
+
+  it("says a hidden post will not be live", async () => {
+    const hidden = draft({ meta: { ...draft({}).meta, extra: ["comments: false", "hidden: true # for now"] } });
+    expect((await buildPublishPlan(hidden, settings)).warnings.map((warning) => warning.kind)).toContain("hidden");
+    const shown = draft({ meta: { ...draft({}).meta, extra: ["hidden: false", "hiddenly: true"] } });
+    expect((await buildPublishPlan(shown, settings)).warnings.map((warning) => warning.kind)).not.toContain("hidden");
+  });
+
   it("refuses a photo too big to send before uploading any", async () => {
     const gif = new Blob([new Uint8Array(9 * 1024 * 1024)], { type: "image/gif" });
     const plan = {

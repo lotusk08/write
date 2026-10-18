@@ -534,13 +534,19 @@ address outright.
 
 Publishing is a review before it is a send (`PublishDialog.vue`, the plan
 from `buildPublishPlan`). Review shows, in order: warnings, each with the
-button that fixes it — a photo with no alt text (it would be named
-`<slug>-N`) selects the photo, no description opens the post panel, a photo
+button that fixes it — a post with no title, or with a date that is no day
+on the calendar, is blocked, since the blog's build stops on either (its
+front matter schema wants a title that is not blank and a `realDate`), and
+the date's button opens the post panel at the slug and date; a post that
+says `hidden: true` is told the build leaves it out, and gets no live link
+(a draft is never built, so none of these three is checked for one); a
+photo with no alt text (it would be named `<slug>-N`) selects the photo, no description opens the post panel, a photo
 over 8 MB that will not be reduced blocks the publish and names the file, a
 copy with no sha offers *Open the site version*, a photo missing from this
 browser's storage; then Post or Draft with the repo path and the live link;
-a card of the post as readers see it (cover, title, date, description,
-topics); the photos with their final names, sizes and a *reduced* badge
+a card of the post as readers see it (cover, title, date and its pin —
+*Pinned*, *Pinned 2nd* or *Pinned 3rd* — description, topics); the photos
+with their final names, sizes and a *reduced* badge
 (decided from size and width, without shrinking at review time, since a
 48 MP photo takes seconds), shown from their display copies; the renames
 `old → new`; a collapsed line diff against the site's file (`src/lib/diff.ts`,
