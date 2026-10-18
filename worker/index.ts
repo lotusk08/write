@@ -19,6 +19,7 @@ import type {
   Topics,
 } from "../shared/types.ts";
 
+import { frontMatter } from "../shared/front.ts";
 import { decoded, servedName, stem, trimSlashes } from "../shared/paths.ts";
 import { readPin } from "../shared/pin.ts";
 import { redirectSources, REDIRECTS_PATH } from "../shared/redirects.ts";
@@ -516,8 +517,6 @@ async function handleImages(request: Request, env: Env): Promise<Response> {
   }
 }
 
-const FRONT = /^\ufeff?---\r?\n([\s\S]*?)\r?\n---[^\S\n]*(?:\r?\n|$)/;
-
 /** A date as the blog's build reads it, in milliseconds; one written with no offset is the site's, +07:00. */
 function postTime(value: string): number {
   const m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?)?\s*(?:(Z)|([+-])(\d{2}):?(\d{2}))?/.exec(value);
@@ -531,8 +530,8 @@ function postTime(value: string): number {
 
 /** What the list of the site's files shows of one: its title, day, place in time, pin and whether the build skips it. */
 export function siteFile(path: string, text: string): SiteFile {
-  const front = FRONT.exec(text)?.[1] ?? "";
-  const field = (key: string) => new RegExp(`^${key}:[ \\t]*(.*?)\\s*$`, "m").exec(front)?.[1] ?? "";
+  const yaml = frontMatter(text)?.yaml ?? "";
+  const field = (key: string) => new RegExp(`^${key}:[ \\t]*(.*?)\\s*$`, "m").exec(yaml)?.[1] ?? "";
   const plain = (raw: string) => !/^["']/.test(raw);
   const value = (raw: string) => (plain(raw) ? raw.replace(/(?:^|[ \t])#.*$/, "").trim() : yamlScalar(raw));
   const written = value(field("date"));

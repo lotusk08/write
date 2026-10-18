@@ -1,4 +1,5 @@
 import type { JSONContent } from "../editor/doc.ts";
+import { frontMatter } from "../../shared/front.ts";
 import { readPin } from "../../shared/pin.ts";
 import type { PostMeta } from "../../shared/types.ts";
 import { EMBED_LIQUID, EMBED_TAG, NOTE_CLASSES, embedPlatform, noteOfClass } from "../editor/blog.ts";
@@ -6,8 +7,6 @@ import { ENTITY, type InlineToken, entityText, inlineTokens } from "./inline.ts"
 import { languageOf } from "./topics.ts";
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
-
-const FRONT_MATTER = /^---\r?\n([\s\S]*?)\r?\n---[^\S\n]*(?:\r?\n|$)/;
 
 function trimAscii(value: string): string {
   return value.replace(/^[ \t\n]+/, "").replace(/\n[ \t\n]*$/, "");
@@ -1366,10 +1365,10 @@ export interface ImportedPost {
 }
 
 export function parsePost(source: string): ImportedPost {
-  const normalized = source.replace(/^\ufeff/, "").replace(/\r\n/g, "\n");
-  const front = FRONT_MATTER.exec(normalized);
+  const text = source.replace(/\r\n/g, "\n");
+  const front = frontMatter(text);
   return {
-    meta: front ? parseFrontMatter(front[1]) : {},
-    doc: markdownToDoc(front ? normalized.slice(front[0].length) : normalized),
+    meta: front ? parseFrontMatter(front.yaml) : {},
+    doc: markdownToDoc(front?.rest ?? text.replace(/^\ufeff/, "")),
   };
 }

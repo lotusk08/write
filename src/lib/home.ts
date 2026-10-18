@@ -1,4 +1,5 @@
 import { bytesToBase64 } from "../../shared/base64.ts";
+import { splitFront } from "../../shared/front.ts";
 import { PLACES, writtenPin, type Pin, type Place } from "../../shared/pin.ts";
 import { fetchPostSource, publish } from "./api.ts";
 import { parsePost } from "./import.ts";
@@ -91,18 +92,16 @@ export function withPins<T extends HomePost>(posts: T[], changes: Map<string, Pi
   return posts.map((post) => (changes.has(post.path) ? { ...post, pin: changes.get(post.path)! } : post));
 }
 
-const FRONT = /^(\ufeff?---[^\S\n]*\r?\n)([\s\S]*?\r?\n)?(---[^\S\n]*(?:\r?\n|$))/;
-
 /**
  * A post's file with its pin changed and every other byte as it was: the `pin:` line is rewritten in place, or, with
  * none, written before `toc:` or at the end of the front matter, where the app writes it. Null with no front matter.
  */
 export function setPin(markdown: string, pin: Pin): string | null {
-  const front = FRONT.exec(markdown);
+  const front = splitFront(markdown);
   if (!front) {
     return null;
   }
-  const [whole, open, body = "", close] = front;
+  const { open, body, close, rest } = front;
   const eol = open.endsWith("\r\n") ? "\r\n" : "\n";
   const line = `pin: ${writtenPin(pin)}`;
   const lines = body.split(/(?<=\n)/);
@@ -113,7 +112,7 @@ export function setPin(markdown: string, pin: Pin): string | null {
     const toc = lines.findIndex((each) => /^toc:(?:[ \t]|\r?\n|$)/.test(each));
     lines.splice(toc === -1 ? lines.length : toc, 0, `${line}${eol}`);
   }
-  return `${open}${lines.join("")}${close}${markdown.slice(whole.length)}`;
+  return `${open}${lines.join("")}${close}${rest}`;
 }
 
 const PIN_WORDS: Record<PinChoice, string> = { off: "unpinned", on: "pinned", "2": "pinned 2nd", "3": "pinned 3rd" };
