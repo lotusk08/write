@@ -4,7 +4,7 @@ import type { AppConfig, PublishResult } from "../../shared/types.ts";
 import { fetchPostSource, PasswordRejected } from "../lib/api.ts";
 import { isLocalSrc, resolveDisplaySrc, type Draft } from "../lib/db.ts";
 import { diffLines, type LineDiff } from "../lib/diff.ts";
-import { choiceOf, PIN_CHOICES } from "../lib/home.ts";
+import { pinWords } from "../lib/home.ts";
 import { shrinks } from "../lib/images.ts";
 import { buildPublishPlan, defaultCommitMessage, sendPlan, type PublishPlan, type PublishWarning } from "../lib/publish.ts";
 import type { Settings } from "../lib/settings.ts";
@@ -23,6 +23,7 @@ const emit = defineEmits<{
   published: [result: PublishResult, plan: PublishPlan];
   fixPhoto: [src: string];
   editPost: [];
+  fixField: [field: "title" | "description"];
   reopen: [];
 }>();
 
@@ -138,11 +139,7 @@ const date = computed(() => {
   const day = new Date(`${datePrefix(props.draft.meta.date)}T00:00:00`);
   return Number.isNaN(day.getTime()) ? "" : day.toLocaleDateString(undefined, { dateStyle: "medium" });
 });
-const pinned = computed(() => {
-  const choice = choiceOf(props.draft.meta.pin);
-  const place = PIN_CHOICES.find((each) => each.id === choice);
-  return choice === "off" ? "" : choice === "on" ? "Pinned" : `Pinned ${place?.label ?? choice}`;
-});
+const pinned = computed(() => (props.draft.meta.pin ? pinWords(props.draft.meta.pin).replace(/^p/, "P") : ""));
 
 const renamedFrom = computed(() =>
   props.draft.publishedPath && plan.value && !updating.value ? props.draft.publishedPath : null,
@@ -174,7 +171,8 @@ const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 const FIXES: Partial<Record<PublishWarning["kind"], [string, (warning: PublishWarning) => void]>> = {
   date: ["Change the date", () => emit("editPost")],
   alt: ["Add alt text", (warning) => warning.src && emit("fixPhoto", warning.src)],
-  description: ["Add", () => emit("editPost")],
+  title: ["Add a title", () => emit("fixField", "title")],
+  description: ["Add", () => emit("fixField", "description")],
   existing: ["Change title or date", () => emit("editPost")],
   unguarded: ["Open the site version", () => emit("reopen")],
   stale: ["Open the site version", () => emit("reopen")],
