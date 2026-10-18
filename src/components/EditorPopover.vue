@@ -100,10 +100,10 @@ const onKey = (event: KeyboardEvent) => {
     dismiss();
   }
 };
-/** A tap outside closes the menu, but not one in the list of the site's files, which opens from it and floats beside it. */
+/** A tap outside closes the menu, but not one in a list of files floating beside it, such as the site's, which opens from it. */
 const onDown = (event: PointerEvent) => {
   const target = event.target as Element;
-  if (panel.value?.contains(target) || props.anchor?.contains(target) || target.closest?.(".draft-list")) {
+  if (panel.value?.contains(target) || props.anchor?.contains(target) || target.closest?.(".file-list")) {
     return;
   }
   emit("close");
@@ -164,7 +164,7 @@ onBeforeUnmount(stop);
         </button>
         <button
           type="button"
-          :class="['btn icon ghost', { 'is-active': settings.focusMode }]"
+          class="btn icon ghost"
           title="Focus mode — hides the toolbar and the draft rail"
           aria-label="Focus mode"
           :aria-pressed="settings.focusMode"
@@ -185,8 +185,8 @@ onBeforeUnmount(stop);
         <Section v-if="share.sharing || share.error" id="menu-share">
           <SharePanel
             :state="share"
-            @name="(name) => emit('shareName', name)"
             :copied="done === 'link'"
+            @name="(name) => emit('shareName', name)"
             @copy="emit('shareCopy')"
             @disable="emit('shareDisable')"
           />

@@ -190,10 +190,6 @@ textarea {
   margin-bottom: 0;
 }
 
-.toggle-wide {
-  width: 100%;
-}
-
 .post-toc {
   margin-top: 12px;
 }
@@ -222,7 +218,7 @@ textarea {
   grid-template-columns: repeat(5, minmax(0, 1fr));
 }
 
-.site-drafts-open {
+.site-open {
   width: 100%;
   height: auto;
   min-height: 28px;
@@ -587,20 +583,20 @@ textarea {
   color: var(--danger);
 }
 
-.draft-list {
+.file-list {
   width: min(300px, calc(100vw - 16px));
 }
 
-.menu.floating.draft-list {
+.menu.file-list {
   z-index: 45;
 }
 
-.draft-list button:not(.btn) {
+.file-list button:not(.btn) {
   min-height: 44px;
   gap: 10px;
 }
 
-.draft-list-title {
+.file-list-title {
   min-width: 0;
   flex: 1;
   overflow: hidden;
@@ -608,7 +604,7 @@ textarea {
   white-space: nowrap;
 }
 
-.draft-list button[aria-current] {
+.file-list button[aria-current] {
   background: var(--hover);
   font-weight: 600;
 }
@@ -659,20 +655,9 @@ textarea {
 }
 
 .site-home-pin,
-.site-row.is-changed .draft-list-title,
+.site-row.is-changed .file-list-title,
 .site-home li.is-changed {
   color: var(--accent);
-}
-
-.site-home .btn.icon {
-  border-color: transparent;
-  background: none;
-  color: var(--muted);
-}
-
-.site-home .btn.icon:hover:not(:disabled) {
-  background: var(--hover);
-  color: var(--text);
 }
 
 .site-row {
@@ -699,10 +684,6 @@ textarea {
 
 .btn.site-pin.is-on {
   color: var(--accent);
-}
-
-.btn.site-pin.is-idle {
-  color: var(--faint);
 }
 
 .btn.site-pin[aria-expanded="true"] {
@@ -2011,7 +1992,7 @@ textarea {
   flex: 1;
 }
 
-.draft-list .sign-in {
+.site-list .sign-in {
   padding: 6px;
   margin-bottom: 0;
 }
@@ -2352,17 +2333,16 @@ textarea {
 }
 
 .menu {
-  position: absolute;
+  position: fixed;
   z-index: 30;
-  top: calc(100% + 6px);
-  right: 0;
-  left: auto;
-  min-width: 200px;
+  min-width: 168px;
   padding: 5px;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: var(--panel);
   box-shadow: var(--shadow-pop);
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .menu button:not(.btn) {
@@ -2377,14 +2357,6 @@ textarea {
   cursor: pointer;
   font-size: var(--text-md);
   text-align: left;
-}
-
-.menu.floating {
-  position: fixed;
-  right: auto;
-  min-width: 168px;
-  overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .menu button:not(.btn):hover {
@@ -2587,7 +2559,7 @@ textarea {
     margin-top: 2px;
   }
 
-  .site-drafts-open {
+  .site-open {
     min-height: 36px;
   }
 
@@ -2604,7 +2576,7 @@ textarea {
     font-size: 16px;
   }
 
-  .btn.ghost.site-drafts-open:hover:not(:disabled) {
+  .btn.ghost.site-open:hover:not(:disabled) {
     background: none;
   }
 
@@ -2779,6 +2751,8 @@ textarea {
 }
 
 .bubble {
+  position: fixed;
+  z-index: 40;
   display: flex;
   gap: 2px;
   padding: 4px;
@@ -2848,11 +2822,6 @@ textarea {
 
 .editor-image:not(.is-selected) .editor-image-edit {
   display: none;
-}
-
-.bubble.floating {
-  position: fixed;
-  z-index: 40;
 }
 
 .editor-host .post-body .editor-image:has(+ p[data-join]) .editor-image-caption,

@@ -23,7 +23,6 @@ const LANGUAGES: ToggleOption<Language>[] = [
 
 const MAX_TOPICS = 8;
 
-
 const coverUrl = ref<string | null>(null);
 const coverInput = ref<HTMLInputElement | null>(null);
 const topics = ref<Topics | null>(null);
@@ -93,7 +92,6 @@ const onAltBlur = (event: FocusEvent) => {
       />
     </div>
     <Toggle
-      class="toggle-wide"
       label="Language"
       :options="LANGUAGES"
       :value="meta.lang"
@@ -102,7 +100,7 @@ const onAltBlur = (event: FocusEvent) => {
   </Section>
 
   <Section>
-    <div class="field post-cover">
+    <div class="field">
       <figure v-if="coverUrl" class="cover-card">
         <img :src="coverUrl" :alt="meta.cover?.alt ?? ''" @error="onCoverError" />
         <figcaption>
@@ -154,7 +152,6 @@ const onAltBlur = (event: FocusEvent) => {
 
   <Section>
     <Toggle
-      class="toggle-wide"
       label="Pin to home"
       :options="PIN_CHOICES"
       :value="choiceOf(meta.pin)"

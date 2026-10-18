@@ -78,7 +78,7 @@ const buttons: { icon: IconName; label: string; active: () => boolean; press: ()
 
 <template>
   <Teleport to="body">
-    <div v-if="shown" ref="bubble" class="bubble floating" role="toolbar" aria-label="Format selection" @mousedown.prevent>
+    <div v-if="shown" ref="bubble" class="bubble" role="toolbar" aria-label="Format selection" @mousedown.prevent>
       <button
         v-for="button in buttons"
         :key="button.icon"

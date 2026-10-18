@@ -58,8 +58,10 @@ const onCancel = (event: KeyboardEvent) => {
 };
 
 /** On a phone a deck of more than one sheet is one target, opening a list of every draft by title. */
+const listed = (sheets: Draft[]) => touch.value && sheets.length > 1;
+
 const pickSheet = (event: MouseEvent, sheets: Draft[], draft: Draft) => {
-  if (touch.value && sheets.length > 1) {
+  if (listed(sheets)) {
     anchor.value = event.currentTarget as HTMLElement;
     listing.value = !listing.value;
   } else {
@@ -90,8 +92,8 @@ const pickFromList = (draft: Draft) => {
           class="rail-tab is-layer"
           :style="{ '--z': ordered.length - ordered.indexOf(draft) }"
           :title="draftLabel(draft)"
-          :aria-label="touch && before.length > 1 ? 'All drafts' : draftLabel(draft)"
-          :aria-haspopup="touch && before.length > 1 ? 'menu' : undefined"
+          :aria-label="listed(before) ? 'All drafts' : draftLabel(draft)"
+          :aria-haspopup="listed(before) ? 'menu' : undefined"
           @click="pickSheet($event, before, draft)"
         >
           <Icon name="file" :size="13" />
@@ -135,8 +137,8 @@ const pickFromList = (draft: Draft) => {
           class="rail-tab is-layer"
           :style="{ '--z': ordered.length - ordered.indexOf(draft) }"
           :title="draftLabel(draft)"
-          :aria-label="touch && after.length > 1 ? 'All drafts' : draftLabel(draft)"
-          :aria-haspopup="touch && after.length > 1 ? 'menu' : undefined"
+          :aria-label="listed(after) ? 'All drafts' : draftLabel(draft)"
+          :aria-haspopup="listed(after) ? 'menu' : undefined"
           @click="pickSheet($event, after, draft)"
         >
           <Icon name="file" :size="13" />
@@ -146,7 +148,7 @@ const pickFromList = (draft: Draft) => {
     </div>
 
     <Teleport to="body">
-      <div v-if="listing" ref="list" class="menu floating draft-list" role="menu" aria-label="Drafts">
+      <div v-if="listing" ref="list" class="menu file-list" role="menu" aria-label="Drafts">
         <button
           v-for="draft in ordered"
           :key="draft.id"
@@ -155,7 +157,7 @@ const pickFromList = (draft: Draft) => {
           :aria-current="draft.id === currentId ? 'true' : undefined"
           @click="pickFromList(draft)"
         >
-          <span class="draft-list-title">{{ draftLabel(draft) }}</span>
+          <span class="file-list-title">{{ draftLabel(draft) }}</span>
           <span v-if="draft.publishedPath" class="dot" :title="`Published to ${draft.publishedPath}`" />
         </button>
       </div>
