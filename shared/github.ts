@@ -54,8 +54,8 @@ async function gh<T>(
   return (await res.json()) as T;
 }
 
-function encodeRef(branch: string): string {
-  return branch.split("/").map(encodeURIComponent).join("/");
+function encodeSegments(path: string): string {
+  return path.split("/").map(encodeURIComponent).join("/");
 }
 
 export async function getDefaultBranch(token: string, repo: string): Promise<string> {
@@ -74,7 +74,7 @@ export async function tokenLogin(token: string): Promise<string | null> {
 
 export async function branchExists(token: string, repo: string, branch: string): Promise<boolean> {
   try {
-    await gh(token, `/repos/${repo}/branches/${encodeRef(branch)}`);
+    await gh(token, `/repos/${repo}/branches/${encodeSegments(branch)}`);
     return true;
   } catch (error) {
     if (error instanceof GitHubError && error.status === 404) {
@@ -84,10 +84,6 @@ export async function branchExists(token: string, repo: string, branch: string):
   }
 }
 
-function encodePath(path: string): string {
-  return path.split("/").map(encodeURIComponent).join("/");
-}
-
 async function readFile(
   token: string,
   repo: string,
@@ -95,7 +91,7 @@ async function readFile(
   path: string,
 ): Promise<{ content: string; encoding: string; sha: string } | null> {
   try {
-    return await gh(token, `/repos/${repo}/contents/${encodePath(path)}?ref=${encodeURIComponent(ref)}`);
+    return await gh(token, `/repos/${repo}/contents/${encodeSegments(path)}?ref=${encodeURIComponent(ref)}`);
   } catch (error) {
     if (error instanceof GitHubError && error.status === 404) {
       return null;
@@ -195,7 +191,7 @@ export async function commitFiles(options: CommitOptions): Promise<PublishResult
 
   const ref = await gh<{ object: { sha: string } }>(
     token,
-    `/repos/${repo}/git/ref/heads/${encodeRef(branch)}`,
+    `/repos/${repo}/git/ref/heads/${encodeSegments(branch)}`,
   );
   const headCommitSha = ref.object.sha;
   const { redirects, fresh } = options;
@@ -257,7 +253,7 @@ export async function commitFiles(options: CommitOptions): Promise<PublishResult
   );
 
   try {
-    await gh(token, `/repos/${repo}/git/refs/heads/${encodeRef(branch)}`, {
+    await gh(token, `/repos/${repo}/git/refs/heads/${encodeSegments(branch)}`, {
       method: "PATCH",
       body: { sha: commit.sha },
     });

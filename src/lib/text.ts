@@ -19,8 +19,7 @@ function pad(value: number): string {
   return String(value).padStart(2, "0");
 }
 
-export function formatPostDate(date: Date, offsetMinutes?: number): string {
-  const offset = offsetMinutes ?? -date.getTimezoneOffset();
+export function formatPostDate(date: Date, offset: number): string {
   const shifted = new Date(date.getTime() + offset * 60_000);
   const sign = offset < 0 ? "-" : "+";
   const abs = Math.abs(offset);

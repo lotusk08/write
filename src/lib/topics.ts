@@ -29,12 +29,7 @@ export function knownTopic(name: string, topics: Topic[]): string {
   return findTopic(name, topics)?.slug ?? name;
 }
 
-export function suggestTopics(
-  topics: Topic[],
-  typed: string,
-  taken: string[],
-  limit = SUGGESTION_LIMIT,
-): Topic[] {
+export function suggestTopics(topics: Topic[], typed: string, taken: string[]): Topic[] {
   const used = new Set(taken.map(topicSlug));
   const open = topics.filter(
     (topic) => !used.has(topic.slug) && !used.has(topicSlug(topic.title)),
@@ -43,7 +38,7 @@ export function suggestTopics(
 
   const query = fold(typed.trim());
   if (!query) {
-    return [...open].sort(byCount).slice(0, limit);
+    return [...open].sort(byCount).slice(0, SUGGESTION_LIMIT);
   }
 
   const dashed = fold(topicSlug(typed));
@@ -59,5 +54,5 @@ export function suggestTopics(
   return ranked
     .sort((a, b) => a.rank - b.rank || byCount(a.topic, b.topic))
     .map(({ topic }) => topic)
-    .slice(0, limit);
+    .slice(0, SUGGESTION_LIMIT);
 }

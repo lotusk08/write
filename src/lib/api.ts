@@ -37,10 +37,15 @@ async function readJson<T>(response: Response, whenItFails: string): Promise<T> 
   return payload as T;
 }
 
+/** Whether the Worker answered: under `npm run dev` there is no `/api`, and Vite hands back the page instead. */
+function answeredJson(response: Response): boolean {
+  return response.ok && (response.headers.get("content-type") ?? "").includes("application/json");
+}
+
 export async function fetchAppConfig(): Promise<AppConfig | null> {
   try {
     const response = await fetch("/api/config", { headers: { accept: "application/json" } });
-    if (!response.ok || !(response.headers.get("content-type") ?? "").includes("application/json")) {
+    if (!answeredJson(response)) {
       return null;
     }
     return (await response.json()) as AppConfig;
@@ -68,7 +73,7 @@ function topicList(value: unknown): Topic[] {
 export function fetchTopics(): Promise<Topics> {
   topics ??= fetch("/api/topics", { headers: { accept: "application/json" } })
     .then(async (response) => {
-      if (!response.ok || !(response.headers.get("content-type") ?? "").includes("application/json")) {
+      if (!answeredJson(response)) {
         throw new Error("No topics.");
       }
       const body = (await response.json()) as Partial<Record<keyof Topics, unknown>>;
@@ -218,7 +223,7 @@ export async function passkeyChallenge(): Promise<PasskeyChallenge> {
 async function passkeySession(path: string, body: Record<string, unknown>, password = ""): Promise<string> {
   const response = await fetch(path, {
     method: "POST",
-    headers: { ...headers(password, { "content-type": "application/json" }) },
+    headers: headers(password, { "content-type": "application/json" }),
     body: JSON.stringify(body),
   });
   const result = await readJson<{ session?: string }>(response, "The passkey did not work");
