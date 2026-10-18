@@ -50,6 +50,38 @@ describe("worker", () => {
     expect(limitedResponse.status).toBe(429);
   });
 
+  it("says what the deployment lacks, the token first, then the password, then the repository", async () => {
+    const problem = async (settings: object) =>
+      ((await (await worker.fetch(new Request("https://write.test/api/config"), settings as never)).json()) as { problem?: string }).problem;
+    expect(await problem({ WRITE_PASSWORD: "pw" })).toMatch(/no GITHUB_TOKEN/);
+    expect(await problem({ GITHUB_TOKEN: "t", WRITE_PASSWORD: " " })).toMatch(/until WRITE_PASSWORD is set/);
+    expect(await problem({ GITHUB_TOKEN: "t", WRITE_PASSWORD: "pw" })).toMatch(/No BLOG_REPO/);
+    expect(await problem(env as object)).toBeUndefined();
+  });
+
+  it("answers each endpoint only by its own method, an unknown one with a 404 and anything else from the assets", async () => {
+    for (const [path, method] of [
+      ["/api/config", "GET"],
+      ["/api/share", "POST"],
+      ["/api/publish", "POST"],
+      ["/api/publish/photo", "POST"],
+      ["/api/images", "GET"],
+      ["/api/site", "GET"],
+      ["/api/source", "GET"],
+      ["/api/passkey/challenge", "POST"],
+      ["/api/passkey/register", "POST"],
+      ["/api/passkey/login", "POST"],
+      ["/api/topics", "GET"],
+    ]) {
+      const response = await call(path, { method: method === "GET" ? "PUT" : "GET" });
+      expect([path, response.status, await response.json()]).toEqual([path, 405, { error: `Use ${method}.` }]);
+    }
+    expect((await call("/api/share/x", { method: "PUT" })).status).toBe(404);
+    expect((await call("/api/drafts")).status).toBe(404);
+    const assets = { ...(env as object), ASSETS: { fetch: async (request: Request) => new Response(new URL(request.url).pathname) } } as never;
+    expect(await (await worker.fetch(new Request("https://write.test/apix"), assets)).text()).toBe("/apix");
+  });
+
   it("asks for the password on every writing or draft-reading endpoint", async () => {
     for (const [path, method] of [
       ["/api/publish", "POST"],

@@ -58,6 +58,7 @@ export interface Env {
 const MAX_REQUEST_BYTES = 4 * 1024 * 1024;
 const MAX_PHOTO_BYTES = Math.ceil((8 * 1024 * 1024 * 4) / 3) + 4;
 const SHA = /^[0-9a-f]{40}$/;
+const MARKDOWN = /\.(md|markdown)$/i;
 
 const PASSKEY_BODY_BYTES = 16 * 1024;
 
@@ -71,6 +72,11 @@ function dirs(env: Env) {
     draftsDir: trimSlashes(env.DRAFTS_DIR || "src/drafts"),
     imagesDir: trimSlashes(env.IMAGES_DIR || "public/assets/img/post"),
   };
+}
+
+/** The folders a path may be published to or read from, each with its trailing slash. */
+function allowedDirs(env: Env): string[] {
+  return Object.values(dirs(env)).map((dir) => `${dir}/`);
 }
 
 async function digest(value: string): Promise<Uint8Array> {
@@ -196,10 +202,7 @@ function unreachable(env: Env): string | null {
 }
 
 function problem(env: Env): string | null {
-  if (!env.GITHUB_TOKEN) {
-    return unreachable(env);
-  }
-  if (!env.WRITE_PASSWORD?.trim()) {
+  if (env.GITHUB_TOKEN && !env.WRITE_PASSWORD?.trim()) {
     return "Publishing is disabled until WRITE_PASSWORD is set (`wrangler secret put WRITE_PASSWORD`), otherwise this endpoint would let anyone write to the blog.";
   }
   return unreachable(env);
@@ -281,7 +284,7 @@ function validateFiles(files: unknown, env: Env): { files: PublishFile[] } | { e
     return { error: "Too many files in one publish (max 50)." };
   }
 
-  const allowed = Object.values(dirs(env)).map((dir) => `${dir}/`);
+  const allowed = allowedDirs(env);
   const validated: PublishFile[] = [];
 
   for (const file of files as PublishFile[]) {
@@ -407,7 +410,7 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
     typeof path === "string" &&
     repoPath(path) === path &&
     (path.startsWith(`${postsDir}/`) || path.startsWith(`${draftsDir}/`)) &&
-    /\.(md|markdown)$/i.test(path);
+    MARKDOWN.test(path);
   const expect = body.expect;
   const guard = (entry: unknown): entry is { path: string; sha: string } =>
     typeof entry === "object" && entry !== null && markdownPath((entry as { path?: unknown }).path) &&
@@ -537,13 +540,14 @@ export function siteFile(path: string, text: string): SiteFile {
   const written = value(field("date"));
   const named = fileDate(path);
   const pin = field("pin");
+  const hidden = field("hidden");
   return {
     path,
     title: yamlScalar(field("title")),
     date: named || /^\d{4}-\d{2}-\d{2}/.exec(written)?.[0] || "",
     time: postTime(written) || postTime(named),
     pin: readPin(value(pin), plain(pin)),
-    hidden: plain(field("hidden")) && /^(?:true|True|TRUE)$/.test(value(field("hidden"))),
+    hidden: plain(hidden) && /^(?:true|True|TRUE)$/.test(value(hidden)),
   };
 }
 
@@ -558,7 +562,7 @@ async function handleSite(request: Request, env: Env): Promise<Response> {
   const { postsDir, draftsDir } = dirs(env);
   const listed = (texts: { path: string; text: string }[]) =>
     texts
-      .filter(({ path }) => /\.(md|markdown)$/i.test(path))
+      .filter(({ path }) => MARKDOWN.test(path))
       .map(({ path, text }) => siteFile(path, text))
       .sort((a, b) => b.time - a.time || a.path.localeCompare(b.path));
   try {
@@ -596,14 +600,14 @@ async function handleSource(request: Request, env: Env): Promise<Response> {
   const url = new URL(request.url);
   const requested = url.searchParams.get("path") ?? "";
   const path = repoPath(requested);
-  const allowed = Object.values(dirs(env)).map((dir) => `${dir}/`);
+  const allowed = allowedDirs(env);
   if (!path || !allowed.some((dir) => path.startsWith(dir))) {
     return json({ error: `Path outside the allowed directories (${allowed.join(", ")}): ${requested}` }, 400);
   }
   if (await limited(env.SOURCE_RATE, request, "source")) {
     return tooMany();
   }
-  if (!/\.(md|markdown)$/i.test(path)) {
+  if (!MARKDOWN.test(path)) {
     return json({ error: "Only Markdown files can be opened." }, 400);
   }
 
@@ -799,64 +803,36 @@ async function handleShareRoom(request: Request, env: Env, token: string): Promi
   return json({ error: "Use GET, DELETE, or a WebSocket." }, 405);
 }
 
-async function route(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
+type Handler = (request: Request, env: Env) => Response | Promise<Response>;
 
-  if (url.pathname === "/api/config") {
-    return request.method === "GET" ? handleConfig(env) : json({ error: "Use GET." }, 405);
-  }
-  if (url.pathname === "/api/share") {
-    return request.method === "POST"
-      ? handleShareCreate(request, env)
-      : json({ error: "Use POST." }, 405);
-  }
-  const share = SHARE_PATH.exec(url.pathname);
+const ROUTES = new Map<string, [method: "GET" | "POST", handle: Handler]>([
+  ["/api/config", ["GET", (_request, env) => handleConfig(env)]],
+  ["/api/share", ["POST", handleShareCreate]],
+  ["/api/publish", ["POST", handlePublish]],
+  ["/api/publish/photo", ["POST", handlePhoto]],
+  ["/api/images", ["GET", handleImages]],
+  ["/api/site", ["GET", handleSite]],
+  ["/api/source", ["GET", handleSource]],
+  ["/api/passkey/challenge", ["POST", handlePasskeyChallenge]],
+  ["/api/passkey/register", ["POST", handlePasskeyRegister]],
+  ["/api/passkey/login", ["POST", handlePasskeyLogin]],
+  ["/api/topics", ["GET", (_request, env) => handleTopics(env)]],
+]);
+
+async function route(request: Request, env: Env): Promise<Response> {
+  const { pathname } = new URL(request.url);
+  const share = SHARE_PATH.exec(pathname);
   if (share) {
     return handleShareRoom(request, env, share[1]);
   }
-  if (url.pathname === "/api/publish") {
-    return request.method === "POST"
-      ? handlePublish(request, env)
-      : json({ error: "Use POST." }, 405);
+  const known = ROUTES.get(pathname);
+  if (known) {
+    const [method, handle] = known;
+    return request.method === method ? handle(request, env) : json({ error: `Use ${method}.` }, 405);
   }
-  if (url.pathname === "/api/publish/photo") {
-    return request.method === "POST"
-      ? handlePhoto(request, env)
-      : json({ error: "Use POST." }, 405);
-  }
-  if (url.pathname === "/api/images") {
-    return request.method === "GET" ? handleImages(request, env) : json({ error: "Use GET." }, 405);
-  }
-  if (url.pathname === "/api/site") {
-    return request.method === "GET" ? handleSite(request, env) : json({ error: "Use GET." }, 405);
-  }
-  if (url.pathname === "/api/source") {
-    return request.method === "GET"
-      ? handleSource(request, env)
-      : json({ error: "Use GET." }, 405);
-  }
-  if (url.pathname === "/api/passkey/challenge") {
-    return request.method === "POST"
-      ? handlePasskeyChallenge(request, env)
-      : json({ error: "Use POST." }, 405);
-  }
-  if (url.pathname === "/api/passkey/register") {
-    return request.method === "POST"
-      ? handlePasskeyRegister(request, env)
-      : json({ error: "Use POST." }, 405);
-  }
-  if (url.pathname === "/api/passkey/login") {
-    return request.method === "POST"
-      ? handlePasskeyLogin(request, env)
-      : json({ error: "Use POST." }, 405);
-  }
-  if (url.pathname === "/api/topics") {
-    return request.method === "GET" ? handleTopics(env) : json({ error: "Use GET." }, 405);
-  }
-  if (url.pathname.startsWith("/api/")) {
+  if (pathname.startsWith("/api/")) {
     return json({ error: "Not found." }, 404);
   }
-
   return env.ASSETS.fetch(request);
 }
 
