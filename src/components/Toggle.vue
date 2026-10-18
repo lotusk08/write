@@ -10,13 +10,14 @@ const at = computed(() => props.options.findIndex((option) => option.id === prop
 
 <template>
   <div class="toggle" role="group" :aria-label="label">
-    <span v-if="at !== -1" class="toggle-knob" :data-at="at" />
+    <span v-if="at !== -1" class="toggle-knob" :style="{ '--at': at, '--count': options.length }" />
     <button
       v-for="option in options"
       :key="option.id"
       type="button"
       :class="{ 'is-on': value === option.id }"
       :aria-pressed="value === option.id"
+      :title="option.title"
       @click="emit('change', option.id)"
     >
       {{ option.label }}

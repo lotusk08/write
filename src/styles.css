@@ -194,8 +194,8 @@ textarea {
   width: 100%;
 }
 
-.switch-pair {
-  grid-template-columns: 1fr 1fr;
+.post-toc {
+  margin-top: 12px;
 }
 
 .popover-foot {
@@ -611,6 +611,126 @@ textarea {
 .draft-list button[aria-current] {
   background: var(--hover);
   font-weight: 600;
+}
+
+.site-list {
+  width: min(340px, calc(100vw - 16px));
+}
+
+.site-kind {
+  margin-bottom: 5px;
+}
+
+.site-home {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 4px 6px 9px;
+  border-radius: var(--radius-sm);
+  margin-bottom: 5px;
+  background: var(--sunken);
+}
+
+.site-home ol {
+  display: grid;
+  min-width: 0;
+  flex: 1;
+  gap: 2px;
+  padding: 0;
+  margin: 0;
+  list-style: none;
+  font-size: var(--text-sm);
+}
+
+.site-home li {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.site-home-place {
+  width: 1ch;
+  flex: none;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.site-home-pin,
+.site-row.is-changed .draft-list-title,
+.site-home li.is-changed {
+  color: var(--accent);
+}
+
+.site-home .btn.icon {
+  border-color: transparent;
+  background: none;
+  color: var(--muted);
+}
+
+.site-home .btn.icon:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.site-row {
+  display: grid;
+  align-items: center;
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+
+.site-row .site-pin-choice {
+  grid-column: 1 / -1;
+  margin: 2px 0 6px;
+}
+
+.btn.site-pin {
+  width: 4.5em;
+  justify-content: center;
+  gap: 3px;
+  margin-left: 4px;
+  border-color: transparent;
+  background: none;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.btn.site-pin.is-on {
+  color: var(--accent);
+}
+
+.btn.site-pin.is-idle {
+  color: var(--faint);
+}
+
+.btn.site-pin[aria-expanded="true"] {
+  background: var(--hover);
+}
+
+.site-save {
+  position: sticky;
+  bottom: -5px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 4px 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 4px;
+  background: var(--panel);
+}
+
+.site-save p {
+  min-width: 0;
+  flex: 1;
+  margin: 0;
+  color: var(--accent);
+  font-size: var(--text-sm);
+}
+
+.site-save p.warn {
+  color: var(--danger);
 }
 
 .card-dock {
@@ -1801,14 +1921,6 @@ textarea {
   color: var(--text);
 }
 
-.switch-list {
-  display: grid;
-  gap: 12px;
-  padding: 0;
-  margin: 0;
-  list-style: none;
-}
-
 .switch {
   display: flex;
   gap: 9px;
@@ -1870,15 +1982,12 @@ textarea {
   top: 2px;
   bottom: 2px;
   left: 2px;
-  width: calc(50% - 2px);
+  width: calc((100% - 4px) / var(--count));
   border-radius: var(--radius-pill);
   background: var(--hover);
   box-shadow: inset 0 0 0 1px var(--border);
+  transform: translateX(calc(100% * var(--at)));
   transition: transform 160ms ease;
-}
-
-.toggle-knob[data-at="1"] {
-  transform: translateX(100%);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2280,6 +2389,20 @@ textarea {
 
 .menu button:not(.btn):hover {
   background: var(--hover);
+}
+
+.menu .toggle button:not(.btn) {
+  display: block;
+  width: auto;
+  min-height: 0;
+  padding: 3px 12px;
+  border-radius: var(--radius-pill);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.menu .toggle button:not(.btn):hover {
+  background: none;
 }
 
 .menu kbd {

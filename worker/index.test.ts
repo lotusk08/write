@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("cloudflare:workers", () => ({ DurableObject: class {} }));
 
-const { default: worker, yamlScalar } = await import("./index.ts");
+const { default: worker, siteFile, yamlScalar } = await import("./index.ts");
 
 const failures = new Map<string, number>();
 const passkeys = {
@@ -43,7 +43,7 @@ afterEach(() => {
 
 describe("worker", () => {
   it("answers a missing setting and a spent rate limit instead of crashing", async () => {
-    const bare = await worker.fetch(new Request("https://write.test/api/drafts", { headers: { "x-write-password": "pw" } }), {} as never);
+    const bare = await worker.fetch(new Request("https://write.test/api/site", { headers: { "x-write-password": "pw" } }), {} as never);
     expect([500, 501]).toContain(bare.status);
     const spent = { ...(env as object), SOURCE_RATE: { limit: async () => ({ success: false }) } } as never;
     const limitedResponse = await worker.fetch(new Request("https://write.test/api/images"), spent);
@@ -54,7 +54,7 @@ describe("worker", () => {
     for (const [path, method] of [
       ["/api/publish", "POST"],
       ["/api/publish/photo", "POST"],
-      ["/api/drafts", "GET"],
+      ["/api/site", "GET"],
       ["/api/source?path=src/drafts/x.md", "GET"],
     ]) {
       expect((await call(path, { method, body: method === "POST" ? "{}" : undefined })).status).toBe(401);
@@ -125,9 +125,58 @@ describe("worker", () => {
   });
 });
 
+describe("the site's posts and drafts", () => {
+  it("lists both, newest first, with each title, day, pin and whether the build skips it", async () => {
+    vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
+      expect(new URL(input).pathname).toBe("/graphql");
+      expect(String(init?.body)).toContain("blog:src/posts");
+      expect(String(init?.body)).toContain("blog:src/drafts");
+      return Response.json({
+        data: {
+          repository: {
+            d0: {
+              entries: [
+                { name: "2026-10-11-trip.md", object: { text: "---\ntitle: Trip\ndate: 2026-10-11 09:00 +0700\npin: 3\n---\nText" } },
+                { name: "2026-10-11-late.md", object: { text: "---\ntitle: Late\ndate: 2026-10-11 20:00 +0700\npin: false\n---\n" } },
+                { name: "2025-01-02-old.md", object: { text: '---\ntitle: "Old \\"one\\""\ndate: 2025-01-02\npin: true # kept\nhidden: true\n---\n' } },
+                { name: "notes.txt", object: { text: "pin: 2" } },
+              ],
+            },
+            d1: { entries: [{ name: "2026-09-01-idea.md", object: { text: "---\ntitle: Idea\n---\n" } }] },
+          },
+        },
+      });
+    });
+    const response = await call("/api/site", { password: "pw" });
+    expect(response.status).toBe(200);
+    const { posts, drafts } = (await response.json()) as { posts: { path: string; pin: unknown; hidden: boolean; title: string; date: string }[]; drafts: { path: string }[] };
+    expect(posts.map(({ path, pin, hidden, title, date }) => [path.split("/").pop(), title, date, pin, hidden])).toEqual([
+      ["2026-10-11-late.md", "Late", "2026-10-11", false, false],
+      ["2026-10-11-trip.md", "Trip", "2026-10-11", 3, false],
+      ["2025-01-02-old.md", 'Old "one"', "2025-01-02", true, true],
+    ]);
+    expect(drafts.map(({ path }) => path)).toEqual(["src/drafts/2026-09-01-idea.md"]);
+  });
+
+  it("reads a pin as the blog does: a quoted number or a word is no place", () => {
+    const pin = (line: string) => siteFile("src/posts/2026-01-01-x.md", `---\ntitle: X\n${line}\n---\n`).pin;
+    expect([pin("pin: 2"), pin("pin: 3"), pin('pin: "true"'), pin("pin: True"), pin('pin: "2"'), pin("pin: 4"), pin("pin: yes"), pin("")]).toEqual([
+      2, 3, true, true, false, false, false, false,
+    ]);
+    expect(siteFile("src/posts/x.md", "No front matter\npin: 2\n").pin).toBe(false);
+  });
+
+  it("orders by the time written, in the site's zone when none is given", () => {
+    const time = (date: string) => siteFile("src/posts/2026-01-01-x.md", `---\ndate: ${date}\n---\n`).time;
+    expect(time("2026-01-01 10:00")).toBe(time("2026-01-01T03:00:00Z"));
+    expect(time("2026-01-01 10:00 +0800")).toBe(time("2026-01-01 09:00 +0700"));
+    expect(siteFile("src/posts/2026-01-01-x.md", "---\ntitle: X\n---\n").time).toBe(time("2026-01-01"));
+  });
+});
+
 describe("worker hardening", () => {
   const from = (ip: string, password: string) =>
-    worker.fetch(new Request("https://write.test/api/drafts", { headers: { "x-write-password": password, "cf-connecting-ip": ip } }), env);
+    worker.fetch(new Request("https://write.test/api/site", { headers: { "x-write-password": password, "cf-connecting-ip": ip } }), env);
 
   it("stops guessing the password after ten misses from one connection, the right one included", async () => {
     vi.stubGlobal("fetch", async () => Response.json({ data: { repository: { d0: null } } }));

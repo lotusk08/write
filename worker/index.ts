@@ -14,11 +14,13 @@ import type {
   PublishFile,
   PublishRequest,
   PublishResult,
+  SiteFile,
   Topic,
   Topics,
 } from "../shared/types.ts";
 
 import { decoded, servedName, stem, trimSlashes } from "../shared/paths.ts";
+import { readPin } from "../shared/pin.ts";
 import { redirectSources, REDIRECTS_PATH } from "../shared/redirects.ts";
 import {
   ALGORITHMS,
@@ -514,7 +516,39 @@ async function handleImages(request: Request, env: Env): Promise<Response> {
   }
 }
 
-async function handleDrafts(request: Request, env: Env): Promise<Response> {
+const FRONT = /^\ufeff?---\r?\n([\s\S]*?)\r?\n---[^\S\n]*(?:\r?\n|$)/;
+
+/** A date as the blog's build reads it, in milliseconds; one written with no offset is the site's, +07:00. */
+function postTime(value: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}):(\d{2})(?::(\d{2}))?(?:\.\d+)?)?\s*(?:(Z)|([+-])(\d{2}):?(\d{2}))?/.exec(value);
+  if (!m) {
+    return 0;
+  }
+  const [, y, mo, d, h = "0", mi = "0", sec = "0", zulu, sign = "+", oh = "07", om = "00"] = m;
+  const offset = zulu ? 0 : (sign === "-" ? -1 : 1) * (Number(oh) * 60 + Number(om));
+  return Date.UTC(Number(y), Number(mo) - 1, Number(d), Number(h), Number(mi), Number(sec)) - offset * 60_000;
+}
+
+/** What the list of the site's files shows of one: its title, day, place in time, pin and whether the build skips it. */
+export function siteFile(path: string, text: string): SiteFile {
+  const front = FRONT.exec(text)?.[1] ?? "";
+  const field = (key: string) => new RegExp(`^${key}:[ \\t]*(.*?)\\s*$`, "m").exec(front)?.[1] ?? "";
+  const plain = (raw: string) => !/^["']/.test(raw);
+  const value = (raw: string) => (plain(raw) ? raw.replace(/(?:^|[ \t])#.*$/, "").trim() : yamlScalar(raw));
+  const written = value(field("date"));
+  const named = /(\d{4}-\d{2}-\d{2})-[^/]*$/.exec(path)?.[1] ?? "";
+  const pin = field("pin");
+  return {
+    path,
+    title: yamlScalar(field("title")),
+    date: named || /^\d{4}-\d{2}-\d{2}/.exec(written)?.[0] || "",
+    time: postTime(written) || postTime(named),
+    pin: readPin(value(pin), plain(pin)),
+    hidden: plain(field("hidden")) && /^(?:true|True|TRUE)$/.test(value(field("hidden"))),
+  };
+}
+
+async function handleSite(request: Request, env: Env): Promise<Response> {
   const denied = await authorize(request, env);
   if (denied) {
     return denied;
@@ -522,17 +556,18 @@ async function handleDrafts(request: Request, env: Env): Promise<Response> {
   if (await limited(env.SOURCE_RATE, request, "source")) {
     return tooMany();
   }
-  try {
-    const texts = await readTexts(githubToken(env), env.BLOG_REPO!, env.BLOG_BRANCH || "main", [dirs(env).draftsDir]);
-    const drafts = texts
+  const { postsDir, draftsDir } = dirs(env);
+  const listed = (texts: { path: string; text: string }[]) =>
+    texts
       .filter(({ path }) => /\.(md|markdown)$/i.test(path))
-      .map(({ path, text }) => ({
-        path,
-        title: yamlScalar(/^title:[ \t]*(.*?)\s*$/m.exec(text.split(/^---\s*$/m, 2).join(""))?.[1] ?? ""),
-        date: /(\d{4}-\d{2}-\d{2})-[^/]*$/.exec(path)?.[1] ?? "",
-      }))
-      .sort((a, b) => b.date.localeCompare(a.date) || a.path.localeCompare(b.path));
-    return json({ drafts });
+      .map(({ path, text }) => siteFile(path, text))
+      .sort((a, b) => b.time - a.time || a.path.localeCompare(b.path));
+  try {
+    const texts = await readTexts(githubToken(env), env.BLOG_REPO!, env.BLOG_BRANCH || "main", [postsDir, draftsDir]);
+    return json({
+      posts: listed(texts.filter(({ path }) => path.startsWith(`${postsDir}/`))),
+      drafts: listed(texts.filter(({ path }) => path.startsWith(`${draftsDir}/`))),
+    });
   } catch (error) {
     return failed(error, "Read failed.");
   }
@@ -793,8 +828,8 @@ async function route(request: Request, env: Env): Promise<Response> {
   if (url.pathname === "/api/images") {
     return request.method === "GET" ? handleImages(request, env) : json({ error: "Use GET." }, 405);
   }
-  if (url.pathname === "/api/drafts") {
-    return request.method === "GET" ? handleDrafts(request, env) : json({ error: "Use GET." }, 405);
+  if (url.pathname === "/api/site") {
+    return request.method === "GET" ? handleSite(request, env) : json({ error: "Use GET." }, 405);
   }
   if (url.pathname === "/api/source") {
     return request.method === "GET"

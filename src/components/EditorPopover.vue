@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { PostMeta } from "../../shared/types.ts";
+import type { PinWritten } from "../lib/home.ts";
 import { resolvedTheme, type Settings } from "../lib/settings.ts";
 import { PHONE_QUERY, useMediaQuery } from "../lib/viewport.ts";
 import Icon from "./Icon.vue";
@@ -9,7 +10,7 @@ import ExportPanel from "./panels/ExportPanel.vue";
 import PostPanel from "./panels/PostPanel.vue";
 import Section from "./panels/Section.vue";
 import SharePanel from "./panels/SharePanel.vue";
-import SiteDrafts from "./SiteDrafts.vue";
+import SiteFiles from "./SiteFiles.vue";
 import type { DoneAction, ExportFormat, ShareState } from "./types.ts";
 
 const props = withDefaults(
@@ -39,6 +40,7 @@ const emit = defineEmits<{
   shareDisable: [];
   publish: [];
   site: [path: string];
+  pinned: [written: PinWritten[]];
   mindmap: [];
   export: [formats: ExportFormat[]];
 }>();
@@ -98,7 +100,7 @@ const onKey = (event: KeyboardEvent) => {
     dismiss();
   }
 };
-/** A tap outside closes the menu, but not one in the site's drafts list, which opens from it and floats beside it. */
+/** A tap outside closes the menu, but not one in the list of the site's files, which opens from it and floats beside it. */
 const onDown = (event: PointerEvent) => {
   const target = event.target as Element;
   if (panel.value?.contains(target) || props.anchor?.contains(target) || target.closest?.(".draft-list")) {
@@ -232,7 +234,7 @@ onBeforeUnmount(stop);
             View
           </button>
         </div>
-        <SiteDrafts @open="(path) => emit('site', path)" />
+        <SiteFiles @open="(path) => emit('site', path)" @pinned="(written) => emit('pinned', written)" />
         <span class="sr-only" role="status">{{ done ? DONE_TEXT[done] : "" }}</span>
       </footer>
     </div>

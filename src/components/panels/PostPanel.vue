@@ -4,6 +4,7 @@ import type { PostMeta, Topics } from "../../../shared/types.ts";
 import { fetchTopics } from "../../lib/api.ts";
 import { isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
 import type { Language } from "../../lib/draft.ts";
+import { choiceOf, PIN_CHOICES, pinOf } from "../../lib/home.ts";
 import { convertedSrc, displaySrc } from "../../lib/site.ts";
 import { rememberValue, tidyEdited } from "../../lib/text.ts";
 import Icon from "../Icon.vue";
@@ -22,10 +23,6 @@ const LANGUAGES: ToggleOption<Language>[] = [
 
 const MAX_TOPICS = 8;
 
-const OPTIONS: { key: "toc" | "pin"; label: string }[] = [
-  { key: "toc", label: "Table of contents" },
-  { key: "pin", label: "Pin to home" },
-];
 
 const coverUrl = ref<string | null>(null);
 const coverInput = ref<HTMLInputElement | null>(null);
@@ -156,17 +153,20 @@ const onAltBlur = (event: FocusEvent) => {
   </Section>
 
   <Section>
-    <ul class="switch-list switch-pair">
-      <li v-for="option in OPTIONS" :key="option.key">
-        <label class="switch">
-          <input
-            type="checkbox"
-            :checked="meta[option.key]"
-            @change="emit('change', { [option.key]: ($event.target as HTMLInputElement).checked })"
-          />
-          <span>{{ option.label }}</span>
-        </label>
-      </li>
-    </ul>
+    <Toggle
+      class="toggle-wide"
+      label="Pin to home"
+      :options="PIN_CHOICES"
+      :value="choiceOf(meta.pin)"
+      @change="(choice) => emit('change', { pin: pinOf(choice) })"
+    />
+    <label class="switch post-toc">
+      <input
+        type="checkbox"
+        :checked="meta.toc"
+        @change="emit('change', { toc: ($event.target as HTMLInputElement).checked })"
+      />
+      <span>Table of contents</span>
+    </label>
   </Section>
 </template>

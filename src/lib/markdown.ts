@@ -1,4 +1,5 @@
 import type { JSONContent } from "../editor/doc.ts";
+import { writtenPin } from "../../shared/pin.ts";
 import type { PostMeta } from "../../shared/types.ts";
 import { NOTE_CLASSES, embedTag, isNoteType } from "../editor/blog.ts";
 import { ENTITY, autolinkFor, bareLinks, entityText, escapeChars } from "./inline.ts";
@@ -638,7 +639,7 @@ function buildFrontMatter(meta: PostMeta): string {
     lines.push(`lang: ${yamlString(meta.lang)}`);
   }
   lines.push(...yamlList("tags", uniqueNames(meta.tags)));
-  lines.push(`pin: ${Boolean(meta.pin)}`, `toc: ${Boolean(meta.toc)}`);
+  lines.push(`pin: ${writtenPin(meta.pin)}`, `toc: ${Boolean(meta.toc)}`);
   if (meta.cover?.path) {
     lines.push("image:", `  path: ${yamlString(meta.cover.path)}`);
     if (meta.cover.alt.trim()) {

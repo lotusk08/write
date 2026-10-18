@@ -1,3 +1,5 @@
+import type { Pin } from "./pin.ts";
+
 export interface AppConfig {
   repo: string;
   branch: string;
@@ -15,7 +17,7 @@ export interface PostMeta {
   date: string;
   lang: string;
   tags: string[];
-  pin: boolean;
+  pin: Pin;
   toc: boolean;
   cover: { path: string; alt: string; lqip?: string } | null;
   extra?: string[];
@@ -39,6 +41,15 @@ export interface PublishRequest {
   expect?: { path: string; sha: string }[];
   remove?: string[];
   redirects?: [string, string][];
+}
+
+export interface SiteFile {
+  path: string;
+  title: string;
+  date: string;
+  time: number;
+  pin: Pin;
+  hidden: boolean;
 }
 
 export interface SitePhoto {

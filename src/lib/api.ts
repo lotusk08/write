@@ -2,6 +2,7 @@ import type {
   AppConfig,
   PublishRequest,
   PublishResult,
+  SiteFile,
   SitePhoto,
   Topic,
   Topics,
@@ -102,16 +103,18 @@ export async function fetchPostSource(path: string, password: string): Promise<P
   return source;
 }
 
-export interface SiteDraft {
-  path: string;
-  title: string;
-  date: string;
+export interface SiteFiles {
+  posts: SiteFile[];
+  drafts: SiteFile[];
 }
 
-export async function fetchSiteDrafts(password: string): Promise<SiteDraft[]> {
-  const response = await fetch("/api/drafts", { headers: headers(password) });
-  const result = await readJson<{ drafts?: SiteDraft[] }>(response, "Could not read the site's drafts");
-  return Array.isArray(result.drafts) ? result.drafts : [];
+export async function fetchSiteFiles(password: string): Promise<SiteFiles> {
+  const response = await fetch("/api/site", { headers: headers(password) });
+  const result = await readJson<Partial<SiteFiles>>(response, "Could not read the site's posts and drafts");
+  return {
+    posts: Array.isArray(result.posts) ? result.posts : [],
+    drafts: Array.isArray(result.drafts) ? result.drafts : [],
+  };
 }
 
 export async function fetchSitePhotos(own: string[]): Promise<{ files: SitePhoto[]; redirected: string[] }> {

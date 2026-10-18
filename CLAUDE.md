@@ -28,7 +28,7 @@ same way. A published post opens without the password: `src/posts` is on the
 blog already, and the *Edit this post* link should land you in the editor rather
 than at a prompt. Drafts do not — they are the writing nobody has seen — and neither
 does publishing. So the password appears in two places, the publish dialog
-and the list of the blog's drafts, and they are one component (`SignIn.vue`,
+and the list of the blog's posts and drafts, and they are one component (`SignIn.vue`,
 its state in `useSignIn.ts`): the same field, the same Passkey button, the
 same sizes, and signing in at either one stops the other asking. The drafts
 list once had its own row, a different height, and asked again after a
@@ -132,7 +132,7 @@ its own npm lockfile.
   prop ignores Escape while a publish is sending.
 - `worker/index.ts` — the only thing holding a credential. The blog endpoints
   (`/api/config`, `/api/source`, `/api/publish`, `/api/publish/photo`,
-  `/api/images`, `/api/drafts`, `/api/topics`), the share
+  `/api/images`, `/api/site`, `/api/topics`), the share
   endpoints (`/api/share`, `/api/share/<token>`), a constant-time check on the
   password, and path validation against the configured directories so a leaked
   password cannot rewrite workflows. `worker/share.ts` is the `ShareRoom`
@@ -290,7 +290,11 @@ Nothing on the blog rewrites front matter any more — sizes and placeholders
 are measured by its build and never written into a post — so what
 `buildFrontMatter` in `src/lib/markdown.ts` writes is what stays in the
 repository: `title`, `description` when there is one, `date`, `lang`, `tags`,
-`pin`, `toc` and `image`, in the order the published posts carry them. There
+`pin`, `toc` and `image`, in the order the published posts carry them. `pin`
+is `false`, `true` or a place, `2` or `3` (`writtenPin` in `shared/pin.ts`),
+as the blog reads it since October 2026: `true` puts a post in the first
+place free after the newest one, a number names the place (`pinOf` and
+`homeOrder` in the blog's `src/logics/utils.ts`). There
 is no `author` and no `categories`. The blog never read `author`, and
 categories became topics and a language; both are dropped when a post is read,
 as `math` and `mermaid` are. A new post is dated in the blog's zone, +0700,
@@ -567,8 +571,8 @@ Sizes come from tokens on `:root` in `src/styles.css`. One control height,
 delete; with none, buttons were 32px, inputs 34 (38 on touch), so a button
 beside an input never lined up — the password field and the Passkey button
 were two heights. Tools (`--tool-size`) are 28px with a mouse and 40px on
-touch: at 44 the phone's dock showed four tools and the bubble ran wide. The
-Language and Publish as toggle keeps its slim pill on touch too, 27px; its
+touch: at 44 the phone's dock showed four tools and the bubble ran wide. A
+toggle (Language, Pin, Publish as) keeps its slim pill on touch too, 27px; its
 buttons reach 8px past it above and below (`::before`), so a tap there still
 lands. Raised to 44px it read as a fat knob, the row under it grew, and it
 was taken back by the owner's choice. A checkbox row (`.switch`) is 44px
@@ -677,11 +681,15 @@ category is dropped (`languageOf`, `currentMeta`); one with neither keeps no
 default. The editor carries the post's language as its own `lang`, so the
 browser spellchecks a Vietnamese post as Vietnamese.
 
-`Toggle` (`src/components/Toggle.vue`) is the two-way switch behind both this
-and Publish as, which sits in the publish dialog. Its halves are equal grid
-columns as wide as the longer label, and the knob covers one of them: as flex
-items the halves split the switch's width while `Tiếng Việt` needed more than
-half, so the label broke over two lines and then ran out from under the knob.
+`Toggle` (`src/components/Toggle.vue`) is the switch behind this, Publish as,
+which sits in the publish dialog, the pin, four ways, and the site list's
+Posts and Drafts. Its parts are equal grid columns as wide as the longest
+label, and the knob covers one of them, a `--count`th of the width moved
+`--at` widths along: as flex items the halves split the switch's width while
+`Tiếng Việt` needed more than half, so the label broke over two lines and
+then ran out from under the knob. Inside a `.menu` the list rows' button
+style reached its buttons, 44px tall and set to the start, so `.menu .toggle
+button` puts the switch's own back.
 
 ## Round-tripping published posts
 
@@ -957,9 +965,15 @@ Things that took a bug to learn, and that a change here can quietly undo:
   do to every value. Left to the writer, a phone keyboard's trailing space
   published `"Title "`; done in the writer, it changed values read from a
   post that meant their spaces. `pin` and `toc` are read as the site reads them, not as
-  YAML 1.1 did: `pin` is on only for `true` (or `"true"`), `toc` off only for
+  YAML 1.1 did: `pin` is `true` only for `true` (or `"true"`), a place only
+  for a plain `2` or `3`, and off for anything else (`readPin` in
+  `shared/pin.ts`, which the Worker's list of the site's files reads with
+  too; a quoted `"2"` stops the blog's build), `toc` off only for
   `false`, so `pin: yes` and `toc: no` stay what the site already draws.
-- `pin` and `toc` are coerced with `Boolean()` before interpolation. A draft
+  Until October 2026 a pin was true or false here, and a post read with
+  `pin: 3` was published back unpinned.
+- `pin` and `toc` are coerced before interpolation (`writtenPin`,
+  `Boolean()`). A draft
   saved before one of them existed writes `undefined` otherwise, which YAML
   reads back as a string — and a string is true.
 - `math`, `mermaid`, `chart` and `render_with_liquid` are read and dropped, not
@@ -1062,13 +1076,14 @@ there, and only shows on hover with a mouse.
 
 The menu (`EditorPopover.vue`) is one panel, no tabs and no headings: the
 post's fields (topics, then the language as a full-width toggle; the cover;
-slug and date; the two options side by side), then Export, then Share while
+slug and date; the pin as a full-width toggle, Off · Pin · 2nd · 3rd, each
+explained by its tooltip, and the table of contents under it), then Export, then Share while
 the draft is shared. A field says what it is by its placeholder (and its
 `aria-label`), not a label above it. Its footer is one row of five equal
 buttons, icon above label — Publish, Share, Export, Copy (the Markdown) and
 View (the mindmap) — borderless tiles on `--sunken` with a 4px corner and
-light (300) `--text-2xs` labels, Publish filled with the accent; *Open a
-draft from the site* sits under them and asks the same password as Publish.
+light (300) `--text-2xs` labels, Publish filled with the accent; *Open from
+the site* sits under them and asks the same password as Publish.
 Export is four columns with no border, a format's icon above its tick,
 labelled lighter and smaller still (`--text-3xs`, 10px); a ticked format
 colours only its icon and its tick, its description the tooltip; the Export button waits for a tick. It had three tabs — Post,
@@ -1076,8 +1091,9 @@ Export, Share — each with its own footer, section headings and labels, and
 the site's drafts opened from the rail, out of reach in focus mode. A
 section is reached by id (`openMenuAt`): a publish error about the address
 opens it at the slug and date, tapping your name in the dock at Share. A tap
-in the drafts list, which floats over the menu, does not close it, and
-Escape there closes the list alone.
+in the list of the site's files, which floats over the menu, does not close it, and
+Escape there closes the list alone. The pin was a *Pin to home* checkbox
+beside the table of contents until October 2026, when the blog took places.
 
 Share, Export and Copy, and the share row's link button, show a check mark
 in the accent for 1.8s once they have worked (*Copied*, *Exported*;
@@ -1235,13 +1251,19 @@ commit's reads that depend only on the head — the stale checks, the folder
 listing, the commit, `redirects.txt` — run together. A push landing at the same moment is "Someone published at
 the same moment. Publish again." rather than GitHub's 422.
 
-The blog's own drafts open from the folder button beside Publish in the
-menu: a list of every file in `src/drafts` (`GET /api/drafts`, password or
-session, one GraphQL read like `/api/images`: the title from front matter,
-the date from the file name, newest first; titles read as YAML strings,
-`yamlScalar`, so an escaped quote does not show its backslash), each row
-44px. The list is a dialog rather than a menu, since it holds the sign-in,
-and opening it focuses the password field. Opening one is
+The blog's posts and its own drafts open from *Open from the site* under
+the menu's buttons (`SiteFiles.vue`): one list, Posts or Drafts by the switch
+at its top, of every file in `src/posts` and `src/drafts` (`GET /api/site`,
+password or session, rate-limited, one GraphQL read like `/api/images`:
+each file's title from front matter, the date from the file name, its pin
+and whether the post is `hidden`, newest first by the `date:` it carries,
+read in the site's zone as the blog's build reads it; titles read as YAML
+strings, `yamlScalar`, so an escaped quote does not show its backslash),
+each row 44px. It listed the drafts alone (`/api/drafts`) until October
+2026. The list is a dialog rather than a menu, since it holds the sign-in,
+and opening it focuses the password field. A floating menu is placed again
+whenever its size changes (`useFloatingMenu`), so a list that grows once it
+has loaded stays inside the visible band. Opening a post or a draft is
 `importPost`, as `?edit=` is, so the stale guard, the sha, the alt renames
 and the round trip all apply. Published as
 Draft it is written back to its own file. Published as Post, or under a new
@@ -1250,3 +1272,32 @@ same commit (`leavesDraft` in `publish.ts`), the stale check made against
 the draft file, and the dialog says the draft is moved. A draft without a
 `date:` takes its file name's date, so a publish does not move it to
 today.
+
+Above the posts stand the home page's first three as the blog draws them
+(`homeTop` and `homePlaces` in `src/lib/home.ts`, the blog's `homeOrder`
+ported: the newest post first whatever its pin, a place to the newest post
+that names it, then `true` pins, newest first, into the places left, and a
+place nobody holds by a pin to the next post by date; `home.test.ts` checks
+the port against the blog's own function over every pin of six posts when
+the blog is checked out beside this repository), a pin beside the two held
+by a pin, and Swap, which writes each of those two the other place. Each
+post has a pin button with its pin (`Pin`, `2nd`, `3rd`, dimmed when it
+holds no place, as the newest post or a third pin does), which opens the
+menu's Off · Pin · 2nd · 3rd switch under it. A post put in a place another
+holds by a pin moves that one to the other place when that is free or being
+left, and unpins it otherwise (`pinChanges`), so the two places never hold
+three pins; the newest post moves nobody. Nothing is sent until *Save to the
+site*: the bar at the list's foot names each change (`Chiều xa → 2nd · Gu →
+unpinned`), the home block and the rows show them in the accent, and Cancel
+takes them back. It is one action at a time, so a save writes two files at
+most, as many as the Worker's `expect` takes. Save reads each file again
+(`/api/source`), stops when its pin on the site is no longer the one the
+list showed (the bar then offers *Read again*), rewrites its `pin:` line and
+nothing else (`setPin`: in place, or before `toc:`, or at the end of the
+front matter when it has none; line endings and the rest of the file byte
+for byte), and commits them in one `docs(post): …` commit guarded by the
+shas it read. A local draft of that post holding the sha it replaced takes
+the new pin and sha (`onPinned` in `App.vue`), so its next publish is not
+refused as stale, and one with no unpublished edits stays one. The host
+builds `blog` on the push, so a save goes live as a publish does. A pin set
+in the menu goes up with the post's next publish, as any field does.

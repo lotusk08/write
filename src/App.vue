@@ -16,6 +16,7 @@ import { createShareRoom, endShareRoom, fetchAppConfig, fetchPostSource, shareRo
 import { draftStore, isLocalSrc, keepSnapshot, NOTICE, resolveLocalSrc, restoreSnapshots, type Draft } from "./lib/db.ts";
 import { createDraft, currentMeta, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
+import type { PinWritten } from "./lib/home.ts";
 import { buildHtmlDocument } from "./lib/html.ts";
 import { markdownToDoc, parsePost, postPathFromLink, slugFromPath } from "./lib/import.ts";
 import { docToMarkdown, docToPlainText } from "./lib/markdown.ts";
@@ -396,6 +397,27 @@ async function importPost(path: string) {
     showToast(existing ? `${path} changed on the site; opened the new version.` : `Opened ${path}.`);
   } catch (cause) {
     showToast(errorText(cause), "error");
+  }
+}
+
+/**
+ * A pin written from the site's list follows into a local draft of that post that was in step with the site, so its
+ * next publish is not refused as stale; a draft with no unpublished edits stays one.
+ */
+async function onPinned(written: PinWritten[]) {
+  await settle();
+  for (const { path, pin, was, sha } of written) {
+    const draft = drafts.value.find((item) => item.publishedPath === path && item.publishedSha === was);
+    if (!draft) {
+      continue;
+    }
+    const clean = draft.publishedPrint === (await draftPrint(draft));
+    const next: Draft = { ...draft, meta: { ...draft.meta, pin }, publishedSha: sha };
+    if (clean) {
+      next.publishedPrint = await draftPrint(next);
+    }
+    await draftStore.put(next);
+    drafts.value = drafts.value.map((item) => (item.id === next.id ? next : item));
   }
 }
 
@@ -1044,6 +1066,7 @@ onBeforeUnmount(() => {
       @share-disable="() => void (current?.shareOwner ? disableShare() : leaveSharedDraft())"
       @publish="() => void openPublish()"
       @site="(path) => ((menuOpen = false), void importPost(path))"
+      @pinned="(written) => void onPinned(written)"
       @mindmap="openMindmap"
       @export="(formats) => void exportAs(formats)"
     />

@@ -8,8 +8,8 @@ const ITEMS = '[role="menuitem"]';
 const FIRST = `${ITEMS}, input, button`;
 
 /**
- * Places a pop-up menu beside its button inside the visible band, and closes it on Escape or a tap outside. Opened from
- * the keyboard it takes the focus, and the arrow keys walk its items.
+ * Places a pop-up menu beside its button inside the visible band, again whenever its contents change its size, and
+ * closes it on Escape or a tap outside. Opened from the keyboard it takes the focus, and the arrow keys walk its items.
  */
 export function useFloatingMenu(
   open: Ref<boolean>,
@@ -65,7 +65,10 @@ export function useFloatingMenu(
     frame = window.requestAnimationFrame(place);
   };
 
+  let resized: ResizeObserver | null = null;
+
   const listen = () => {
+    resized = new ResizeObserver(follow);
     document.addEventListener("keydown", onKey, true);
     document.addEventListener("pointerdown", onDown);
     window.addEventListener("resize", follow);
@@ -74,6 +77,8 @@ export function useFloatingMenu(
     window.visualViewport?.addEventListener("scroll", follow);
   };
   const unlisten = () => {
+    resized?.disconnect();
+    resized = null;
     window.cancelAnimationFrame(frame);
     document.removeEventListener("keydown", onKey, true);
     document.removeEventListener("pointerdown", onDown);
@@ -90,6 +95,9 @@ export function useFloatingMenu(
       listen();
       void nextTick(() => {
         place();
+        if (menu.value) {
+          resized?.observe(menu.value);
+        }
         if (keyboard) {
           menu.value?.querySelector<HTMLElement>(FIRST)?.focus();
         }

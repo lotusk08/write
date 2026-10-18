@@ -1,4 +1,5 @@
 import type { JSONContent } from "../editor/doc.ts";
+import { readPin } from "../../shared/pin.ts";
 import type { PostMeta } from "../../shared/types.ts";
 import { EMBED_LIQUID, EMBED_TAG, NOTE_CLASSES, embedPlatform, noteOfClass } from "../editor/blog.ts";
 import { ENTITY, type InlineToken, entityText, inlineTokens } from "./inline.ts";
@@ -351,7 +352,7 @@ function parseFrontMatter(yaml: string): Partial<PostMeta> {
         break;
       case "pin": {
         const found = scalar(value, body, 0);
-        meta.pin = found?.text === "true" || (!!found?.plain && /^(?:True|TRUE)$/.test(found.text));
+        meta.pin = found ? readPin(found.text, found.plain) : false;
         break;
       }
       case "toc": {

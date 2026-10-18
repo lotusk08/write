@@ -8,6 +8,7 @@ export type DoneAction = "share" | "link" | "export" | "copy";
 export interface ToggleOption<T extends string> {
   id: T;
   label: string;
+  title?: string;
 }
 
 export interface ShareState {
