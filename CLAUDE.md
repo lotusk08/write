@@ -142,7 +142,12 @@ its own npm lockfile.
   `worker/passkeys.ts` is the `Passkeys` Durable Object (`/api/passkey/*`): the
   registered passkeys and the challenges handed out, with the WebAuthn checks
   and the session tokens.
-- `shared/` — GitHub calls, base64 and the post types. No DOM in it, so it is
+- `shared/` — GitHub calls, base64, the post types, paths (`fileDate`, the
+  day in a post's file name), redirects, the pin (`pin.ts`) and front matter
+  (`front.ts`: `frontMatter`, where the editor and the Worker's list find
+  it; `splitFront`, the same cut kept byte for byte for `setPin`; and
+  `frontField`, one field read as the blog's YAML reads it, for the Worker's
+  list and the pin check before a save). No DOM in it, so it is
   read by both the app and the Worker; `lib/api.ts` is the browser's only door
   to the network, and it only ever calls `/api`.
 
@@ -548,10 +553,14 @@ from `buildPublishPlan`). Review shows, in order: warnings, each with the
 button that fixes it — a post with no title, or with a date that is no day
 on the calendar, is blocked, since the blog's build stops on either (its
 front matter schema wants a title that is not blank and a `realDate`), and
-the date's button opens the post panel at the slug and date; a post that
+the date's button opens the post panel at the slug and date, the title's
+puts the caret in the title on the page; a post that
 says `hidden: true` is told the build leaves it out, and gets no live link
 (a draft is never built, so none of these three is checked for one); a
-photo with no alt text (it would be named `<slug>-N`) selects the photo, no description opens the post panel, a photo
+photo with no alt text (it would be named `<slug>-N`) selects the photo, no
+description puts the caret in the description on the page (`fixField` in
+`App.vue`; it opened the menu, which has no description, until October
+2026), a photo
 over 8 MB that will not be reduced blocks the publish and names the file, a
 copy with no sha offers *Open the site version*, a photo missing from this
 browser's storage; then Post or Draft with the repo path and the live link;
@@ -984,9 +993,10 @@ Things that took a bug to learn, and that a change here can quietly undo:
   published `"Title "`; done in the writer, it changed values read from a
   post that meant their spaces. `pin` and `toc` are read as the site reads them, not as
   YAML 1.1 did: `pin` is `true` only for `true` (or `"true"`), a place only
-  for a plain `2` or `3`, and off for anything else (`readPin` in
-  `shared/pin.ts`, which the Worker's list of the site's files reads with
-  too; a quoted `"2"` stops the blog's build), `toc` off only for
+  for a plain number YAML's core schema reads as 2 or 3 (`2`, `02`, `3.0`,
+  `0x3`: js-yaml 5, the blog's, reads all of them so), and off for anything
+  else (`readPin` in `shared/pin.ts`, which the Worker's list of the site's
+  files reads with too; a quoted `"2"` stops the blog's build), `toc` off only for
   `false`, so `pin: yes` and `toc: no` stay what the site already draws.
   Until October 2026 a pin was true or false here, and a post read with
   `pin: 3` was published back unpinned.
@@ -1277,8 +1287,10 @@ at its top, of every file in `src/posts` and `src/drafts` (`GET /api/site`,
 password or session, rate-limited, one GraphQL read like `/api/images`:
 each file's title from front matter, the date from the file name, its pin
 and whether the post is `hidden`, newest first by the `date:` it carries,
-read in the site's zone as the blog's build reads it; titles read as YAML
-strings, `yamlScalar`, so an escaped quote does not show its backslash),
+read in the site's zone as the blog's build reads it; each field read by
+`frontField`, as YAML reads it: quoted or plain, a comment after it left out,
+on the key's line or the indented line under it, so an escaped quote does not
+show its backslash and `pin: "true" # top` is a pin),
 each row 44px. It listed the drafts alone (`/api/drafts`) until October
 2026. The list is a dialog rather than a menu, since it holds the sign-in,
 and opening it focuses the password field. A floating menu is placed again
@@ -1302,22 +1314,41 @@ the port against the blog's own function over every pin of six posts when
 the blog is checked out beside this repository), a pin beside the two held
 by a pin, and Swap, which writes each of those two the other place. Each
 post has a pin button with its pin (`Pin`, `2nd`, `3rd`, dimmed when it
-holds no place, as the newest post or a third pin does), which opens the
-menu's Off · Pin · 2nd · 3rd switch under it. A post put in a place another
-holds by a pin moves that one to the other place when that is free or being
-left, and unpins it otherwise (`pinChanges`), so the two places never hold
-three pins; the newest post moves nobody. Nothing is sent until *Save to the
-site*: the bar at the list's foot names each change (`Chiều xa → 2nd · Gu →
-unpinned`), the home block and the rows show them in the accent, and Cancel
-takes them back. It is one action at a time, so a save writes two files at
-most, as many as the Worker's `expect` takes. Save reads each file again
-(`/api/source`), stops when its pin on the site is no longer the one the
-list showed (the bar then offers *Read again*), rewrites its `pin:` line and
-nothing else (`setPin`: in place, or before `toc:`, or at the end of the
-front matter when it has none; line endings and the rest of the file byte
-for byte), and commits them in one `docs(post): …` commit guarded by the
-shas it read. A local draft of that post holding the sha it replaced takes
-the new pin and sha (`onPinned` in `App.vue`), so its next publish is not
-refused as stale, and one with no unpublished edits stays one. The host
+holds no place, as the newest post or a third pin does; its name says the
+pin and that, as the badge alone would not to a screen reader), which opens
+the menu's Off · Pin · 2nd · 3rd switch under it. A post put in a place
+another holds by a pin moves that one to the other place when that is free or
+being left, and unpins it otherwise (`pinChanges`), so the two places never
+hold three pins; a post that names a place an older or newer one holds is put
+there the same way; and every other post naming a place written is unpinned
+(`claimed`), since the newer of two posts naming a place takes it: left
+naming it, an older post outranked the post put there and took the place,
+and Swap left a place to the duplicate naming it. The newest post moves
+nobody. `home.test.ts` checks both over every pin of six posts. Nothing is
+sent until *Save to the site*: the bar at the list's foot names each change
+(`Chiều xa → 2nd · Gu → unpinned`), the home block and the rows show them in
+the accent, and Cancel takes them back. It is one action at a time: while
+one waits, Swap and the other rows' pin buttons are disabled (and while it
+is sent, the open switch and the rows too), so nothing replaces it unseen;
+Swap hands the focus to Save, and a save done to its status. A save writes
+as many files as the action reaches, two places and the duplicates left
+naming them, so the Worker's `expect` takes as many guards as files (it took
+two until October 2026). Save reads the site's list again first and stops
+when anything in it moved since it was read: a post published, a pin
+changed, a post hidden, since the changes were worked out from the whole
+list; then each file (`/api/source`), and stops when its pin is no longer
+the list's (the bar then announces it and offers *Read again*); it rewrites
+the `pin:` line and nothing else (`setPin`: in place, a comment after the
+value kept, or before `toc:`, or at the end of the front matter when it has
+none; never where the editor reads no front matter), leaves out a file whose
+text would not change, and commits in one `docs(post): …` commit guarded by
+the shas it read. The rest of the file is kept as `/api/source` reads it: a
+byte-order mark, which no post has, is dropped there, as it is on every
+publish. A local draft of that post holding the sha it replaced takes the new
+pin and sha (`onPinned` in `App.vue`), so its next publish is not refused as
+stale, and one with no unpublished edits stays one. `onPinned` reaches
+`SiteFiles.vue` as a prop, not an emitted event: closing the menu unmounts
+the list, an unmounted component's emit goes nowhere, and a save the menu
+closed under left the draft holding the old sha. The host
 builds `blog` on the push, so a save goes live as a publish does. A pin set
 in the menu goes up with the post's next publish, as any field does.

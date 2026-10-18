@@ -142,6 +142,12 @@ const shareState = computed<ShareState>(() => ({
   peers: peers.value,
 }));
 
+/** Stores a draft and puts it in the list in place of the one with its id. */
+async function storeDraft(next: Draft) {
+  await draftStore.put(next);
+  drafts.value = drafts.value.map((item) => (item.id === next.id ? next : item));
+}
+
 function findDraft(id: string | null): Draft | undefined {
   return drafts.value.find((draft) => draft.id === id);
 }
@@ -360,8 +366,7 @@ async function importPost(path: string) {
     if (existing && (!fetched || !existing.publishedSha || fetched.sha === existing.publishedSha || same)) {
       if (same && fetched!.sha !== existing.publishedSha) {
         const known = { ...existing, publishedSha: fetched!.sha, publishedPrint: mine };
-        await draftStore.put(known);
-        drafts.value = drafts.value.map((item) => (item.id === known.id ? known : item));
+        await storeDraft(known);
       }
       currentId.value = existing.id;
       showToast(`Opened your local draft of ${path}.`);
@@ -417,8 +422,7 @@ async function onPinned(written: PinWritten[]) {
     if (clean) {
       next.publishedPrint = await draftPrint(next);
     }
-    await draftStore.put(next);
-    drafts.value = drafts.value.map((item) => (item.id === next.id ? next : item));
+    await storeDraft(next);
   }
 }
 
@@ -761,6 +765,12 @@ function editPost() {
   openMenuAt("menu-file");
 }
 
+/** The title and the description are on the page, not in the menu: the dialog closes onto the field. */
+function fixField(field: "title" | "description") {
+  publishOpen.value = false;
+  window.setTimeout(() => document.querySelector<HTMLElement>(`.${field}-input`)?.focus(), 40);
+}
+
 async function reopenFromSite(draft: Draft) {
   const path = draft.publishedPath;
   publishOpen.value = false;
@@ -768,8 +778,7 @@ async function reopenFromSite(draft: Draft) {
     return;
   }
   const copy: Draft = { ...draft, publishedPath: undefined, publishedSha: undefined, publishedPrint: undefined, updatedAt: Date.now() };
-  await draftStore.put(copy);
-  drafts.value = drafts.value.map((item) => (item.id === copy.id ? copy : item));
+  await storeDraft(copy);
   await importPost(path);
 }
 
@@ -1082,6 +1091,7 @@ onBeforeUnmount(() => {
       @published="(result, plan) => void onPublished(current!.id, result, plan)"
       @fix-photo="fixPhoto"
       @edit-post="editPost"
+      @fix-field="fixField"
       @reopen="() => void reopenFromSite(current!)"
     />
 
