@@ -264,8 +264,14 @@ a click in the item's margin) rather than the editor's checklist with its
 `bridge.test.ts` renders, sanitizes (with the editor's own `sanitizeHtml`) and
 reads back every post, draft and page in `../stevehoang.com` (or `BLOG_DIR`),
 and checks the Markdown written from the result is the Markdown written from
-the parse. All 96 on `blog` pass (October 2026); treat a failure as a regression. Without the blog
-checked out beside this repository that half of the suite is skipped.
+the parse. It writes each file's front matter back too and reads it again:
+every field the app has a box for comes back the same, and every field it
+has none for is in the file as it was found, line for line. All 96 on `blog`
+pass (October 2026); treat a failure as a regression. Without the blog
+checked out beside this repository that half of the suite is skipped. Only
+`redirect_from` and a page's `layout` of those fields are written on `blog`,
+so `markdown.test.ts` holds the rest the blog reads (`comments`, `hidden`,
+`last_modified_at`, `updated`) and the fields dropped on reading.
 
 Not carried over from Tiptap: remote carets in a shared draft, and Tiptap's
 typography input rules (the site's own

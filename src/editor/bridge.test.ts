@@ -3,8 +3,9 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { sanitizeHtml } from "@erag/text-editor-vue";
 import { describe, expect, it } from "vitest";
+import { newPostMeta } from "../lib/draft.ts";
 import { markdownToDoc, parsePost } from "../lib/import.ts";
-import { docToMarkdown } from "../lib/markdown.ts";
+import { buildPostFile, docToMarkdown } from "../lib/markdown.ts";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
 import { sanitizerOptions } from "./config.ts";
 import type { JSONContent } from "./doc.ts";
@@ -31,7 +32,7 @@ describe("bridge", () => {
     ["raw inline", "*a *b* c* and <span>tag</span>"],
     ["lists", "- one\n- two\n  - nested\n\n3. three\n4. four"],
     ["task lists", "- [ ] todo\n- [x] done\n- plain"],
-    ["callouts", "> A tip\n{: .prompt-tip }\n\n> Said\n>\n> Someone\n{: .author }"],
+    ["callouts", "> A tip\n{: .tip }\n\n> Said\n>\n> Someone\n{: .author }"],
     ["code fences", "```js\nconst a = 1;\n\nconst b = 2;\n```\n\n````\n```\nfence\n```\n````"],
     ["mermaid", "```mermaid\ngraph TD\nA-->B\n```"],
     ["tables", "| a | b |\n|:--|--:|\n| 1 | 2 |\n| 3 | 4 |"],
@@ -184,6 +185,23 @@ describe.skipIf(CORPUS.length === 0)("the blog's posts", () => {
     (_name, path) => {
       const { doc } = parsePost(readFileSync(path, "utf8"));
       expect(docToMarkdown(throughEditor(doc))).toBe(docToMarkdown(doc));
+    },
+  );
+
+  const DROPPED = new Set(["author", "categories", "math", "mermaid", "chart", "render_with_liquid"]);
+  const keys = (file: string) => [.../^---\r?\n([\s\S]*?)\r?\n---/.exec(file)?.[1].matchAll(/^([A-Za-z_][\w-]*):/gm) ?? []].map((key) => key[1]);
+
+  it.each(CORPUS.map((path) => [path.slice(BLOG.length + 1), path]))(
+    "%s keeps its front matter, every field the app has no box for as written",
+    (_name, path) => {
+      const source = readFileSync(path, "utf8");
+      const { meta, doc } = parsePost(source);
+      const full = { ...newPostMeta(), ...meta };
+      const file = buildPostFile(full, doc);
+      expect({ ...newPostMeta(), date: full.date, ...parsePost(file).meta }).toEqual(full);
+      const kept = keys(source).filter((key) => !DROPPED.has(key) && (key !== "description" || meta.description?.trim()));
+      expect(keys(file)).toEqual(expect.arrayContaining(kept));
+      expect(file.split("\n")).toEqual(expect.arrayContaining(meta.extra ?? []));
     },
   );
 });
