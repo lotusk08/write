@@ -2,7 +2,7 @@ import type {
   AppConfig,
   PublishRequest,
   PublishResult,
-  SiteFile,
+  SiteFiles,
   SitePhoto,
   Topic,
   Topics,
@@ -106,11 +106,6 @@ export async function fetchPostSource(path: string, password: string): Promise<P
     throw new Error(`Could not open ${path}.`);
   }
   return source;
-}
-
-export interface SiteFiles {
-  posts: SiteFile[];
-  drafts: SiteFile[];
 }
 
 export async function fetchSiteFiles(password: string): Promise<SiteFiles> {

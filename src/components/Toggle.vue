@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import type { ToggleOption } from "./types.ts";
 
-const props = defineProps<{ label: string; options: ToggleOption<T>[]; value: string }>();
+const props = defineProps<{ label: string; options: ToggleOption<T>[]; value: string; disabled?: boolean }>();
 const emit = defineEmits<{ change: [id: T] }>();
 
 const at = computed(() => props.options.findIndex((option) => option.id === props.value));
@@ -18,6 +18,7 @@ const at = computed(() => props.options.findIndex((option) => option.id === prop
       :class="{ 'is-on': value === option.id }"
       :aria-pressed="value === option.id"
       :title="option.title"
+      :disabled="disabled"
       @click="emit('change', option.id)"
     >
       {{ option.label }}

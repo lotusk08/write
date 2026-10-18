@@ -27,3 +27,39 @@ export function frontMatter(text: string): { yaml: string; rest: string } | null
   }
   return { yaml: front.body.replace(/\r?\n$/, ""), rest: front.rest };
 }
+
+/** A scalar written in quotes, read as YAML reads it; a double-quoted one as JSON, which it is but for rare escapes. */
+export function yamlScalar(value: string): string {
+  if (value.startsWith('"')) {
+    try {
+      return JSON.parse(value) as string;
+    } catch {
+      return value.slice(1, -1);
+    }
+  }
+  return value.startsWith("'") ? value.slice(1, -1).replace(/''/g, "'") : value;
+}
+
+const QUOTED = /^(?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*')/;
+
+/**
+ * A top-level field's scalar, read as the blog's YAML reads it for the fields the site's list shows: quoted or plain,
+ * a comment after it left out, written on the key's line or on the indented line under it. Null when it is not there.
+ */
+export function frontField(yaml: string, key: string): { text: string; plain: boolean } | null {
+  const lines = yaml.split(/\r?\n/);
+  const at = lines.findIndex((line) => line.startsWith(`${key}:`) && /^(?:[ \t]|$)/.test(line.slice(key.length + 1)));
+  if (at === -1) {
+    return null;
+  }
+  let raw = lines[at].slice(key.length + 1).trim();
+  if (!raw || raw.startsWith("#")) {
+    raw = /^[ \t]+(\S.*)$/.exec(lines[at + 1] ?? "")?.[1] ?? "";
+  }
+  const quoted = QUOTED.exec(raw)?.[0];
+  if (quoted) {
+    return { text: yamlScalar(quoted), plain: false };
+  }
+  const text = raw.replace(/(?:^|[ \t])#.*$/, "").trim();
+  return text ? { text, plain: true } : null;
+}

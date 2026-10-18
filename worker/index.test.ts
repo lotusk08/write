@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("cloudflare:workers", () => ({ DurableObject: class {} }));
 
-const { default: worker, siteFile, yamlScalar } = await import("./index.ts");
+const { default: worker, siteFile } = await import("./index.ts");
 
 const failures = new Map<string, number>();
 const passkeys = {
@@ -196,6 +196,7 @@ describe("the site's posts and drafts", () => {
       2, 3, true, true, false, false, false, false,
     ]);
     expect(siteFile("src/posts/x.md", "No front matter\npin: 2\n").pin).toBe(false);
+    expect([pin('pin: "true" # kept'), pin("pin:\n  2"), pin("pin: 02"), pin("pin: 3.0"), pin("pin: 2 # second"), pin("pin: 0x3")]).toEqual([true, 2, 2, 3, 2, 3]);
   });
 
   it("finds the front matter where the app does", () => {
@@ -283,10 +284,3 @@ describe("worker hardening", () => {
   });
 });
 
-describe("yamlScalar", () => {
-  it("reads a draft title as YAML does", () => {
-    expect(yamlScalar('"He said \\"x\\""')).toBe('He said "x"');
-    expect(yamlScalar("'It''s here'")).toBe("It's here");
-    expect(yamlScalar("Chuyện cà phê")).toBe("Chuyện cà phê");
-  });
-});

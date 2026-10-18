@@ -59,6 +59,51 @@ describe("pinning from the list", () => {
     expect([...swapChanges(posts(false, false, 2))]).toEqual([["p2", 3]]);
     expect([...swapChanges(posts(false, false, false))]).toEqual([]);
   });
+
+  it("unpins an older post naming the same place, which would otherwise take it", () => {
+    const named = posts(false, 2, 2, false);
+    expect([...pinChanges(named, named[3], 2)]).toEqual([["p3", 2], ["p1", 3], ["p2", false]]);
+    const twice = posts(false, 2, 2, 3);
+    expect([...swapChanges(twice)]).toEqual([["p1", 3], ["p3", 2], ["p2", false]]);
+    const outranked = posts(false, 2, 2, false);
+    expect([...pinChanges(outranked, outranked[2], 2)]).toEqual([["p2", 2], ["p1", 3]]);
+  });
+
+  const every = (count: number) =>
+    Array.from({ length: 4 ** count }, (_, seed) => posts(...Array.from({ length: count }, (_, at) => ([false, true, 2, 3] as Pin[])[Math.floor(seed / 4 ** at) % 4])));
+  const applied = (list: ReturnType<typeof posts>, changes: Map<string, Pin>) =>
+    list.map((post) => ({ ...post, pin: changes.has(post.path) ? changes.get(post.path)! : post.pin }));
+  const standing = (list: ReturnType<typeof posts>) => new Map([...homePlaces(list)].map(([place, post]) => [place, post.path]));
+
+  it("puts the post where it was asked, over every pin of six posts", () => {
+    for (const list of every(6)) {
+      for (const post of list.slice(1)) {
+        for (const place of [2, 3] as const) {
+          const before = standing(list);
+          const changes = pinChanges(list, post, place);
+          const after = standing(applied(list, changes));
+          expect(changes.size, "two places, two posts, and the duplicates left naming them").toBeLessThanOrEqual(list.length);
+          const label = `${JSON.stringify(list.map((each) => each.pin))} ${post.path} → ${place}`;
+          expect(after.get(place), label).toBe(post.path);
+          const holder = before.get(place);
+          const other = place === 2 ? 3 : 2;
+          if (holder && holder !== post.path && (!before.get(other) || before.get(other) === post.path)) {
+            expect(after.get(other), label).toBe(holder);
+          } else if (before.get(other) !== post.path) {
+            expect(after.get(other), label).toBe(before.get(other));
+          }
+        }
+      }
+    }
+  });
+
+  it("trades the two places, over every pin of six posts", () => {
+    for (const list of every(6)) {
+      const before = standing(list);
+      const after = standing(applied(list, swapChanges(list)));
+      expect([after.get(3), after.get(2)], JSON.stringify(list.map((each) => each.pin))).toEqual([before.get(2), before.get(3)]);
+    }
+  });
 });
 
 describe("a post's pin line", () => {
@@ -66,7 +111,8 @@ describe("a post's pin line", () => {
 
   it("is rewritten in place and nothing else moves", () => {
     expect(setPin(post, 2)).toBe(post.replace("pin: false", "pin: 2"));
-    expect(setPin(post.replace("pin: false", "pin: true # top"), false)).toBe(post);
+    expect(setPin(post.replace("pin: false", "pin: true # top"), 2)).toBe(post.replace("pin: false", "pin: 2 # top"));
+    expect(setPin(post.replace("pin: false", 'pin: "true"  # top'), 3)).toBe(post.replace("pin: false", "pin: 3  # top"));
     expect(setPin(post.replaceAll("\n", "\r\n"), 3)).toBe(post.replace("pin: false", "pin: 3").replaceAll("\n", "\r\n"));
     expect(setPin(`\ufeff${post}`, 3)).toBe(`\ufeff${post.replace("pin: false", "pin: 3")}`);
   });
@@ -77,15 +123,15 @@ describe("a post's pin line", () => {
     expect(setPin("No front matter\n", 2)).toBeNull();
   });
 
-  it("is written into front matter the editor does not read, an empty one or one opened by --- and spaces", () => {
-    expect(setPin("---\n---\nBody\n", 2)).toBe("---\npin: 2\n---\nBody\n");
-    expect(setPin("---  \ntitle: X\n---\nBody\n", 2)).toBe("---  \ntitle: X\npin: 2\n---\nBody\n");
+  it("is not written where the editor reads no front matter: an empty one, or one opened by --- and spaces", () => {
     expect(setPin("---\ntitle: X\n---", 3)).toBe("---\ntitle: X\npin: 3\n---");
-    expect(setPin("\ufeff\ufeff---\ntitle: X\n---\n", 3)).toBeNull();
+    for (const text of ["---\n---\nBody\n", "---  \ntitle: X\n---\nBody\n", "\ufeff\ufeff---\ntitle: X\n---\n"]) {
+      expect(setPin(text, 2), JSON.stringify(text)).toBeNull();
+    }
   });
 
   it("is read back and written as the blog takes it", () => {
-    for (const [line, pin] of [["pin: 2", 2], ["pin: 3", 3], ["pin: true", true], ['pin: "2"', false], ["pin: 4", false]] as const) {
+    for (const [line, pin] of [["pin: 2", 2], ["pin: 3", 3], ["pin: true", true], ['pin: "2"', false], ["pin: 4", false], ["pin: 02", 2], ["pin: 3.0", 3]] as const) {
       const meta = parsePost(post.replace("pin: false", line)).meta;
       expect(meta.pin, line).toBe(pin);
       expect(buildPostFile({ ...newPostMeta(), ...meta }, { type: "doc", content: [] })).toContain(`\npin: ${pin}\n`);
@@ -98,15 +144,16 @@ describe("publishPins", () => {
     "src/posts/a.md": "---\ntitle: A\npin: 2\ntoc: false\n---\nA\n",
     "src/posts/b.md": "---\ntitle: B\npin: false\ntoc: false\n---\nB\n",
   };
-  const shown = new Map<string, { title: string; pin: Pin }>([
-    ["src/posts/a.md", { title: "A", pin: 2 }],
-    ["src/posts/b.md", { title: "B", pin: false }],
-  ]);
+  const file = (path: string, title: string, pin: Pin, time: number) => ({ path, title, date: "", time, pin, hidden: false });
+  const shown = [file("src/posts/n.md", "N", false, 3), file("src/posts/a.md", "A", 2, 2), file("src/posts/b.md", "B", false, 1)];
 
-  function site() {
+  function site(listed = shown) {
     const sent: { message: string; files: { path: string; contentBase64: string }[]; expect: unknown }[] = [];
     vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
       const url = new URL(input, "https://write.test");
+      if (url.pathname === "/api/site") {
+        return Response.json({ posts: listed, drafts: [] });
+      }
       if (url.pathname === "/api/source") {
         const path = url.searchParams.get("path")!;
         return Response.json({ path, branch: "blog", markdown: sources[path], sha: path.endsWith("a.md") ? "a".repeat(40) : "b".repeat(40) });
@@ -135,10 +182,18 @@ describe("publishPins", () => {
     ]);
   });
 
-  it("sends nothing when a pin on the site is no longer the one the list showed", async () => {
-    const sent = site();
-    const stale = new Map(shown).set("src/posts/a.md", { title: "A", pin: false });
-    await expect(publishPins(new Map<string, Pin>([["src/posts/a.md", 3]]), stale, "pw")).rejects.toThrow("changed on the site");
+  it("sends nothing when a file's pin is no longer the one the list showed", async () => {
+    const stale = shown.map((post) => (post.path === "src/posts/a.md" ? { ...post, pin: false as Pin } : post));
+    const sent = site(stale);
+    await expect(publishPins(new Map<string, Pin>([["src/posts/a.md", 3]]), stale, "pw")).rejects.toThrow("A changed on the site");
     expect(sent).toHaveLength(0);
+  });
+
+  it("sends nothing when the site's list moved since it was read: a post published, or a pin changed", async () => {
+    for (const now of [[file("src/posts/new.md", "New", false, 4), ...shown], shown.map((post) => (post.path === "src/posts/b.md" ? { ...post, pin: 3 as Pin } : post))]) {
+      const sent = site(now);
+      await expect(publishPins(new Map<string, Pin>([["src/posts/a.md", 3]]), shown, "pw")).rejects.toThrow("The site changed since the list was read.");
+      expect(sent).toHaveLength(0);
+    }
   });
 });

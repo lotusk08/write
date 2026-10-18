@@ -52,6 +52,11 @@ export interface SiteFile {
   hidden: boolean;
 }
 
+export interface SiteFiles {
+  posts: SiteFile[];
+  drafts: SiteFile[];
+}
+
 export interface SitePhoto {
   name: string;
   sha: string;

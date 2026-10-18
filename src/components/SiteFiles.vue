@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import type { Pin } from "../../shared/pin.ts";
-import type { SiteFile } from "../../shared/types.ts";
-import { fetchSiteFiles, PasswordRejected, type SiteFiles } from "../lib/api.ts";
+import type { SiteFile, SiteFiles } from "../../shared/types.ts";
+import { fetchSiteFiles, PasswordRejected } from "../lib/api.ts";
 import {
   choiceOf,
   homePlaces,
@@ -10,6 +10,7 @@ import {
   PIN_CHOICES,
   pinChanges,
   pinOf,
+  pinWords,
   publishPins,
   swapChanges,
   withPins,
@@ -34,7 +35,12 @@ const LABELS = new Map(PIN_CHOICES.map((choice) => [choice.id, choice.label]));
 
 const IDLE = "Pinned, but it holds no place: the newest post is first anyway, or both places are taken";
 
-const emit = defineEmits<{ open: [path: string]; pinned: [written: PinWritten[]] }>();
+/**
+ * `onPinned` is a prop, not an emitted event, so a save the menu closed under still hands its pins on: an unmounted
+ * component's emit goes nowhere.
+ */
+const props = defineProps<{ onPinned?: (written: PinWritten[]) => void }>();
+const emit = defineEmits<{ open: [path: string] }>();
 
 const open = ref(false);
 const anchor = ref<HTMLElement | null>(null);
@@ -46,6 +52,8 @@ const editing = ref<string | null>(null);
 const changes = ref(new Map<string, Pin>());
 const saving = ref(false);
 const saved = ref<string | null>(null);
+const saveButton = ref<HTMLButtonElement | null>(null);
+const status = ref<HTMLElement | null>(null);
 const { password, asking, credential, accepted, signedIn, forget } = useSignIn();
 
 useFloatingMenu(open, anchor, list);
@@ -63,7 +71,7 @@ const rows = computed<SiteFile[]>(() =>
 const pending = computed(() =>
   [...changes.value].map(([path, pin]) => {
     const post = byPath.value.get(path);
-    return `${post ? titleOf(post) : name(path)} → ${badge(pin) || "unpinned"}`;
+    return `${post ? titleOf(post) : name(path)} → ${badge(pin) || pinWords(pin)}`;
   }),
 );
 
@@ -73,6 +81,13 @@ const titleOf = (file: SiteFile) => file.title || name(file.path);
 const badge = (pin: Pin) => (pin === false ? "" : LABELS.get(choiceOf(pin)));
 /** Pinned, yet standing at no place on the home page. */
 const idle = (file: SiteFile) => file.pin !== false && !standing.value.has(file.path);
+/** The pin button's name: what it does, and the pin it shows, as a screen reader cannot see the dimmed badge. */
+const pinLabel = (file: SiteFile) =>
+  [`Pin ${titleOf(file)}`, typeof file.pin === "number" ? badge(file.pin) : file.pin ? "pinned" : "not pinned", idle(file) && "holds no place"]
+    .filter(Boolean)
+    .join(", ");
+/** One change at a time: while one waits, only its own row's switch, Save and Cancel answer. */
+const locked = (path?: string) => saving.value || (changes.value.size > 0 && editing.value !== path);
 
 const load = async () => {
   problem.value = "";
@@ -118,6 +133,7 @@ const swapPlaces = () => {
   saved.value = null;
   editing.value = null;
   changes.value = swap.value;
+  void nextTick(() => saveButton.value?.focus());
 };
 
 const cancel = () => {
@@ -126,16 +142,18 @@ const cancel = () => {
 };
 
 const save = async () => {
+  const sending = changes.value;
   saving.value = true;
   problem.value = "";
   try {
-    const { commitUrl, written } = await publishPins(changes.value, byPath.value, credential());
+    const { commitUrl, written } = await publishPins(sending, posts.value, credential());
     accepted();
-    files.value = { ...files.value!, posts: withPins(posts.value, changes.value) };
+    props.onPinned?.(written);
+    files.value = { ...files.value!, posts: withPins(posts.value, sending) };
     changes.value = new Map();
     editing.value = null;
     saved.value = commitUrl;
-    emit("pinned", written);
+    void nextTick(() => status.value?.focus());
   } catch (cause) {
     if (cause instanceof PasswordRejected) {
       forget();
@@ -160,7 +178,7 @@ const save = async () => {
     Open from the site
   </button>
   <Teleport to="body">
-    <div v-if="open" ref="list" class="menu file-list site-list" role="dialog" aria-label="Posts and drafts on the site">
+    <div v-if="open" ref="list" class="menu file-list site-list" role="dialog" aria-label="Posts and drafts on the site" tabindex="-1">
       <p v-if="problem && !changes.size" class="notice warn">
         {{ problem }}
         <button v-if="files" type="button" class="btn tiny" @click="load">Read again</button>
@@ -183,13 +201,16 @@ const save = async () => {
           <li v-for="(post, index) in top" :key="post.path" :class="{ 'is-changed': changes.has(post.path) }">
             <span class="site-home-place">{{ index + 1 }}</span>
             <span class="file-list-title">{{ titleOf(post) }}</span>
-            <Icon v-if="standing.has(post.path)" name="pin" :size="12" class="site-home-pin" />
+            <template v-if="standing.has(post.path)">
+              <Icon name="pin" :size="12" class="site-home-pin" />
+              <span class="sr-only">, pinned</span>
+            </template>
           </li>
         </ol>
         <button
           type="button"
           class="btn icon ghost"
-          :disabled="!swap.size || saving"
+          :disabled="!swap.size || locked()"
           :title="swap.size ? 'Swap the posts pinned 2nd and 3rd' : 'Pin a post 2nd or 3rd to swap the places'"
           aria-label="Swap 2nd and 3rd"
           @click="swapPlaces"
@@ -198,7 +219,7 @@ const save = async () => {
         </button>
       </div>
       <div v-for="file in rows" :key="file.path" :class="['site-row', { 'is-changed': changes.has(file.path) }]">
-        <button type="button" :title="file.path" @click="pick(file.path)">
+        <button type="button" :title="file.path" :disabled="saving" @click="pick(file.path)">
           <span class="file-list-title">{{ titleOf(file) }}</span>
           <span class="mono">{{ file.hidden ? "hidden" : file.date }}</span>
         </button>
@@ -207,9 +228,9 @@ const save = async () => {
           type="button"
           :class="['btn tiny site-pin', { 'is-on': standing.has(file.path) }]"
           :aria-expanded="editing === file.path"
-          :aria-label="`Pin ${titleOf(file)}`"
+          :aria-label="pinLabel(file)"
           :title="idle(file) ? IDLE : 'Pin to the home page'"
-          :disabled="saving"
+          :disabled="locked(file.path)"
           @click="editing = editing === file.path ? null : file.path"
         >
           <Icon name="pin" :size="12" />
@@ -221,19 +242,21 @@ const save = async () => {
           label="Pin to home"
           :options="PIN_CHOICES"
           :value="choiceOf(file.pin)"
+          :disabled="saving"
           @change="(choice) => choose(file.path, choice)"
         />
       </div>
       <div v-if="changes.size" class="site-save">
-        <p :class="{ warn: problem }">{{ problem || pending.join(" · ") }}</p>
+        <p v-if="problem" class="warn" role="alert">{{ problem }}</p>
+        <p v-else>{{ pending.join(" · ") }}</p>
         <button type="button" class="btn tiny" :disabled="saving" @click="problem ? load() : cancel()">
           {{ problem ? "Read again" : "Cancel" }}
         </button>
-        <button type="button" class="btn tiny primary" :disabled="saving" @click="save">
+        <button ref="saveButton" type="button" class="btn tiny primary" :disabled="saving" @click="save">
           {{ saving ? "Saving…" : "Save to the site" }}
         </button>
       </div>
-      <div v-else-if="saved" class="site-save" role="status">
+      <div v-else-if="saved" ref="status" class="site-save" role="status" tabindex="-1">
         <p>Saved to the site. <a :href="saved" target="_blank" rel="noopener">View commit</a></p>
       </div>
     </div>

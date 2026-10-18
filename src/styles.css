@@ -1900,6 +1900,11 @@ textarea {
   color: var(--text);
 }
 
+.toggle button:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .toggle-knob {
   position: absolute;
   z-index: 0;

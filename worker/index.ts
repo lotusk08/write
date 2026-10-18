@@ -15,11 +15,12 @@ import type {
   PublishRequest,
   PublishResult,
   SiteFile,
+  SiteFiles,
   Topic,
   Topics,
 } from "../shared/types.ts";
 
-import { frontMatter } from "../shared/front.ts";
+import { frontField, frontMatter } from "../shared/front.ts";
 import { decoded, fileDate, servedName, stem, trimSlashes } from "../shared/paths.ts";
 import { readPin } from "../shared/pin.ts";
 import { redirectSources, REDIRECTS_PATH } from "../shared/redirects.ts";
@@ -366,17 +367,6 @@ function servedDir(env: Env): string {
   return `/${dirs(env).imagesDir.replace(/^public\//, "")}/`;
 }
 
-export function yamlScalar(value: string): string {
-  if (value.startsWith('"')) {
-    try {
-      return JSON.parse(value) as string;
-    } catch {
-      return value.slice(1, -1);
-    }
-  }
-  return value.startsWith("'") ? value.slice(1, -1).replace(/''/g, "'") : value;
-}
-
 function validList<T>(value: unknown, valid: (item: unknown) => item is T): value is T[] {
   return Array.isArray(value) && value.length <= 50 && value.every(valid);
 }
@@ -415,7 +405,7 @@ async function handlePublish(request: Request, env: Env): Promise<Response> {
   const guard = (entry: unknown): entry is { path: string; sha: string } =>
     typeof entry === "object" && entry !== null && markdownPath((entry as { path?: unknown }).path) &&
     typeof (entry as { sha?: unknown }).sha === "string" && ((entry as { sha: string }).sha === "" || SHA.test((entry as { sha: string }).sha));
-  if (expect !== undefined && !(validList(expect, guard) && expect.length <= 2)) {
+  if (expect !== undefined && !validList(expect, guard)) {
     return json({ error: "Malformed expect entry." }, 400);
   }
   const remove = body.remove ?? [];
@@ -534,20 +524,17 @@ function postTime(value: string): number {
 /** What the list of the site's files shows of one: its title, day, place in time, pin and whether the build skips it. */
 export function siteFile(path: string, text: string): SiteFile {
   const yaml = frontMatter(text)?.yaml ?? "";
-  const field = (key: string) => new RegExp(`^${key}:[ \\t]*(.*?)\\s*$`, "m").exec(yaml)?.[1] ?? "";
-  const plain = (raw: string) => !/^["']/.test(raw);
-  const value = (raw: string) => (plain(raw) ? raw.replace(/(?:^|[ \t])#.*$/, "").trim() : yamlScalar(raw));
-  const written = value(field("date"));
+  const written = frontField(yaml, "date")?.text ?? "";
   const named = fileDate(path);
-  const pin = field("pin");
-  const hidden = field("hidden");
+  const pin = frontField(yaml, "pin");
+  const hidden = frontField(yaml, "hidden");
   return {
     path,
-    title: yamlScalar(field("title")),
+    title: frontField(yaml, "title")?.text ?? "",
     date: named || /^\d{4}-\d{2}-\d{2}/.exec(written)?.[0] || "",
     time: postTime(written) || postTime(named),
-    pin: readPin(value(pin), plain(pin)),
-    hidden: plain(hidden) && /^(?:true|True|TRUE)$/.test(value(hidden)),
+    pin: pin ? readPin(pin.text, pin.plain) : false,
+    hidden: Boolean(hidden?.plain && /^(?:true|True|TRUE)$/.test(hidden.text)),
   };
 }
 
@@ -567,10 +554,11 @@ async function handleSite(request: Request, env: Env): Promise<Response> {
       .sort((a, b) => b.time - a.time || a.path.localeCompare(b.path));
   try {
     const texts = await readTexts(githubToken(env), env.BLOG_REPO!, env.BLOG_BRANCH || "main", [postsDir, draftsDir]);
-    return json({
+    const files: SiteFiles = {
       posts: listed(texts.filter(({ path }) => path.startsWith(`${postsDir}/`))),
       drafts: listed(texts.filter(({ path }) => path.startsWith(`${draftsDir}/`))),
-    });
+    };
+    return json(files);
   } catch (error) {
     return failed(error, "Read failed.");
   }
