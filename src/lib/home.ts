@@ -44,7 +44,7 @@ export function homePlaces<T extends HomePost>(posts: T[]): Map<Place, T> {
     if (free === undefined) {
       break;
     }
-    if (post.pin === true && ![...placed.values()].includes(post)) {
+    if (post.pin === true) {
       placed.set(free, post);
     }
   }
@@ -137,14 +137,15 @@ export async function publishPins(
     [...changes].map(async ([path, pin]) => {
       const source = await fetchPostSource(path, password);
       const listed = shown.get(path);
+      const title = listed?.title || path;
       if (!listed || (parsePost(source.markdown).meta.pin ?? false) !== listed.pin) {
-        throw new Error(`${listed?.title || path} changed on the site since the list was read.`);
+        throw new Error(`${title} changed on the site since the list was read.`);
       }
       const markdown = setPin(source.markdown, pin);
       if (markdown === null) {
         throw new Error(`${path} has no front matter to write a pin in.`);
       }
-      return { path, pin, markdown, was: source.sha, title: listed.title || path };
+      return { path, pin, markdown, was: source.sha, title };
     }),
   );
   const result = await publish(
