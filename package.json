@@ -8,6 +8,7 @@
   "license": "MIT",
   "scripts": {
     "dev": "vite",
+    "watch": "node scripts/watch.mjs",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc -b",
