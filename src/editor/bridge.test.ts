@@ -163,7 +163,17 @@ describe("bridge", () => {
     expect(docToMarkdown(moved)).toBe("Lead\n\n3. three");
   });
 
-  it("keeps a poem's lines and stanzas, its last stanza included", () => {
+  it("opens a quote saved with {: .poem} as its attribute list as the poem callout, written once", () => {
+    const saved: JSONContent = {
+      type: "doc",
+      content: [{ type: "blockquote", attrs: { note: null, blockIal: "{: .poem }" }, content: [{ type: "paragraph", content: [{ type: "text", text: "a" }] }] }],
+    };
+    const doc = throughEditor(saved);
+    expect(doc.content?.[0].attrs?.note).toBe("poem");
+    expect(docToMarkdown(doc)).toBe("> a\n{: .poem}");
+  });
+
+  it("keeps a poem's lines and stanzas", () => {
     const markdown = "> Line one\n> line two\n>\n> Last line\n> of all\n{: .poem}";
     const quote = markdownToDoc(markdown).content?.[0];
     expect(quote?.attrs?.note).toBe("poem");

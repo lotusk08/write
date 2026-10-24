@@ -1,5 +1,6 @@
 import { isLocalSrc } from "../lib/db.ts";
 import { previewSrc } from "../lib/site.ts";
+import { noteOfIal } from "./blog.ts";
 import type { DocMark, JSONContent } from "./doc.ts";
 
 /**
@@ -95,6 +96,13 @@ function blockAttrs(node: JSONContent): string {
   return (Object.keys(BLOCK_ATTRS) as BlockAttr[])
     .map((key) => attr(BLOCK_ATTRS[key], node.attrs?.[key]))
     .join("");
+}
+
+/** A draft saved before its class was a callout holds `{: .poem}` as the quote's attribute list; it opens as the callout. */
+function liftNote(quote: JSONContent): JSONContent {
+  const ial = quote.attrs?.blockIal;
+  const note = !quote.attrs?.note && !quote.attrs?.ialAbove && ial ? noteOfIal(String(ial)) : null;
+  return note ? { ...quote, attrs: { ...quote.attrs, note, blockIal: null } } : quote;
 }
 
 function hasBlockAttrs(node: JSONContent): boolean {
@@ -203,8 +211,10 @@ function blockHtml(node: JSONContent, options: RenderOptions): string {
       const level = Math.min(Math.max(Number(node.attrs?.level ?? 2), 1), 6);
       return `<h${level}${extra}>${textblockBody(node)}</h${level}>`;
     }
-    case "blockquote":
-      return `<blockquote${attr("data-note", node.attrs?.note)}${extra}>${blocksHtml(children, options) || "<p><br></p>"}</blockquote>`;
+    case "blockquote": {
+      const quote = liftNote(node);
+      return `<blockquote${attr("data-note", quote.attrs?.note)}${blockAttrs(quote)}>${blocksHtml(children, options) || "<p><br></p>"}</blockquote>`;
+    }
     case "codeBlock":
       return `<pre${attr("data-language", node.attrs?.language)}${extra}><code>${preText(node)}</code></pre>`;
     case "rawBlock":

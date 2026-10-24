@@ -35,6 +35,12 @@ export function noteOfClass(name: string): NoteType | null {
   return NOTE_TYPES.find((type) => NOTE_CLASSES[type] === name) ?? null;
 }
 
+/** The callout an attribute list names on its own, as `{: .poem }` does. */
+export function noteOfIal(line: string): NoteType | null {
+  const name = /^\{:\s*\.([\w-]+)\s*\}$/.exec(line.trim())?.[1];
+  return name ? noteOfClass(name) : null;
+}
+
 const PLATFORMS = ["youtube", "x", "audio", "video"] as const;
 
 const FILE_PLATFORMS = new Set(["audio", "video"]);
