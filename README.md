@@ -43,7 +43,8 @@ browser.
   of its front matter.
 - **Quotes and callouts.** A plain quote has its own button; quotes can carry
   the blog's five note styles, exported as `{: .info}` and friends, plus
-  `{: .author}` for a quote with its author.
+  `{: .author}` for a quote with its author, and `{: .poem}` for a poem
+  without one: the same centred quote, its last stanza kept a stanza.
 - **Shortcuts.** Markdown as you type (`**bold**`, `[text](url)`, `- [x] `,
   `---` …) and the ⌘ keys the old editor had; Tab nests list items.
 - **Paste.** From Google Docs, Word or a web page, keeping headings, lists,

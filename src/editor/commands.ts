@@ -341,7 +341,7 @@ function wrapInQuote(root: HTMLElement): HTMLElement | null {
   return quote;
 }
 
-/** A callout of the blog's: `{: .tip }` and the rest, or `{: .author }`. Picking the current kind takes it off. */
+/** A callout of the blog's: `{: .tip }` and the rest, `{: .author }` or `{: .poem }`. Picking the current kind takes it off. */
 export function setNote(root: HTMLElement, note: NoteType): boolean {
   const quote = quoteAt(root) ?? wrapInQuote(root);
   if (!quote) {

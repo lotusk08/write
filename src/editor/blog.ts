@@ -2,7 +2,7 @@ import { displaySrc } from "../lib/site.ts";
 
 /** The blog's own vocabulary: callouts, galleries and embeds, as the posts write them. */
 
-export const NOTE_TYPES = ["tip", "info", "important", "warning", "danger", "author"] as const;
+export const NOTE_TYPES = ["tip", "info", "important", "warning", "danger", "author", "poem"] as const;
 
 export type NoteType = (typeof NOTE_TYPES)[number];
 
@@ -13,6 +13,7 @@ export const NOTE_LABELS: Record<NoteType, string> = {
   warning: "Warning",
   danger: "Danger",
   author: "Author",
+  poem: "Poem",
 };
 
 export function isNoteType(value: unknown): value is NoteType {
@@ -27,6 +28,7 @@ export const NOTE_CLASSES: Record<NoteType, string> = {
   warning: "warn",
   danger: "risk",
   author: "author",
+  poem: "poem",
 };
 
 export function noteOfClass(name: string): NoteType | null {

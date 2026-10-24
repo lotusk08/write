@@ -110,6 +110,7 @@ describe("bridge", () => {
     ["warn", "warning"],
     ["risk", "danger"],
     ["author", "author"],
+    ["poem", "poem"],
   ])("reads {: .%s } as the %s callout and writes it back", (name, note) => {
     const markdown = `> said\n{: .${name}}`;
     expect(markdownToDoc(markdown).content?.[0].attrs?.note).toBe(note);
@@ -160,6 +161,14 @@ describe("bridge", () => {
     const moved = markdownToDoc("## Steps\n3. three");
     moved.content?.splice(0, 1, { type: "paragraph", content: [{ type: "text", text: "Lead" }] });
     expect(docToMarkdown(moved)).toBe("Lead\n\n3. three");
+  });
+
+  it("keeps a poem's lines and stanzas, its last stanza included", () => {
+    const markdown = "> Line one\n> line two\n>\n> Last line\n> of all\n{: .poem}";
+    const quote = markdownToDoc(markdown).content?.[0];
+    expect(quote?.attrs?.note).toBe("poem");
+    expect(quote?.content?.map((node) => node.type)).toEqual(["paragraph", "paragraph"]);
+    expect(roundTrip(markdown)).toBe(markdown);
   });
 
   it("keeps an old {: .note-info } as it was written, not as a callout", () => {
