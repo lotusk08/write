@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import type { AppConfig, PostMeta, PublishResult } from "../shared/types.ts";
 import { fileDate } from "../shared/paths.ts";
 import DraftRail from "./components/DraftRail.vue";
@@ -19,8 +19,9 @@ import { createDraft, currentMeta, draftLabel, newPostMeta, sortDrafts } from ".
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
 import type { PinWritten } from "./lib/home.ts";
 import { buildHtmlDocument } from "./lib/html.ts";
-import { markdownToDoc, parsePost, postPathFromLink, slugFromPath } from "./lib/import.ts";
-import { docToMarkdown, docToPlainText } from "./lib/markdown.ts";
+import { parsePost, postPathFromLink, slugFromPath } from "./lib/import.ts";
+import { keptFront, readSource, rememberSource, sameMeta, sourceFor, withFront } from "./lib/source.ts";
+import { docToPlainText } from "./lib/markdown.ts";
 import { mindmapUrl } from "./lib/mindmap.ts";
 import { sessionPassword } from "./lib/password.ts";
 import {
@@ -44,7 +45,7 @@ import {
 } from "./lib/participants.ts";
 import type { ShareSession } from "./lib/share.ts";
 import { previewSrc, setSiteUrl, showPublishedAs } from "./lib/site.ts";
-import { countWords, datePrefix, rememberValue, slugify, tidyEdited } from "./lib/text.ts";
+import { countWords, datePrefix, slugify } from "./lib/text.ts";
 import { usePinnedViewport } from "./lib/viewport.ts";
 
 type SaveState = "idle" | "saving" | "saved";
@@ -112,7 +113,6 @@ const systemDark = ref(window.matchMedia("(prefers-color-scheme: dark)").matches
 const postEditor = ref<InstanceType<typeof PostEditor> | null>(null);
 const menuButton = ref<HTMLButtonElement | null>(null);
 const focusButton = ref<HTMLButtonElement | null>(null);
-const description = ref<HTMLTextAreaElement | null>(null);
 const mainRegion = ref<HTMLDivElement | null>(null);
 const scrollRegion = ref<HTMLDivElement | null>(null);
 
@@ -213,7 +213,7 @@ async function settle() {
 function gather() {
   window.clearTimeout(parseTimer);
   if (source.value !== null) {
-    queueSave({ doc: markdownToDoc(source.value) });
+    applySource(source.value);
   } else {
     postEditor.value?.flush();
   }
@@ -314,18 +314,6 @@ watch(current, (draft) => {
 });
 
 watch(
-  () => [current.value?.meta.description, currentId.value, ready.value],
-  async () => {
-    await nextTick();
-    const field = description.value;
-    if (field) {
-      field.style.height = "auto";
-      field.style.height = `${field.scrollHeight}px`;
-    }
-  },
-);
-
-watch(
   dark,
   (value) => {
     document.documentElement.dataset.theme = value ? "dark" : "light";
@@ -348,7 +336,7 @@ async function newDraft() {
   await draftStore.put(draft);
   drafts.value = sortDrafts([draft, ...drafts.value]);
   currentId.value = draft.id;
-  window.setTimeout(() => document.querySelector<HTMLInputElement>(".title-input")?.focus(), 40);
+  window.setTimeout(() => postEditor.value?.focus(), 40);
 }
 
 async function importPost(path: string) {
@@ -393,6 +381,7 @@ async function importPost(path: string) {
       publishedPath: path,
       publishedSha: fetched!.sha,
     };
+    draft.sourceText = rememberSource(fetched!.markdown, draft.meta, draft.doc);
     draft.publishedPrint = await draftPrint(draft);
     await draftStore.put(draft);
     if (existing) {
@@ -478,26 +467,55 @@ async function joinRequested(token: string) {
   showToast(`Joined as “${participantName()}” — tap your name below to change it.`);
 }
 
+/** The post as one Markdown file, front matter included, shown as it was last typed or opened while it reads the same. */
 async function editSource() {
   await settle();
   const draft = findDraft(currentId.value);
-  source.value = draft ? docToMarkdown(draft.doc) : "";
+  source.value = draft ? sourceFor(draft.meta, draft.doc, draft.sourceText) : "";
 }
 
 async function editRich() {
   if (source.value !== null) {
     window.clearTimeout(parseTimer);
-    queueSave({ doc: markdownToDoc(source.value) });
+    applySource(source.value);
     await flush();
   }
   source.value = null;
 }
 
+/** The source view's text read back into the draft: its body, the fields in its front matter, and the text as typed. */
+function applySource(text: string) {
+  const draft = findDraft(currentId.value);
+  if (!draft) {
+    return;
+  }
+  const was = { ...draft.meta, ...pending.meta };
+  const { meta, doc } = readSource(text, was);
+  queueSave({ doc, sourceText: rememberSource(text, meta, doc) });
+  if (!sameMeta(meta, was)) {
+    updateMeta(meta);
+  }
+}
+
 function changeSource(text: string) {
   source.value = text;
   window.clearTimeout(parseTimer);
-  parseTimer = window.setTimeout(() => queueSave({ doc: markdownToDoc(text) }), PARSE_DEBOUNCE_MS);
+  parseTimer = window.setTimeout(() => applySource(text), PARSE_DEBOUNCE_MS);
 }
+
+/** A field changed in the menu while the source view is open is written into its front matter; the body stays as typed. */
+watch(
+  () => current.value?.meta,
+  (meta) => {
+    const draft = findDraft(currentId.value);
+    const kept = pending.sourceText ?? writing.sourceText ?? draft?.sourceText;
+    if (source.value === null || !meta || !draft || keptFront(kept, meta)) {
+      return;
+    }
+    // The text shows the field at once; reading it back, with any body edit still waiting, waits on the same debounce.
+    changeSource(withFront(source.value, meta));
+  },
+);
 
 async function selectDraft(id: string) {
   await settle();
@@ -553,20 +571,6 @@ function setSlug(typed: string) {
   const slug = clean && /[^\p{L}\p{N}]$/u.test(typed) ? `${clean}-` : clean;
   queueSave({ slug });
   patchCurrent({ slug });
-}
-
-function onTitleBlur(event: FocusEvent) {
-  const title = tidyEdited(event.target as HTMLInputElement);
-  if (title !== null) {
-    updateMeta({ title });
-  }
-}
-
-function onDescriptionBlur(event: FocusEvent) {
-  const value = tidyEdited(event.target as HTMLTextAreaElement);
-  if (value !== null) {
-    updateMeta({ description: value });
-  }
 }
 
 async function exportAs(formats: ExportFormat[]) {
@@ -734,7 +738,7 @@ function openMindmap() {
     return;
   }
   try {
-    const doc = source.value !== null ? markdownToDoc(source.value) : (postEditor.value?.flush() ?? draft.doc);
+    const doc = source.value !== null ? readSource(source.value, draft.meta).doc : (postEditor.value?.flush() ?? draft.doc);
     const meta = { ...draft.meta, ...pending.meta };
     window.open(mindmapUrl(doc, meta.title), "_blank", "noopener");
   } catch (cause) {
@@ -765,10 +769,11 @@ function editPost() {
   openMenuAt("menu-file");
 }
 
-/** The title and the description are on the page, not in the menu: the dialog closes onto the field. */
+/** The title and the description are in the menu: the dialog closes onto the field there. */
 function fixField(field: "title" | "description") {
   publishOpen.value = false;
-  window.setTimeout(() => document.querySelector<HTMLElement>(`.${field}-input`)?.focus(), 40);
+  openMenuAt("menu-file");
+  window.setTimeout(() => document.getElementById(`meta-${field}`)?.focus({ preventScroll: true }), 80);
 }
 
 async function reopenFromSite(draft: Draft) {
@@ -854,6 +859,49 @@ async function onPublished(id: string, result: PublishResult, plan: PublishPlan)
   await flush();
 }
 
+/** The dock fades while the writer types, and comes back when the mouse moves, a tap or click lands or the text loses focus. */
+const dockIdle = ref(false);
+/** Where the mouse was when typing began; a hand resting on it should not wake the dock. */
+let restingAt: [number, number] | null = null;
+const WAKE_PX = 6;
+
+/**
+ * Writing fades the dock: typed text, a deletion, a phone keyboard's word, dictation. A tool does not — the blog's
+ * blocks are edited by hand and announced with an untrusted `input`, and the browser's own commands send no
+ * `beforeinput` at all.
+ */
+function typing(event: InputEvent) {
+  if (event.isTrusted && /^(?:insert|delete)/.test(event.inputType)) {
+    dockIdle.value = true;
+    restingAt = null;
+  }
+}
+
+function wakeDock(event: PointerEvent) {
+  if (!dockIdle.value) {
+    return;
+  }
+  if (event.type === "pointermove") {
+    if (event.pointerType !== "mouse") {
+      return;
+    }
+    if (!restingAt) {
+      restingAt = [event.clientX, event.clientY];
+      return;
+    }
+    if (Math.hypot(event.clientX - restingAt[0], event.clientY - restingAt[1]) < WAKE_PX) {
+      return;
+    }
+  }
+  dockIdle.value = false;
+}
+
+function leftText(event: FocusEvent) {
+  if (!(event.currentTarget as HTMLElement).contains(event.relatedTarget as Node | null)) {
+    dockIdle.value = false;
+  }
+}
+
 function focusEnd(event: MouseEvent) {
   if (event.target === event.currentTarget) {
     event.preventDefault();
@@ -901,6 +949,8 @@ const onNotice = (event: Event) => showToast((event as CustomEvent<string>).deta
 
 onMounted(() => {
   document.addEventListener("keydown", onKey);
+  document.addEventListener("pointermove", wakeDock, { passive: true });
+  document.addEventListener("pointerdown", wakeDock, { passive: true });
   document.addEventListener("visibilitychange", onLeave);
   window.addEventListener("pagehide", onLeave);
   window.addEventListener(NOTICE, onNotice);
@@ -920,6 +970,8 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   document.removeEventListener("keydown", onKey);
+  document.removeEventListener("pointermove", wakeDock);
+  document.removeEventListener("pointerdown", wakeDock);
   document.removeEventListener("visibilitychange", onLeave);
   window.removeEventListener("pagehide", onLeave);
   window.removeEventListener(NOTICE, onNotice);
@@ -965,25 +1017,7 @@ onBeforeUnmount(() => {
       <div ref="scrollRegion" class="editor-scroll">
         <div :class="['editor-page', { 'has-toc': tocOn }]">
           <div class="editor-card">
-            <div class="editor-body" @mousedown="focusEnd">
-              <input
-                class="title-input"
-                placeholder="Title"
-                :value="current.meta.title"
-                @input="updateMeta({ title: ($event.target as HTMLInputElement).value })"
-                @focus="rememberValue($event.target as HTMLInputElement)"
-                @blur="onTitleBlur"
-              />
-              <textarea
-                ref="description"
-                class="description-input"
-                placeholder="Description"
-                rows="1"
-                :value="current.meta.description"
-                @input="updateMeta({ description: ($event.target as HTMLTextAreaElement).value })"
-                @focus="rememberValue($event.target as HTMLTextAreaElement)"
-                @blur="onDescriptionBlur"
-              />
+            <div class="editor-body" @mousedown="focusEnd" @beforeinput="typing" @focusout="leftText">
               <textarea
                 v-if="source !== null"
                 class="source-editor"
@@ -1003,9 +1037,9 @@ onBeforeUnmount(() => {
               />
             </div>
 
-            <div v-if="!settings.focusMode" class="card-dock">
+            <div v-if="!settings.focusMode" :class="['card-dock', { 'is-idle': dockIdle && !menuOpen }]">
               <div v-show="source === null" id="dock-tools" class="dock-tools" />
-              <span v-if="source !== null" class="hint source-note">Markdown source — exactly what gets published</span>
+              <span v-if="source !== null" class="hint source-note">The post as a Markdown file, front matter and all</span>
               <button
                 type="button"
                 :class="['tool mode-toggle', { 'is-active': source !== null }]"

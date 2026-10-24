@@ -4,8 +4,13 @@ import type { Settings } from "./settings.ts";
 import { leavesDraft, photoName, planImages } from "./publish.ts";
 
 describe("photoName", () => {
-  it("names a photo after its alt, folded to ASCII", () => {
-    expect(photoName("da-lat", "Đồi thông ở Đà Lạt", new Set())).toBe("da-lat-doi-thong-o-da-lat");
+  it("names a photo after its alt alone, folded to ASCII, with no slug in front", () => {
+    expect(photoName("da-lat", "Đồi thông ở Đà Lạt", new Set())).toBe("doi-thong-o-da-lat");
+  });
+
+  it("names a cover with no alt after the post", () => {
+    expect(photoName("trip", "", new Set(), "cover")).toBe("trip-cover");
+    expect(photoName("trip", "Biển", new Set(), "cover")).toBe("bien");
   });
 
   it("numbers a photo with no alt past every name taken", () => {
@@ -13,14 +18,14 @@ describe("photoName", () => {
   });
 
   it("never reuses a name, and remembers the ones it gives", () => {
-    const taken = new Set(["trip-sea"]);
-    expect(photoName("trip", "Sea", taken)).toBe("trip-sea-2");
-    expect(photoName("trip", "Sea", taken)).toBe("trip-sea-3");
+    const taken = new Set(["sea"]);
+    expect(photoName("trip", "Sea", taken)).toBe("sea-2");
+    expect(photoName("trip", "Sea", taken)).toBe("sea-3");
   });
 
   it("cuts a long alt on a word boundary", () => {
     const name = photoName("p", "a long caption that keeps going well past the fifty character mark", new Set());
-    expect(name).toBe("p-a-long-caption-that-keeps-going-well-past-the");
+    expect(name).toBe("a-long-caption-that-keeps-going-well-past-the");
   });
 });
 
@@ -37,20 +42,22 @@ describe("planImages", () => {
       draft([["/assets/img/post/old-1.jpg", "Biển xanh"]]),
       "trip",
       "assets/img/post",
-      site("old-1.webp", "trip-bien-xanh.webp"),
+      site("old-1.webp", "bien-xanh.webp"),
     );
-    expect(planned.map((image) => [image.site?.name, image.baseName])).toEqual([["old-1.webp", "trip-bien-xanh-2"]]);
+    expect(planned.map((image) => [image.site?.name, image.baseName])).toEqual([["old-1.webp", "bien-xanh-2"]]);
   });
 
-  it("leaves a photo already named after its alt, or with no alt", async () => {
+  it("leaves a photo already named after its alt, the post's slug in front or not, or with no alt", async () => {
     const planned = await planImages(
       draft([
         ["/assets/img/post/trip-sea-2.webp", "Sea"],
+        ["/assets/img/post/sea.webp", "Sea"],
+        ["/assets/img/post/sea-3.webp", "Sea"],
         ["/assets/img/post/old.webp", ""],
       ]),
       "trip",
       "assets/img/post",
-      site("trip-sea-2.webp", "old.webp"),
+      site("trip-sea-2.webp", "sea.webp", "sea-3.webp", "old.webp"),
     );
     expect(planned).toEqual([]);
   });
@@ -80,13 +87,13 @@ describe("photo names under load", () => {
 
   it("gives two hundred photos with colliding, empty and odd alts two hundred distinct names", () => {
     const alts = ["Biển", "biển", "BIỂN!", "", "   ", "!!!", "🌊🌊", "Đà Lạt — sáng", "x".repeat(300), "a b c ".repeat(40), "Ảnh 1"];
-    const existing = new Set(Array.from({ length: 500 }, (_, index) => (index % 2 ? `trip-bien-${index}` : `trip-${index}`)));
+    const existing = new Set(Array.from({ length: 500 }, (_, index) => (index % 2 ? `bien-${index}` : `trip-${index}`)));
     const taken = new Set(existing);
     const names = Array.from({ length: 200 }, (_, index) => photoName("trip", alts[index % alts.length], taken));
     expect(new Set(names).size).toBe(200);
     expect(names.filter((name) => existing.has(name))).toEqual([]);
     for (const name of names) {
-      expect(name).toMatch(/^trip-[a-z0-9]+(-[a-z0-9]+)*$/);
+      expect(name).toMatch(/^[a-z0-9]+(-[a-z0-9]+)*$/);
       expect(name.length).toBeLessThanOrEqual("trip-".length + 50 + 4);
     }
   });
@@ -94,12 +101,12 @@ describe("photo names under load", () => {
   it("renames two hundred published photos without a clash, past redirected addresses too", async () => {
     const photos = Array.from({ length: 200 }, (_, index): [string, string] => [`/assets/img/post/IMG_${index}.jpg`, index % 3 ? "Hồ Gươm" : "Phố cổ"]);
     const site = photos.map(([src]) => ({ name: src.split("/").pop()!.replace(".jpg", ".webp"), sha: src, shared: false }));
-    const planned = await planImages(draft(photos), "ha-noi", "assets/img/post", site, ["ha-noi-ho-guom.webp", "ha-noi-pho-co-2.webp"]);
+    const planned = await planImages(draft(photos), "ha-noi", "assets/img/post", site, ["ho-guom.webp", "pho-co-2.webp"]);
     const names = planned.map((image) => image.baseName);
     expect(planned).toHaveLength(200);
     expect(new Set(names).size).toBe(200);
-    expect(names).not.toContain("ha-noi-ho-guom");
-    expect(names).not.toContain("ha-noi-pho-co-2");
+    expect(names).not.toContain("ho-guom");
+    expect(names).not.toContain("pho-co-2");
     expect(planned.every((image) => image.site?.name.endsWith(".webp"))).toBe(true);
   });
 

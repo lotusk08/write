@@ -112,6 +112,7 @@ function images(root: HTMLElement): void {
     applyTheme(figure);
     imageTools(figure, img);
     img.draggable = false;
+    figure.draggable = true;
     const local = img.getAttribute("data-local-src");
     if (local && isLocalSrc(local)) {
       if (img.getAttribute("src") === BLANK_SRC) {
@@ -135,6 +136,8 @@ function galleries(root: HTMLElement): void {
     let label = firstTransient(gallery, "editor-gallery-label");
     if (!label) {
       label = transient("span", "editor-gallery-label");
+      label.draggable = true;
+      label.title = "Drag to move the gallery";
       gallery.prepend(label);
     }
     if (label.textContent !== "Gallery") {

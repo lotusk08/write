@@ -152,27 +152,8 @@ onBeforeUnmount(stop);
       aria-label="Editor menu"
       :style="position"
     >
-      <header class="popover-head">
-        <button
-          type="button"
-          class="btn icon ghost"
-          :title="scheme === 'dark' ? 'Switch to light' : 'Switch to dark'"
-          :aria-label="scheme === 'dark' ? 'Switch to light' : 'Switch to dark'"
-          @click="emit('settings', { theme: scheme === 'dark' ? 'light' : 'dark' })"
-        >
-          <Icon :name="scheme === 'dark' ? 'sun' : 'moon'" />
-        </button>
-        <button
-          type="button"
-          class="btn icon ghost"
-          title="Focus mode — hides the toolbar and the draft rail"
-          aria-label="Focus mode"
-          :aria-pressed="settings.focusMode"
-          @click="emit('settings', { focusMode: !settings.focusMode })"
-        >
-          <Icon name="focus" />
-        </button>
-        <button v-if="sheet" type="button" class="btn icon ghost" title="Close" aria-label="Close menu" @click="dismiss">
+      <header v-if="sheet" class="popover-head">
+        <button type="button" class="btn icon ghost" title="Close" aria-label="Close menu" @click="dismiss">
           <Icon name="close" />
         </button>
       </header>
@@ -234,7 +215,28 @@ onBeforeUnmount(stop);
             View
           </button>
         </div>
-        <SiteFiles @open="(path) => emit('site', path)" @pinned="(written) => emit('pinned', written)" />
+        <div class="foot-tools">
+          <button
+            type="button"
+            class="btn icon ghost"
+            title="Focus mode — hides the toolbar and the draft rail"
+            aria-label="Focus mode"
+            :aria-pressed="settings.focusMode"
+            @click="emit('settings', { focusMode: !settings.focusMode })"
+          >
+            <Icon name="focus" />
+          </button>
+          <SiteFiles @open="(path) => emit('site', path)" @pinned="(written) => emit('pinned', written)" />
+          <button
+            type="button"
+            class="btn icon ghost"
+            :title="scheme === 'dark' ? 'Switch to light' : 'Switch to dark'"
+            :aria-label="scheme === 'dark' ? 'Switch to light' : 'Switch to dark'"
+            @click="emit('settings', { theme: scheme === 'dark' ? 'light' : 'dark' })"
+          >
+            <Icon :name="scheme === 'dark' ? 'sun' : 'moon'" />
+          </button>
+        </div>
         <span class="sr-only" role="status">{{ done ? DONE_TEXT[done] : "" }}</span>
       </footer>
     </div>

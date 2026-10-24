@@ -34,7 +34,7 @@ const pick = (entry: OutlineEntry) => {
 
 <template>
   <template v-if="entries.length">
-    <div :class="['toc-bar', { 'is-visible': scrolled }]">
+    <div :class="['toc-bar', { 'is-scrolled': scrolled }]">
       <span class="toc-label">{{ label }}</span>
       <button type="button" class="tool" title="Contents" aria-label="Open the table of contents" @click="open = true">
         <Icon name="bulletList" />

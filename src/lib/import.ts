@@ -359,6 +359,16 @@ function parseFrontMatter(yaml: string): Partial<PostMeta> {
         meta.toc = !(found?.plain && /^(?:false|False|FALSE)$/.test(found.text));
         break;
       }
+      case "moments": {
+        const found = scalar(value, body, 0);
+        const flag = found?.plain ? /^(?:(true|True|TRUE)|false|False|FALSE)$/.exec(found.text) : null;
+        if (flag) {
+          meta.moments = Boolean(flag[1]);
+        } else {
+          extra.push(...lines.slice(from, to));
+        }
+        break;
+      }
       case "author":
       case "math":
       case "mermaid":

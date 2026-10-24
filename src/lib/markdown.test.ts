@@ -48,6 +48,20 @@ describe("front matter the app has no field for", () => {
     expect(written(post)).toBe("---\ntitle: X\ndate: 2026-10-11 09:00 +0700\ntags: []\npin: 2\ntoc: true\nredirect_from: [/old-address]\nhidden: true # for now\n---\nText\n");
   });
 
+  it("reads moments as a switch and writes it last, as the blog's posts carry it", () => {
+    const post = "---\ntitle: X\ndate: 2026-10-11 09:00 +0700\ntags: []\npin: false\ntoc: true\nimage:\n  path: /a.webp\nredirect_from: /old\nmoments: false\n---\nText\n";
+    expect(parsePost(post).meta.moments).toBe(false);
+    expect(parsePost(post).meta.extra).toEqual(["redirect_from: /old"]);
+    expect(written(post)).toBe(post);
+    expect(written(post.replace("moments: false", "moments: True"))).toContain("\nmoments: true\n---");
+    expect(written(post.replace("\nmoments: false", ""))).not.toContain("moments");
+    expect(parsePost(post.replace("moments: false", "moments: maybe")).meta.extra).toEqual(["redirect_from: /old", "moments: maybe"]);
+    const odd = parsePost(post.replace("moments: false", 'moments: "false"'));
+    const file = buildPostFile({ ...newPostMeta(), ...odd.meta, moments: false }, odd.doc);
+    expect(file.match(/^moments:/gm)).toHaveLength(1);
+    expect(file).toContain("redirect_from: /old\nmoments: false\n---");
+  });
+
   it("drops what the blog no longer reads", () => {
     const post = "---\ntitle: X\nauthor: steve\ncategories: [Vietnamese]\nmath: true\nrender_with_liquid: false\ndate: 2026-10-11 09:00 +0700\n---\nText\n";
     expect(written(post)).toBe("---\ntitle: X\ndate: 2026-10-11 09:00 +0700\nlang: vi\ntags: []\npin: false\ntoc: true\n---\nText\n");

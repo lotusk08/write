@@ -493,6 +493,37 @@ function markShortcut(root: HTMLElement): boolean {
   return true;
 }
 
+/**
+ * Backspace or Delete merging a heading and a paragraph leaves, in Chrome, the text that moved in a span styled with
+ * the block it came from — a paragraph line drawn at a heading's size, though the blog draws it plain. The span goes,
+ * and the caret stays where it was.
+ */
+function unstyleMerge(root: HTMLElement): boolean {
+  const block = currentTextblock(root);
+  const spans = block
+    ? [...block.querySelectorAll<HTMLElement>("span[style]")].filter((span) =>
+        /font-size|letter-spacing|font-variant/.test(span.getAttribute("style") ?? ""),
+      )
+    : [];
+  if (!spans.length) {
+    return false;
+  }
+  const selection = window.getSelection();
+  const at = selection?.rangeCount ? selection.getRangeAt(0) : null;
+  const caret = at ? ([at.startContainer, at.startOffset] as const) : null;
+  for (const span of spans) {
+    span.replaceWith(...span.childNodes);
+  }
+  if (caret && caret[0].isConnected) {
+    const range = document.createRange();
+    range.setStart(caret[0], caret[1]);
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+  return true;
+}
+
 /** After the editor has applied a keystroke: Markdown shortcuts, and a new block not inheriting the old one's layout. */
 export function handleInput(root: HTMLElement, event: InputEvent): void {
   if (!event.isComposing) {
@@ -511,6 +542,12 @@ export function handleInput(root: HTMLElement, event: InputEvent): void {
       block?.setAttribute("data-checked", "false");
     }
     if (inherited.length || ticked) {
+      notify(root);
+    }
+    return;
+  }
+  if (event.inputType.startsWith("delete")) {
+    if (unstyleMerge(root)) {
       notify(root);
     }
     return;

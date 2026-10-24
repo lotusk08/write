@@ -3,21 +3,29 @@ import { Editor, type EditorInstance } from "@erag/text-editor-vue";
 import "@erag/text-editor-vue/style.css";
 import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { docToHtml, htmlToDoc } from "../editor/bridge.ts";
+import { clipboardOf, copiedBlocks, MEDIA } from "../editor/clipboard.ts";
 import {
   askLink,
+  captionOf,
   continueAfter,
+  type DropSpot,
+  insertDoc,
   insertImages,
   leaveGallery,
+  moveBlock,
   moveGalleryPhoto,
   notify,
   placeCaret,
   removeGalleryPhoto,
+  selectedFigure,
   selectFigure,
+  selectionIn,
   setImageAlt,
   setImageCaption,
   toggleSection,
   toggleTask,
 } from "../editor/commands.ts";
+import { dropSpot, markSpot } from "../editor/drag.ts";
 import { editorInit } from "../editor/config.ts";
 import { decorate, Previews, releasePhotos } from "../editor/decorate.ts";
 import type { JSONContent } from "../editor/doc.ts";
@@ -45,6 +53,11 @@ let timer: number | undefined;
 let frame = 0;
 let pending: string | null = null;
 let toolsFrame = 0;
+/** The photo or gallery being dragged inside the post, and the line showing where it would land. */
+let dragged: HTMLElement | null = null;
+const dropMark = document.createElement("div");
+dropMark.className = "drop-mark";
+dropMark.hidden = true;
 
 function refreshTools(): void {
   window.cancelAnimationFrame(toolsFrame);
@@ -111,6 +124,10 @@ function onReady(element: HTMLElement): void {
   document.execCommand("defaultParagraphSeparator", false, "p");
   element.setAttribute("lang", props.lang);
   element.addEventListener("paste", onPaste, true);
+  element.addEventListener("dragstart", onDragStart, true);
+  element.addEventListener("dragover", onDragOver, true);
+  element.addEventListener("dragleave", onDragLeave, true);
+  element.addEventListener("dragend", endDrag, true);
   element.addEventListener("drop", onDrop, true);
   element.addEventListener("mousedown", onMousedown);
   element.addEventListener("keydown", onShortcut, true);
@@ -175,8 +192,7 @@ function onKeydown(event: KeyboardEvent): void {
 
 /** The photo with its caption line, the blocks a selected photo stands for. */
 function withCaption(figure: HTMLElement): Element {
-  const next = figure.nextElementSibling;
-  return next?.matches("p[data-join]") ? next : figure;
+  return captionOf(figure) ?? figure;
 }
 
 /** Typing on a selected photo writes in the paragraph after it, or after its gallery. */
@@ -303,13 +319,13 @@ function imageFiles(list: FileList | DataTransferItemList | null | undefined): F
   return files;
 }
 
-function addImages(files: File[]): void {
+function addImages(files: File[], spot: DropSpot | null = null): void {
   const element = root.value;
   if (!element || !files.length) {
     return;
   }
   const mine = epoch;
-  void insertImages(element, files, () => mine === epoch && element.isConnected).catch((error: unknown) => {
+  void insertImages(element, files, () => mine === epoch && element.isConnected, spot).catch((error: unknown) => {
     window.alert(
       `Could not store the image${files.length === 1 ? "" : "s"}: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -317,6 +333,13 @@ function addImages(files: File[]): void {
 }
 
 function onPaste(event: ClipboardEvent): void {
+  const own = copiedBlocks(event.clipboardData?.getData("text/html") ?? "");
+  if (own) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    run((element) => insertDoc(element, own));
+    return;
+  }
   const files = imageFiles(event.clipboardData?.items);
   if (files.length) {
     event.preventDefault();
@@ -327,27 +350,110 @@ function onPaste(event: ClipboardEvent): void {
   }
 }
 
+/** Whether a selection takes the whole of a node; one that only ends at its edge, as a triple click does, does not. */
+function holds(range: Range, node: Node): boolean {
+  const parent = node.parentNode;
+  if (!parent) {
+    return false;
+  }
+  const index = Array.prototype.indexOf.call(parent.childNodes, node) as number;
+  return range.comparePoint(parent, index) === 0 && range.comparePoint(parent, index + 1) === 0;
+}
+
+/**
+ * A copy or a cut that takes a photo, a gallery or a player is written as the editor's own blocks, so pasting it here
+ * brings it back whole: the selected photo, or a selection running over one. Anything else is the browser's.
+ */
+function onClipboard(event: ClipboardEvent): void {
+  const element = root.value;
+  if (!element || !event.clipboardData) {
+    return;
+  }
+  const figure = selectedFigure(element);
+  const range = selectionIn(element);
+  const photo = figure && document.activeElement === figure ? figure : null;
+  const media = !photo && range && !range.collapsed && [...element.querySelectorAll(MEDIA)].some((node) => holds(range, node));
+  if (!photo && !media) {
+    return;
+  }
+  const caption = photo && captionOf(photo);
+  const copied = photo ? (caption ? [photo, caption] : [photo]) : [range!.cloneContents()];
+  const { html, text } = clipboardOf(copied);
+  event.clipboardData.setData("text/html", html);
+  event.clipboardData.setData("text/plain", text);
+  event.preventDefault();
+  if (event.type !== "cut") {
+    return;
+  }
+  if (photo?.closest("[data-gallery]")) {
+    editPhoto(0);
+  } else if (photo) {
+    removePhoto(element, photo);
+  } else {
+    document.execCommand("delete");
+  }
+}
+
+/** A photo, or a gallery by its label, is dragged to a new place in the post. */
+function onDragStart(event: DragEvent): void {
+  const element = root.value;
+  const target = event.target instanceof Element ? event.target : null;
+  const handle = target?.closest<HTMLElement>("figure[data-image], .editor-gallery-label");
+  if (!element || !handle || !event.dataTransfer || target?.closest(".editor-image-tools")) {
+    return;
+  }
+  dragged = handle.matches("[data-image]") ? handle : handle.closest<HTMLElement>("[data-gallery]");
+  event.dataTransfer.effectAllowed = "move";
+  event.dataTransfer.setData("text/plain", "");
+}
+
+function onDragOver(event: DragEvent): void {
+  const element = root.value;
+  if (!element || !event.dataTransfer || (!dragged && !event.dataTransfer.types.includes("Files"))) {
+    return;
+  }
+  event.preventDefault();
+  event.stopImmediatePropagation();
+  event.dataTransfer.dropEffect = dragged ? "move" : "copy";
+  markSpot(dropMark, dropSpot(element, event.clientX, event.clientY, dragged));
+}
+
+function onDragLeave(event: DragEvent): void {
+  if (!root.value?.contains(event.relatedTarget as Node | null)) {
+    dropMark.hidden = true;
+  }
+}
+
+function endDrag(): void {
+  dragged = null;
+  dropMark.hidden = true;
+}
+
+/** A drop lands where the line showed it: a dragged photo or gallery is moved, photos from the desktop are added. */
 function onDrop(event: DragEvent): void {
+  const element = root.value;
+  if (!element) {
+    return;
+  }
+  const spot = dropSpot(element, event.clientX, event.clientY, dragged);
+  const moving = dragged;
+  endDrag();
+  if (moving) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (spot) {
+      run((root) => moveBlock(root, moving, spot));
+    }
+    return;
+  }
   const files = imageFiles(event.dataTransfer?.files);
   if (!files.length) {
     return;
   }
   event.preventDefault();
   event.stopImmediatePropagation();
-  const element = root.value;
-  const target = event.target as Element;
-  const photo =
-    target.closest<HTMLElement>("[data-gallery] figure[data-image]") ??
-    target.closest("[data-gallery]")?.querySelector<HTMLElement>("figure[data-image]:last-child");
-  if (element) {
-    selectFigure(element, photo ?? null);
-  }
-  const caret = !photo && document.caretRangeFromPoint?.(event.clientX, event.clientY);
-  if (caret) {
-    window.getSelection()?.removeAllRanges();
-    window.getSelection()?.addRange(caret);
-  }
-  addImages(files);
+  selectFigure(element, null);
+  addImages(files, spot);
 }
 
 function run(command: (element: HTMLElement) => unknown): void {
@@ -368,9 +474,17 @@ watch(
   () => redecorate(),
 );
 
-onMounted(() => document.addEventListener("selectionchange", refreshTools));
+onMounted(() => {
+  document.addEventListener("selectionchange", refreshTools);
+  document.addEventListener("copy", onClipboard);
+  document.addEventListener("cut", onClipboard);
+  document.body.append(dropMark);
+});
 onBeforeUnmount(() => {
   document.removeEventListener("selectionchange", refreshTools);
+  document.removeEventListener("copy", onClipboard);
+  document.removeEventListener("cut", onClipboard);
+  dropMark.remove();
   window.cancelAnimationFrame(frame);
   window.cancelAnimationFrame(toolsFrame);
   queueMicrotask(releasePhotos);

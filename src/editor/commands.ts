@@ -121,7 +121,7 @@ export function selectFigure(root: HTMLElement, figure: HTMLElement | null): voi
   }
 }
 
-function selectedFigure(root: HTMLElement): HTMLElement | null {
+export function selectedFigure(root: HTMLElement): HTMLElement | null {
   const figure = selectedFigures.get(root) ?? null;
   return figure && root.contains(figure) ? figure : null;
 }
@@ -436,69 +436,124 @@ export function setAllCollapsibles(root: HTMLElement, open: boolean): void {
 
 // --------------------------------------------------------------- insert blocks
 
+/** Where blocks go in: after the selected photo, or at the block the caret is in. */
+interface Place {
+  figure: HTMLElement | null;
+  block: HTMLElement | null;
+}
+
+function placeOf(root: HTMLElement): Place {
+  const figure = selectedFigure(root);
+  return { figure, block: figure ? null : flowBlock(root) };
+}
+
 /**
  * Inserts whole blocks where the caret is, the way the old `insertBlocks` did:
  * over an empty paragraph it takes the paragraph's place, otherwise it goes
  * after the block — after a selected photo and whatever joins it (its caption,
  * the rest of its row), so neither is cut in two — and the caret moves on to a
  * paragraph after it, so the next key typed does not land on what was placed.
+ * Given a `place` taken earlier, the blocks go there; `follow` false leaves the
+ * caret and the selected photo where the writer has since put them.
  */
-function insertBlocks(root: HTMLElement, html: string): boolean {
+function insertBlocks(root: HTMLElement, html: string, place: Place = placeOf(root), follow = true): boolean {
   const fragment = fragmentOf(html);
   const inserted = [...fragment.children];
   const last = inserted[inserted.length - 1];
   if (!last) {
     return false;
   }
-  const figure = selectedFigure(root);
+  const figure = place.figure && root.contains(place.figure) ? place.figure : null;
   const gallery = figure?.closest("[data-gallery]");
   if (figure && gallery && inserted.every((node) => node.hasAttribute("data-image"))) {
     figure.after(fragment);
-    continueAfter(gallery);
-    selectFigure(root, last as HTMLElement);
+    if (follow) {
+      continueAfter(gallery);
+      selectFigure(root, last as HTMLElement);
+    }
     notify(root);
     return true;
   }
-  let after: Element | null = figure;
+  // Anything but photos pasted on a gallery's photo goes after the gallery, never into its strip.
+  let after: Element | null = gallery ?? figure;
   while (after?.nextElementSibling?.hasAttribute("data-join")) {
     after = after.nextElementSibling;
   }
-  const block = after ?? flowBlock(root);
+  const block = after ?? (place.block && root.contains(place.block) ? place.block : flowBlock(root));
+  const caretIn = Boolean(block?.contains(selectionIn(root)?.startContainer ?? null));
   if (!block) {
     root.append(fragment);
-  } else if (!after && isEmptyParagraph(block)) {
+  } else if (!after && isEmptyParagraph(block) && (follow || !caretIn)) {
     block.replaceWith(fragment);
   } else {
     block.after(fragment);
   }
-  selectFigure(root, null);
-  continueAfter(last);
+  if (follow) {
+    selectFigure(root, null);
+    continueAfter(last);
+  }
   notify(root);
   return true;
 }
 
-/** Stores the photos in this browser, then inserts them — several at once as a gallery, the blog's only way to show photos together. */
+function caretSpot(root: HTMLElement): [Node, number] | null {
+  const range = selectionIn(root);
+  return range ? [range.startContainer, range.startOffset] : null;
+}
+
+/**
+ * Stores the photos in this browser, then inserts them — several at once as a gallery, the blog's only way to show
+ * photos together. They go where they were added; a writer who typed or moved the caret while they were being stored
+ * keeps the caret, where it used to jump to below the photos mid-word.
+ */
 export async function insertImages(
   root: HTMLElement,
   files: File[],
   stillHere: () => boolean,
+  spot: DropSpot | null = null,
 ): Promise<void> {
   if (!files.length) {
     return;
   }
-  const stored = await Promise.all(files.map((file) => storeImageFile(file)));
+  const place = placeOf(root);
+  const spotAt = caretSpot(root);
+  let edited = false;
+  const onInput = () => (edited = true);
+  root.addEventListener("input", onInput);
+  let stored: Awaited<ReturnType<typeof storeImageFile>>[];
+  try {
+    stored = await Promise.all(files.map((file) => storeImageFile(file)));
+  } finally {
+    root.removeEventListener("input", onInput);
+  }
   if (!stillHere()) {
     await Promise.all(stored.map((image) => imageStore.remove(image.id)));
     window.alert("Not added: the draft changed while the photo was being stored. Add it again.");
     return;
   }
-  const inGallery = Boolean(selectedFigure(root)?.closest("[data-gallery]"));
+  const now = caretSpot(root);
+  const still = !edited && now?.[0] === spotAt?.[0] && now?.[1] === spotAt?.[1];
   const images: JSONContent[] = stored.map((image) => ({
     type: "image",
     attrs: { src: `${LOCAL_PREFIX}${image.id}`, alt: "", title: null },
   }));
+  if (spot && root.contains(spot.ref)) {
+    const html = docToHtml({ type: "doc", content: spot.kind === "photo" || images.length < 2 ? images : [{ type: "gallery", content: images }] });
+    putAt(root, [...fragmentOf(html).children] as HTMLElement[], spot);
+    return;
+  }
+  const inGallery = Boolean(place.figure?.closest("[data-gallery]"));
   const content = images.length > 1 && !inGallery ? [{ type: "gallery", content: images }] : images;
-  insertBlocks(root, docToHtml({ type: "doc", content }));
+  insertBlocks(root, docToHtml({ type: "doc", content }), place, still);
+}
+
+/** Pastes blocks copied in the editor — photos, galleries, players — where the caret or the selected photo is. */
+export function insertDoc(root: HTMLElement, doc: JSONContent): boolean {
+  const range = selectionIn(root);
+  if (range && !range.collapsed && !selectedFigure(root)) {
+    range.deleteContents();
+  }
+  return insertBlocks(root, docToHtml(doc));
 }
 
 export function insertEmbed(root: HTMLElement, embed: { platform: string; id: string }): boolean {
@@ -539,8 +594,7 @@ export function setGallery(root: HTMLElement): boolean {
   if (run.length < 2) {
     return false;
   }
-  const gallery = fragmentOf(docToHtml({ type: "doc", content: [{ type: "gallery", content: [] }] }))
-    .firstElementChild as HTMLElement;
+  const gallery = newGallery();
   run[0].before(gallery);
   gallery.querySelector(".editor-gallery-strip")?.append(...run.map(plainImage));
   selectFigure(root, null);
@@ -601,19 +655,135 @@ export function removeGalleryPhoto(root: HTMLElement): boolean {
   }
   const next = (figure.nextElementSibling ?? figure.previousElementSibling) as HTMLElement | null;
   figure.remove();
-  const left = [...gallery.querySelectorAll<HTMLElement>("[data-image]")];
-  if (left.length > 1 && next) {
+  const place = settleGallery(gallery);
+  if (!place && next) {
     selectFigure(root, next);
     next.focus({ preventScroll: true });
-  } else {
-    const place = left[0] ? plainImage(left[0]) : emptyParagraph();
-    gallery.replaceWith(place);
+  } else if (place) {
     selectFigure(root, null);
-    if (left[0]) {
+    if (place.matches("[data-image]")) {
       continueAfter(place);
     } else {
       placeCaret(place);
     }
+  }
+  notify(root);
+  return true;
+}
+
+// ------------------------------------------------------------- drag and drop
+
+/** Where a dragged photo or block lands: beside a photo (one alone becomes a gallery), or above or below a block. */
+export interface DropSpot {
+  kind: "photo" | "block";
+  ref: HTMLElement;
+  side: "before" | "after";
+}
+
+function newGallery(): HTMLElement {
+  return fragmentOf(docToHtml({ type: "doc", content: [{ type: "gallery", content: [] }] })).firstElementChild as HTMLElement;
+}
+
+/** The italic caption line joined under a photo, from drafts written before captions were titles; none, null. */
+export function captionOf(figure: HTMLElement): Element | null {
+  const next = figure.nextElementSibling;
+  return next?.matches("p[data-join]") ? next : null;
+}
+
+/** An italic caption line left behind by its photo stands on its own. */
+function freeCaption(figure: HTMLElement): void {
+  const caption = captionOf(figure);
+  caption?.removeAttribute("data-join");
+  caption?.removeAttribute("data-same-line");
+}
+
+/** The gallery a photo is in; a photo alone is put in a new one, for another to join it. */
+function galleryOf(figure: HTMLElement): HTMLElement {
+  const found = figure.closest<HTMLElement>("[data-gallery]");
+  if (found) {
+    return found;
+  }
+  const gallery = newGallery();
+  freeCaption(figure);
+  figure.before(gallery);
+  gallery.querySelector(".editor-gallery-strip")?.append(plainImage(figure));
+  return gallery;
+}
+
+/** A gallery left with one photo is a plain image, and one left with none an empty paragraph; returns what took its place. */
+function settleGallery(gallery: HTMLElement | null): HTMLElement | null {
+  if (!gallery?.isConnected) {
+    return null;
+  }
+  const left = [...gallery.querySelectorAll<HTMLElement>("[data-image]")];
+  if (left.length > 1) {
+    return null;
+  }
+  const place = left[0] ? plainImage(left[0]) : emptyParagraph();
+  gallery.replaceWith(place);
+  return place;
+}
+
+/** Puts photos beside a photo, in its gallery, a photo alone becoming a gallery of them both. */
+function besidePhoto(spot: DropSpot, photos: HTMLElement[]): void {
+  galleryOf(spot.ref);
+  spot.ref[spot.side](...photos.map(plainImage));
+}
+
+/** Leaves a paragraph to type in after a block that would otherwise end the post. */
+function roomAfter(root: HTMLElement, node: Element): void {
+  const top = node.closest("[data-gallery]") ?? node;
+  if (top.parentElement === root && !top.nextElementSibling) {
+    top.after(emptyParagraph());
+  }
+}
+
+/** Puts new blocks at a drop spot, photos beside a photo going into its gallery, and selects the last photo placed. */
+function putAt(root: HTMLElement, nodes: HTMLElement[], spot: DropSpot): void {
+  const last = nodes[nodes.length - 1];
+  if (!last) {
+    return;
+  }
+  if (spot.kind === "photo") {
+    besidePhoto(spot, nodes);
+  } else {
+    spot.ref[spot.side](...nodes);
+  }
+  roomAfter(root, last);
+  selectFigure(root, last.matches("[data-image]") ? last : null);
+  notify(root);
+}
+
+/**
+ * Moves a photo or a whole gallery to a drop spot: a photo between two others of a gallery, into another gallery or
+ * beside a photo alone, which makes a gallery of the two, or out between blocks of the post. The gallery it left is
+ * settled, as removing a photo does.
+ */
+export function moveBlock(root: HTMLElement, dragged: HTMLElement, spot: DropSpot): boolean {
+  const photo = dragged.matches("[data-image]");
+  if (spot.ref === dragged || dragged.contains(spot.ref) || (spot.kind === "photo" && !photo) || !root.contains(dragged)) {
+    return false;
+  }
+  const from = photo ? dragged.closest<HTMLElement>("[data-gallery]") : null;
+  const caption = photo && !from ? captionOf(dragged) : null;
+  if (spot.ref === caption) {
+    return false;
+  }
+  if (spot.kind === "photo") {
+    freeCaption(dragged);
+    besidePhoto(spot, [dragged]);
+  } else if (from || !photo) {
+    spot.ref[spot.side](photo ? plainImage(dragged) : dragged);
+  } else {
+    // A photo alone keeps what is written on it and takes its caption line along; it only leaves the row it was in.
+    dragged.removeAttribute("data-join");
+    spot.ref[spot.side](...(caption ? [dragged, caption] : [dragged]));
+  }
+  settleGallery(from);
+  roomAfter(root, dragged);
+  selectFigure(root, photo ? dragged : null);
+  if (photo) {
+    dragged.focus({ preventScroll: true });
   }
   notify(root);
   return true;

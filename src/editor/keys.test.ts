@@ -383,3 +383,14 @@ describe("embeds from a link", () => {
     expect(embedFromUrl("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC")).toBeNull();
   });
 });
+
+describe("a heading merged into a paragraph", () => {
+  it("leaves no span styled as the heading, and the caret where it was", () => {
+    root.innerHTML = '<p>Some text<span style="font-size: 1.28em; letter-spacing: -0.02em; font-weight: 600;">Head</span></p>';
+    caretAfter("Some text");
+    handleInput(root, new InputEvent("input", { inputType: "deleteContentBackward" }));
+    expect(root.innerHTML).toBe("<p>Some textHead</p>");
+    expect(window.getSelection()?.getRangeAt(0).startOffset).toBe("Some text".length);
+    expect(markdown()).toBe("Some textHead");
+  });
+});

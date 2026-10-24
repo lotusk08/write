@@ -629,7 +629,18 @@ function yamlList(key: string, values: string[]): string[] {
   return [`${key}:`, ...values.map((value) => `  - ${yamlString(value)}`)];
 }
 
-function buildFrontMatter(meta: PostMeta): string {
+/** A field kept raw, with the lines under it, taken out: a `moments` the toggle has since set must not be written twice. */
+function withoutKey(lines: string[], key: string): string[] {
+  let skipping = false;
+  return lines.filter((line) => {
+    if (/^\S/.test(line)) {
+      skipping = line.startsWith(`${key}:`);
+    }
+    return !skipping;
+  });
+}
+
+export function buildFrontMatter(meta: PostMeta): string {
   const lines = ["---", `title: ${yamlString(meta.title)}`];
   if (meta.description.trim()) {
     lines.push(`description: ${yamlString(meta.description)}`);
@@ -649,11 +660,15 @@ function buildFrontMatter(meta: PostMeta): string {
       lines.push(`  lqip: ${yamlString(meta.cover.lqip)}`);
     }
   }
-  if (meta.extra?.length) {
-    lines.push(...meta.extra);
-    if (meta.extra[meta.extra.length - 1] === "") {
+  const extra = typeof meta.moments === "boolean" ? withoutKey(meta.extra ?? [], "moments") : meta.extra;
+  if (extra?.length) {
+    lines.push(...extra);
+    if (extra[extra.length - 1] === "") {
       lines.push("");
     }
+  }
+  if (typeof meta.moments === "boolean") {
+    lines.push(`moments: ${meta.moments}`);
   }
   lines.push("---");
   return lines.join("\n");

@@ -20,15 +20,18 @@ const toggle = (id: ExportFormat) => {
 
 <template>
   <div class="export-formats" role="group" aria-label="Formats to export">
-    <label
+    <button
       v-for="format in FORMATS"
       :key="format.id"
+      type="button"
       :class="['export-format', { 'is-on': chosen.includes(format.id) }]"
-      :title="format.hint"
+      :title="`${format.label} — ${format.hint}`"
+      :aria-label="format.label"
+      :aria-pressed="chosen.includes(format.id)"
+      :disabled="exporting"
+      @click="toggle(format.id)"
     >
       <Icon :name="format.icon" :size="22" />
-      <span class="export-format-label">{{ format.label }}</span>
-      <input type="checkbox" :checked="chosen.includes(format.id)" :disabled="exporting" @change="toggle(format.id)" />
-    </label>
+    </button>
   </div>
 </template>

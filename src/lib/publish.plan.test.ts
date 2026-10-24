@@ -45,12 +45,12 @@ describe("buildPublishPlan", () => {
     );
     expect(sitePhotos).toHaveBeenCalledWith(["src/posts/2026-10-11-trip.md"]);
     expect(plan.renames.map((rename) => rename.path)).toEqual([
-      "public/assets/img/post/trip-bien.jpg",
-      "public/assets/img/post/trip-nui.webp",
+      "public/assets/img/post/bien.jpg",
+      "public/assets/img/post/nui.webp",
     ]);
     expect(plan.remove).toEqual(["public/assets/img/post/IMG 1.jpg"]);
-    expect(plan.redirects).toEqual([["/assets/img/post/IMG%201.webp", "/assets/img/post/trip-bien.webp"]]);
-    expect(plan.markdown).toContain("/assets/img/post/trip-bien.jpg");
+    expect(plan.redirects).toEqual([["/assets/img/post/IMG%201.webp", "/assets/img/post/bien.webp"]]);
+    expect(plan.markdown).toContain("/assets/img/post/bien.jpg");
     expect(plan.expect).toEqual([{ path: "src/posts/2026-10-11-trip.md", sha: "c".repeat(40) }]);
   });
 

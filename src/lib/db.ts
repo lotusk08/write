@@ -1,5 +1,6 @@
 import type { JSONContent } from "../editor/doc.ts";
 import type { PostMeta } from "../../shared/types.ts";
+import type { SourceText } from "./source.ts";
 
 export interface Draft {
   id: string;
@@ -16,6 +17,8 @@ export interface Draft {
   shareToken?: string;
   shareOwner?: string | boolean;
   shareSeed?: Uint8Array;
+  /** The Markdown last typed in the source view or opened from the blog, shown again while the post reads the same. */
+  sourceText?: SourceText;
 }
 
 export interface StoredImage {

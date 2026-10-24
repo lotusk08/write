@@ -113,8 +113,7 @@ export function useOutline(
       found = entry.key;
     }
     active.value = found ?? entries.value[0]?.key ?? null;
-    const title = container.querySelector(".title-input");
-    scrolled.value = title ? title.getBoundingClientRect().bottom < edge : container.scrollTop > 0;
+    scrolled.value = container.scrollTop > 0;
   };
 
   const schedule = () => {

@@ -19,6 +19,8 @@ export interface PostMeta {
   tags: string[];
   pin: Pin;
   toc: boolean;
+  /** `false` keeps the post's photos off the blog's Moments wall; unset, a post shares them. */
+  moments?: boolean;
   cover: { path: string; alt: string; lqip?: string } | null;
   extra?: string[];
 }

@@ -27,7 +27,6 @@
   --radius-lg: 14px;
   --radius-pill: 999px;
 
-  --text-3xs: 10px;
   --text-2xs: 10.5px;
   --text-xs: 11.5px;
   --text-sm: 12px;
@@ -153,7 +152,7 @@ textarea {
   width: min(380px, calc(100vw - 24px));
   flex-direction: column;
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   background: var(--panel);
   box-shadow: var(--shadow-pop);
   overflow: hidden;
@@ -167,8 +166,26 @@ textarea {
   border-bottom: 1px solid var(--border);
 }
 
-.popover-head > :first-child {
-  margin-right: auto;
+/* Only a phone's sheet has a head: its close button, since the sheet covers the ⌘ button that opened it. */
+.popover-head {
+  justify-content: flex-end;
+}
+
+/* Focus mode, the site's files and the theme, on one row under the main buttons. */
+.foot-tools {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.foot-tools .site-open {
+  min-width: 0;
+  flex: 1;
+}
+
+.foot-tools > .btn.icon {
+  flex: none;
+  color: var(--muted);
 }
 
 .popover-body {
@@ -177,10 +194,56 @@ textarea {
   overflow-y: auto;
 }
 
+/* Sections are set apart by space alone. */
 .section + .section {
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-  margin-top: 12px;
+  margin-top: 18px;
+}
+
+/* The menu's fields are a line under the text, not a box. */
+.popover-body .input,
+.popover-body .tokens {
+  border: none;
+  border-bottom: 1px solid var(--border-strong);
+  border-radius: 0;
+  background: none;
+  padding-inline: 0;
+  box-shadow: none;
+  transition: border-color 120ms ease;
+}
+
+.popover-body .input:focus,
+.popover-body .tokens:focus-within {
+  border-bottom-color: var(--accent);
+  box-shadow: 0 1px 0 var(--accent);
+}
+
+.popover-body .field-row {
+  display: flex;
+  gap: 12px;
+}
+
+.popover-body .meta-title {
+  min-width: 0;
+  flex: 1;
+  font-weight: 600;
+}
+
+.popover-body .meta-slug {
+  width: 38%;
+  flex: none;
+  color: var(--muted);
+}
+
+.popover-body .meta-description {
+  display: block;
+  height: auto;
+  min-height: var(--control-h);
+  padding-block: 7px;
+  overflow: hidden;
+  color: var(--muted);
+  font-family: inherit;
+  line-height: 1.45;
+  resize: none;
 }
 
 .popover-body .field {
@@ -191,9 +254,44 @@ textarea {
   margin-bottom: 0;
 }
 
-.post-toc {
-  margin-top: 12px;
+/* The post's two switches, drawn as the export formats are: on, the accent on a soft ground. */
+.post-options {
+  display: grid;
+  gap: 6px;
+  grid-template-columns: 1fr 1fr;
+  margin-top: 10px;
 }
+
+.post-option {
+  display: flex;
+  height: var(--control-h);
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 10px;
+  border: none;
+  border-radius: var(--radius);
+  background: var(--sunken);
+  color: var(--muted);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  transition: background 120ms ease, color 120ms ease;
+}
+
+/* The menu's toggle tiles — Contents and Moments, the export formats — share one look: on, the accent on a soft ground. */
+.post-option:not(.is-on, :disabled):hover,
+.export-format:not(.is-on, :disabled):hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.post-option.is-on,
+.export-format.is-on {
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.post-option:focus-visible,
 
 .popover-foot {
   display: grid;
@@ -258,43 +356,26 @@ textarea {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
+/* A format is its icon alone: ticked, it takes the accent and a soft ground; the name is the tooltip. */
 .export-format {
   display: grid;
-  justify-items: center;
-  gap: 4px;
-  padding: 6px 2px;
+  height: var(--control-h);
+  place-items: center;
+  padding: 0;
+  border: none;
   border-radius: var(--radius);
-  color: var(--muted);
+  background: none;
+  color: var(--faint);
   cursor: pointer;
-  font-size: var(--text-3xs);
-  font-weight: 300;
   transition: background 120ms ease, color 120ms ease;
 }
 
-.export-format:hover {
-  background: var(--hover);
-  color: var(--text);
+.export-format:disabled {
+  cursor: default;
+  opacity: 0.6;
 }
 
-.export-format.is-on svg {
-  color: var(--accent);
-}
-
-.export-format-label {
-  max-width: 100%;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.export-format input {
-  width: 15px;
-  height: 15px;
-  margin: 0;
-  accent-color: var(--accent);
-}
-
-.export-format:has(input:focus-visible) {
+.export-format:focus-visible {
   box-shadow: 0 0 0 3px var(--ring);
   outline: 1px solid var(--accent);
 }
@@ -444,7 +525,7 @@ textarea {
   gap: 9px;
   padding: 10px 5px 12px;
   border: 1px solid var(--border);
-  border-radius: var(--radius);
+  border-radius: var(--radius-xs);
   background: var(--panel);
   color: var(--faint);
   cursor: pointer;
@@ -688,8 +769,15 @@ textarea {
   align-items: center;
   padding: 6px 10px;
   border-top: 1px solid var(--border);
-  border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+  border-radius: 0 0 var(--radius) var(--radius);
   background: var(--panel);
+  transition: opacity 240ms ease;
+}
+
+/* Faded while the writer types; the mouse moving, a tap, or Tab reaching a tool brings it back. It still takes a
+   click or a tap, so one meant for a tool is not lost to the text under it. */
+.card-dock.is-idle:not(:focus-within) {
+  opacity: 0;
 }
 
 .card-dock .source-note {
@@ -885,9 +973,13 @@ textarea {
   padding: 32px 20px 64px;
 }
 
+/*
+ * Below 1200px the contents are a bar over the page, shown whenever the post has a heading. Shown only once the page
+ * had scrolled, it never appeared in a post too short to scroll, which is every post while it is being written.
+ */
 .toc-bar {
   position: absolute;
-  top: -3rem;
+  top: 0;
   right: 0;
   left: 0;
   z-index: 3;
@@ -896,16 +988,14 @@ textarea {
   justify-content: space-between;
   gap: 8px;
   padding: 6px 8px 10px 16px;
-  background: linear-gradient(var(--bg) 70%, transparent);
   color: var(--muted);
   font-size: var(--text-md);
-  visibility: hidden;
-  transition: top 200ms ease-in-out;
+  transition: background 200ms ease;
 }
 
-.toc-bar.is-visible {
-  top: 0;
-  visibility: visible;
+/* Over text scrolled under it, the bar takes the page's ground. */
+.toc-bar.is-scrolled {
+  background: linear-gradient(var(--bg) 70%, transparent);
 }
 
 .toc-label {
@@ -1039,6 +1129,12 @@ textarea {
   }
 }
 
+@media (width < 1200px) {
+  .main:has(> .toc-bar) .editor-page {
+    padding-top: calc(var(--tool-size) + 24px);
+  }
+}
+
 @media (width >= 1200px) {
   .toc-bar {
     display: none;
@@ -1073,7 +1169,7 @@ textarea {
 
 .editor-card {
   border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius);
   background: var(--panel);
   box-shadow: var(--shadow-card);
 }
@@ -1093,46 +1189,6 @@ textarea {
 .editor-body > * {
   max-width: 700px;
   margin-inline: auto;
-}
-
-.title-input {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: none;
-  margin-bottom: 6px;
-  background: none;
-  font-family: var(--font-prose);
-  font-size: 30px;
-  font-weight: 650;
-  letter-spacing: -0.025em;
-  line-height: 1.2;
-}
-
-.description-input {
-  display: block;
-  width: 100%;
-  padding: 0;
-  border: none;
-  margin-bottom: 20px;
-  background: none;
-  color: var(--muted);
-  font-family: var(--font-prose);
-  font-size: var(--text-lg);
-  line-height: 1.55;
-  overflow: hidden;
-  resize: none;
-}
-
-.title-input:focus,
-.description-input:focus {
-  outline: none;
-}
-
-.title-input::placeholder,
-.description-input::placeholder {
-  color: var(--placeholder);
-  opacity: 1;
 }
 
 .editor-host .post-body {
@@ -1663,6 +1719,20 @@ textarea {
   object-fit: cover;
 }
 
+.editor-host .post-body figure[data-image] img,
+.editor-gallery-label {
+  cursor: grab;
+}
+
+/* Where a dragged photo or gallery, or a photo from the desktop, would land. */
+.drop-mark {
+  position: fixed;
+  z-index: 40;
+  border-radius: 2px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
 .editor-gallery.is-selected {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
@@ -1853,22 +1923,6 @@ textarea {
   color: var(--text);
 }
 
-.switch {
-  display: flex;
-  gap: 9px;
-  align-items: flex-start;
-  cursor: pointer;
-  font-size: var(--text-md);
-}
-
-.switch input {
-  width: 15px;
-  height: 15px;
-  flex: none;
-  margin-top: 1px;
-  accent-color: var(--accent);
-}
-
 .toggle {
   position: relative;
   display: grid;
@@ -1920,6 +1974,7 @@ textarea {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .card-dock,
   .toggle-knob,
   .publish-details summary::before {
     transition: none;
@@ -2428,10 +2483,6 @@ textarea {
     width: 100%;
   }
 
-  .title-input {
-    font-size: 26px;
-  }
-
   .card-dock {
     gap: 2px;
     padding: 4px;
@@ -2462,7 +2513,6 @@ textarea {
   .publish-details summary,
   .publish-progress,
   .menu button:not(.btn),
-  .switch,
   .btn.tiny {
     min-height: var(--control-h);
   }
@@ -2471,10 +2521,6 @@ textarea {
     position: absolute;
     inset: -8px 0;
     content: "";
-  }
-
-  .switch {
-    align-items: center;
   }
 
   .editor-image-alt {
@@ -2531,7 +2577,6 @@ textarea {
     font-size: var(--text-base);
   }
 
-  .description-input,
   .source-editor,
   .input,
   .token-input,

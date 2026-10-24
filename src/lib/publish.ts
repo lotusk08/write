@@ -125,14 +125,25 @@ function altSlug(alt: string): string {
   return (cut.includes("-") ? cut.slice(0, cut.lastIndexOf("-")) : cut.slice(0, NAME_LENGTH)).replace(/-+$/, "");
 }
 
-export function photoName(slug: string, alt: string, taken: Set<string>): string {
-  const words = altSlug(alt);
-  let name = words ? `${slug}-${words}` : "";
-  for (let next = words ? 2 : 1; !name || taken.has(name); next += 1) {
-    name = words ? `${slug}-${words}-${next}` : `${slug}-${next}`;
+/**
+ * A photo is named from its alt alone, `ho-guom`, then `ho-guom-2` …; one with no alt is `<slug>-1` …, and the cover
+ * with none `<slug>-cover`, since a bare number or `cover` would say nothing of the post.
+ */
+export function photoName(slug: string, alt: string, taken: Set<string>, unnamed = ""): string {
+  const base = altSlug(alt) || (unnamed ? `${slug}-${unnamed}` : "");
+  let name = base;
+  for (let next = base ? 2 : 1; !name || taken.has(name); next += 1) {
+    name = base ? `${base}-${next}` : `${slug}-${next}`;
   }
   taken.add(name);
   return name;
+}
+
+/** A name that already follows its alt: `<alt>` or `<alt>-N`, or as photos were named before, `<slug>-<alt>` or `<slug>-<alt>-N`. */
+function followsAlt(name: string, slug: string, words: string): boolean {
+  return [words, `${slug}-${words}`].some(
+    (named) => name === named || (name.startsWith(`${named}-`) && /^\d+$/.test(name.slice(named.length + 1))),
+  );
 }
 
 export function draftSlug(draft: Draft): string {
@@ -155,7 +166,7 @@ export async function planImages(
   const cover = draft.meta.cover;
   const photos = new Map<string, string>();
   if (cover?.path) {
-    photos.set(cover.path, cover.alt || (isLocalSrc(cover.path) ? "cover" : ""));
+    photos.set(cover.path, cover.alt);
   }
   for (const [src, alt] of collectImages(draft.doc)) {
     if (!photos.has(src)) {
@@ -173,9 +184,7 @@ export async function planImages(
     const file = fileOf(src, dir);
     const words = altSlug(photos.get(src) ?? "");
     const found = file && words ? (site.find((photo) => photo.name === file) ?? site.find((photo) => stem(photo.name) === stem(file))) : undefined;
-    const name = found ? stem(found.name) : "";
-    const named = `${slug}-${words}`;
-    if (found && name !== named && !(name.startsWith(`${named}-`) && /^\d+$/.test(name.slice(named.length + 1)))) {
+    if (found && !followsAlt(stem(found.name), slug, words)) {
       renames.push({ src, baseName: "", site: found });
     }
   }
@@ -186,7 +195,8 @@ export async function planImages(
   const planned = renames;
   for (const [src, alt] of photos) {
     if (isLocalSrc(src)) {
-      planned.push({ src, alt, baseName: photoName(slug, alt, taken), stored: await imageStore.get(localId(src)) });
+      const baseName = photoName(slug, alt, taken, src === cover?.path ? "cover" : "");
+      planned.push({ src, alt, baseName, stored: await imageStore.get(localId(src)) });
     }
   }
   return planned;
