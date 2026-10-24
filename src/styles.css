@@ -1330,12 +1330,13 @@ textarea {
 }
 
 .editor-host .post-body blockquote:is([data-note="author"], [data-note="poem"]) {
-  padding: 0.75em 2em;
+  width: fit-content;
+  padding: 0.75em min(2em, 6vw);
   border: none;
+  margin-inline: auto;
   background: none;
   color: var(--muted);
   font-size: 1.05em;
-  text-align: center;
 }
 
 .editor-host .post-body blockquote[data-note="author"] p:last-child {
@@ -1355,7 +1356,7 @@ textarea {
   font-size: inherit;
   font-style: inherit;
   opacity: 1;
-  text-align: center;
+  text-align: inherit;
 }
 
 .editor-host .post-body blockquote[data-note="author"] p:only-child::before {
