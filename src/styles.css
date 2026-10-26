@@ -1513,6 +1513,15 @@ textarea {
   --pele-surface-alt: var(--border);
   --pele-border: var(--border-strong);
   --pele-accent: var(--accent);
+  /* the blog's branch colours, from its info, warn, tip, key and risk notes */
+  --pele-series-1: #1f6feb;
+  --pele-series-2: #ef9c03;
+  --pele-series-3: #238636;
+  --pele-series-4: #8957e5;
+  --pele-series-5: #da3633;
+  --pele-series-6: #36a3d9;
+  --pele-series-7: #f07178;
+  --pele-series-8: var(--muted);
   --pele-font: var(--font-prose);
   --pele-font-mono: var(--font-mono);
 
@@ -1524,6 +1533,10 @@ textarea {
   background: var(--panel);
   text-align: center;
   overflow-x: auto;
+}
+
+:root[data-theme="dark"] .block-preview {
+  --pele-series-2: #ffa500;
 }
 
 .block-preview svg {
