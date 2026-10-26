@@ -2,7 +2,7 @@ import { isLocalSrc, localId, releaseDisplays, resolveDisplaySrc } from "../lib/
 import { convertedSrc, fullSrc } from "../lib/site.ts";
 import { embedTag, embedUrl } from "./blog.ts";
 import { BLANK_SRC, TRANSIENT } from "./bridge.ts";
-import { renderChart, renderMermaid, type Teardown } from "./render.ts";
+import { renderChart, renderDiagram, type Teardown } from "./render.ts";
 
 /**
  * What the editor shows but does not keep. Elements marked `data-transient`
@@ -218,7 +218,6 @@ interface Preview {
 /** Mermaid and chart fences drawn above their source, redrawn a moment after the source stops changing. */
 export class Previews {
   private readonly live = new Map<HTMLElement, Preview>();
-  private serial = 0;
 
   sync(root: HTMLElement, dark: boolean): void {
     const seen = new Set<HTMLElement>();
@@ -234,7 +233,7 @@ export class Previews {
         preview = { element: transient("div", "block-preview"), source, dark, generation: 0 };
         this.live.set(pre, preview);
         this.draw(preview, language);
-      } else if (preview.source !== source || preview.dark !== dark) {
+      } else if (preview.source !== source || (language === "chart" && preview.dark !== dark)) {
         preview.source = source;
         preview.dark = dark;
         window.clearTimeout(preview.timer);
@@ -265,12 +264,11 @@ export class Previews {
 
   private draw(preview: Preview, language: string): void {
     const mine = ++preview.generation;
-    const key = `${++this.serial}-${mine}`;
     preview.teardown?.();
     preview.teardown = undefined;
     const started =
       language === "mermaid"
-        ? renderMermaid(preview.source, preview.element, preview.dark, `mermaid-${key}`)
+        ? renderDiagram(preview.source, preview.element, () => mine === preview.generation)
         : renderChart(preview.source, preview.element);
     void started.then((teardown) => {
       if (mine !== preview.generation) {
