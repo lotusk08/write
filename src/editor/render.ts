@@ -8,21 +8,29 @@ function fail(target: HTMLElement, error: unknown): Teardown {
   return noop;
 }
 
-let peleLoader: Promise<typeof import("pele/lazy")> | null = null;
-
-async function loadPele() {
-  peleLoader ??= import("pele/lazy");
-  return peleLoader;
+/** Loads a module once, but forgets a failed load so the next preview tries again. */
+export function retrying<T>(load: () => Promise<T>): () => Promise<T> {
+  let loading: Promise<T> | null = null;
+  return () =>
+    (loading ??= load().catch((error: unknown) => {
+      loading = null;
+      throw error;
+    }));
 }
+
+const loadPele = retrying(() => import("pele/lazy"));
+let drawn = 0;
 
 export async function renderDiagram(source: string, target: HTMLElement, current: () => boolean): Promise<Teardown> {
   try {
     const { renderAsync } = await loadPele();
-    const { svg } = await renderAsync(source);
+    const fontFamily = getComputedStyle(target).getPropertyValue("--pele-font").trim() || undefined;
+    const { svg, width } = await renderAsync(source, { fontFamily, idPrefix: `preview-${++drawn}` });
     if (!current()) {
       return noop;
     }
     target.innerHTML = svg;
+    target.style.setProperty("--w", `${width}px`);
     delete target.dataset.state;
     return () => {
       target.innerHTML = "";
@@ -32,12 +40,7 @@ export async function renderDiagram(source: string, target: HTMLElement, current
   }
 }
 
-let chartLoader: Promise<typeof import("chart.js/auto").default> | null = null;
-
-async function loadChart() {
-  chartLoader ??= import("chart.js/auto").then((module) => module.default);
-  return chartLoader;
-}
+const loadChart = retrying(() => import("chart.js/auto").then((module) => module.default));
 
 export async function renderChart(source: string, target: HTMLElement): Promise<Teardown> {
   try {
