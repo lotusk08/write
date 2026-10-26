@@ -8,31 +8,27 @@ function fail(target: HTMLElement, error: unknown): Teardown {
   return noop;
 }
 
-let mermaidLoader: Promise<typeof import("mermaid").default> | null = null;
+let peleLoader: Promise<typeof import("pele/lazy")> | null = null;
 
-async function loadMermaid() {
-  mermaidLoader ??= import("mermaid").then((module) => module.default);
-  return mermaidLoader;
+async function loadPele() {
+  peleLoader ??= import("pele/lazy");
+  return peleLoader;
 }
 
-export async function renderMermaid(
-  source: string,
-  target: HTMLElement,
-  dark: boolean,
-  id: string,
-): Promise<Teardown> {
+export async function renderDiagram(source: string, target: HTMLElement, current: () => boolean): Promise<Teardown> {
   try {
-    const mermaid = await loadMermaid();
-    mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: dark ? "dark" : "default" });
-    const { svg } = await mermaid.render(id, source);
+    const { renderAsync } = await loadPele();
+    const { svg } = await renderAsync(source);
+    if (!current()) {
+      return noop;
+    }
     target.innerHTML = svg;
     delete target.dataset.state;
     return () => {
       target.innerHTML = "";
     };
   } catch (error) {
-    document.querySelector(`#d${id}`)?.remove();
-    return fail(target, error);
+    return current() ? fail(target, error) : noop;
   }
 }
 
