@@ -8,40 +8,39 @@ function fail(target: HTMLElement, error: unknown): Teardown {
   return noop;
 }
 
-let mermaidLoader: Promise<typeof import("mermaid").default> | null = null;
-
-async function loadMermaid() {
-  mermaidLoader ??= import("mermaid").then((module) => module.default);
-  return mermaidLoader;
+/** Loads a module once, but forgets a failed load so the next preview tries again. */
+export function retrying<T>(load: () => Promise<T>): () => Promise<T> {
+  let loading: Promise<T> | null = null;
+  return () =>
+    (loading ??= load().catch((error: unknown) => {
+      loading = null;
+      throw error;
+    }));
 }
 
-export async function renderMermaid(
-  source: string,
-  target: HTMLElement,
-  dark: boolean,
-  id: string,
-): Promise<Teardown> {
+const loadPele = retrying(() => import("pele/lazy"));
+let drawn = 0;
+
+export async function renderDiagram(source: string, target: HTMLElement, current: () => boolean): Promise<Teardown> {
   try {
-    const mermaid = await loadMermaid();
-    mermaid.initialize({ startOnLoad: false, securityLevel: "strict", theme: dark ? "dark" : "default" });
-    const { svg } = await mermaid.render(id, source);
+    const { renderAsync } = await loadPele();
+    const fontFamily = getComputedStyle(target).getPropertyValue("--pele-font").trim() || undefined;
+    const { svg, width } = await renderAsync(source, { fontFamily, idPrefix: `preview-${++drawn}` });
+    if (!current()) {
+      return noop;
+    }
     target.innerHTML = svg;
+    target.style.setProperty("--w", `${width}px`);
     delete target.dataset.state;
     return () => {
       target.innerHTML = "";
     };
   } catch (error) {
-    document.querySelector(`#d${id}`)?.remove();
-    return fail(target, error);
+    return current() ? fail(target, error) : noop;
   }
 }
 
-let chartLoader: Promise<typeof import("chart.js/auto").default> | null = null;
-
-async function loadChart() {
-  chartLoader ??= import("chart.js/auto").then((module) => module.default);
-  return chartLoader;
-}
+const loadChart = retrying(() => import("chart.js/auto").then((module) => module.default));
 
 export async function renderChart(source: string, target: HTMLElement): Promise<Teardown> {
   try {

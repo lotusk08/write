@@ -1505,6 +1505,17 @@ textarea {
 }
 
 .block-preview {
+  --pele-bg: var(--panel);
+  --pele-fg: var(--text);
+  --pele-muted: var(--muted);
+  --pele-line: var(--muted);
+  --pele-surface: var(--bg);
+  --pele-surface-alt: var(--border);
+  --pele-border: var(--border-strong);
+  --pele-accent: var(--accent);
+  --pele-font: var(--font-prose);
+  --pele-font-mono: var(--font-mono);
+
   display: block;
   padding: 16px;
   border: 1px solid var(--border);
@@ -1518,6 +1529,10 @@ textarea {
 .block-preview svg {
   max-width: 100%;
   height: auto;
+}
+
+.block-preview > svg.pele {
+  min-width: calc(0.75 * var(--w));
 }
 
 .chart-frame {
