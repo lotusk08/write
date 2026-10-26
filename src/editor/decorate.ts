@@ -12,7 +12,7 @@ import { renderChart, renderDiagram, type Teardown } from "./render.ts";
  * load and every edit, and only touches what changed.
  */
 
-const RENDERED = new Set(["mermaid", "chart"]);
+const RENDERED = new Set(["diagram", "chart"]);
 const REDRAW_MS = 400;
 
 function transient<K extends keyof HTMLElementTagNameMap>(tag: K, className: string): HTMLElementTagNameMap[K] {
@@ -215,7 +215,7 @@ interface Preview {
   teardown?: Teardown;
 }
 
-/** Mermaid and chart fences drawn above their source, redrawn a moment after the source stops changing. */
+/** Diagram and chart fences drawn above their source, redrawn a moment after the source stops changing. */
 export class Previews {
   private readonly live = new Map<HTMLElement, Preview>();
 
@@ -267,7 +267,7 @@ export class Previews {
     preview.teardown?.();
     preview.teardown = undefined;
     const started =
-      language === "mermaid"
+      language === "diagram"
         ? renderDiagram(preview.source, preview.element, () => mine === preview.generation)
         : renderChart(preview.source, preview.element);
     void started.then((teardown) => {

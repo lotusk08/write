@@ -1545,7 +1545,9 @@ textarea {
 }
 
 .block-preview > svg.pele {
-  min-width: calc(0.75 * var(--w));
+  display: block;
+  width: min(100%, var(--w));
+  margin-inline: auto;
 }
 
 .chart-frame {

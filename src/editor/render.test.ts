@@ -3,14 +3,14 @@ import { describe, expect, it } from "vitest";
 import { renderDiagram, retrying } from "./render.ts";
 
 describe("renderDiagram", () => {
-  it("draws a mermaid fence as an SVG and clears it on teardown", async () => {
+  it("draws a diagram fence as an SVG and clears it on teardown", async () => {
     const target = document.createElement("div");
     target.dataset.state = "error";
     const teardown = await renderDiagram("flowchart LR\n  Write --> Publish", target, () => true);
     expect(target.querySelector("svg.pele")).not.toBeNull();
     expect(target.textContent).toContain("Publish");
     expect(target.dataset.state).toBeUndefined();
-    expect(target.style.getPropertyValue("--w")).toMatch(/^\d+(\.\d+)?px$/);
+    expect(target.style.getPropertyValue("--w")).toMatch(/^\d+(\.\d+)?em$/);
     teardown();
     expect(target.innerHTML).toBe("");
   });

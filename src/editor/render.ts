@@ -19,18 +19,19 @@ export function retrying<T>(load: () => Promise<T>): () => Promise<T> {
 }
 
 const loadPele = retrying(() => import("pele/lazy"));
+const LABEL_PX = 16;
 let drawn = 0;
 
 export async function renderDiagram(source: string, target: HTMLElement, current: () => boolean): Promise<Teardown> {
   try {
     const { renderAsync } = await loadPele();
     const fontFamily = getComputedStyle(target).getPropertyValue("--pele-font").trim() || undefined;
-    const { svg, width } = await renderAsync(source, { fontFamily, idPrefix: `preview-${++drawn}` });
+    const { svg, width } = await renderAsync(source, { fontFamily, fontSize: LABEL_PX, idPrefix: `preview-${++drawn}` });
     if (!current()) {
       return noop;
     }
     target.innerHTML = svg;
-    target.style.setProperty("--w", `${width}px`);
+    target.style.setProperty("--w", `${width / LABEL_PX}em`);
     delete target.dataset.state;
     return () => {
       target.innerHTML = "";

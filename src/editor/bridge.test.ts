@@ -34,7 +34,7 @@ describe("bridge", () => {
     ["task lists", "- [ ] todo\n- [x] done\n- plain"],
     ["callouts", "> A tip\n{: .tip }\n\n> Said\n>\n> Someone\n{: .author }"],
     ["code fences", "```js\nconst a = 1;\n\nconst b = 2;\n```\n\n````\n```\nfence\n```\n````"],
-    ["mermaid", "```mermaid\ngraph TD\nA-->B\n```"],
+    ["diagrams", "```diagram\ngraph TD\nA-->B\n```"],
     ["tables", "| a | b |\n|:--|--:|\n| 1 | 2 |\n| 3 | 4 |"],
     ["images and captions", "![alt](/assets/img/post/a.jpg \"Title\")\n*A caption*"],
     ["galleries", "```gallery\n![a](/a.jpg \"one\")\n![b](/b.jpg)\n```"],
