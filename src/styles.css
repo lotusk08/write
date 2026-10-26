@@ -1505,14 +1505,6 @@ textarea {
 }
 
 .block-preview {
-  --pele-bg: var(--panel);
-  --pele-fg: var(--text);
-  --pele-muted: var(--muted);
-  --pele-line: var(--muted);
-  --pele-surface: var(--bg);
-  --pele-surface-alt: var(--border);
-  --pele-border: var(--border-strong);
-  --pele-accent: var(--accent);
   --pele-font: var(--font-prose);
   --pele-font-mono: var(--font-mono);
 
@@ -1524,6 +1516,16 @@ textarea {
   background: var(--panel);
   text-align: center;
   overflow-x: auto;
+}
+
+/* Pele's own colours suit a light page, as on the blog; a dark one needs the app's */
+:root[data-theme="dark"] .block-preview {
+  --pele-bg: var(--panel);
+  --pele-fg: var(--text);
+  --pele-muted: var(--muted);
+  --pele-line: var(--muted);
+  --pele-surface: var(--bg);
+  --pele-surface-alt: var(--border);
 }
 
 .block-preview svg {
