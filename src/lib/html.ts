@@ -1,6 +1,7 @@
 import type { PostMeta } from "../../shared/types.ts";
 import { localId, imageStore } from "./db.ts";
 import { bytesToBase64 } from "../../shared/base64.ts";
+import { withoutLocation } from "./images.ts";
 
 async function inlineImages(root: Document): Promise<void> {
   const images = [...root.querySelectorAll("img[data-local-src]")];
@@ -12,7 +13,7 @@ async function inlineImages(root: Document): Promise<void> {
         img.removeAttribute("src");
         return;
       }
-      const bytes = new Uint8Array(await stored.blob.arrayBuffer());
+      const bytes = new Uint8Array(await (await withoutLocation(stored.blob)).arrayBuffer());
       img.setAttribute("src", `data:${stored.type};base64,${bytesToBase64(bytes)}`);
     }),
   );

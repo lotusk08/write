@@ -17,6 +17,7 @@ import {
 } from "docx";
 import type { PostMeta } from "../../shared/types.ts";
 import { isLocalSrc, imageStore, localId } from "./db.ts";
+import { withoutLocation } from "./images.ts";
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
 type DocxImageType = "png" | "jpg" | "gif" | "bmp";
@@ -76,7 +77,7 @@ async function prepareImage(blob: Blob): Promise<PreparedImage | null> {
     }
     bitmap.close();
 
-    return { data: new Uint8Array(await source.arrayBuffer()), type, width, height };
+    return { data: new Uint8Array(await (await withoutLocation(source)).arrayBuffer()), type, width, height };
   } catch {
     return null;
   }

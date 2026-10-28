@@ -3,7 +3,7 @@ import type { PostMeta, PublishResult, SitePhoto } from "../../shared/types.ts";
 import { fetchSitePhotos, publish, uploadPhoto } from "./api.ts";
 import type { Draft, StoredImage } from "./db.ts";
 import { imageStore, isLocalSrc, localId } from "./db.ts";
-import { blobToBase64, extensionFor, MAX_UPLOAD_BYTES, shrinkImage, tooBig } from "./images.ts";
+import { blobToBase64, extensionFor, MAX_UPLOAD_BYTES, shrinkImage, tooBig, withoutLocation } from "./images.ts";
 import { buildPostFile } from "./markdown.ts";
 import { decoded, servedName, stem, trimSlashes } from "../../shared/paths.ts";
 import type { Settings } from "./settings.ts";
@@ -330,7 +330,7 @@ export async function sendPlan(
   for (const photo of plan.photos) {
     progress(uploaded.length);
     signal?.throwIfAborted();
-    const sha = await uploadPhoto(await blobToBase64(await shrinkImage(photo.blob)), password, signal);
+    const sha = await uploadPhoto(await blobToBase64(await withoutLocation(await shrinkImage(photo.blob))), password, signal);
     uploaded.push({ path: photo.path, sha });
   }
   progress(uploaded.length);
