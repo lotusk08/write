@@ -46,8 +46,9 @@ browser.
   writes its alerts — `> [!info]` and friends — plus `> [!author]` for a
   quote with its author, and `> [!poem]` for a poem without one: the same
   centred quote, its last stanza kept a stanza. GitHub's own names
-  (`[!NOTE]`, `[!WARNING]` …) and the older `{: .info}` under a quote are
-  read too.
+  (`[!NOTE]`, `[!WARNING]` …) are read too. kramdown's older forms, `{: .info}`
+  under a quote and `{: .x}` lists, met in a pasted text, an old post or a
+  draft kept from before, are read as these and written so.
 - **Shortcuts.** Markdown as you type (`**bold**`, `[text](url)`, `- [x] `,
   `---` …) and the ⌘ keys the old editor had; Tab nests list items.
 - **Paste.** From Google Docs, Word or a web page, keeping headings, lists,

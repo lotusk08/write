@@ -15,7 +15,7 @@ import { docToHtml } from "./editor/bridge.ts";
 import type { JSONContent } from "./editor/doc.ts";
 import { createShareRoom, endShareRoom, fetchAppConfig, fetchPostSource, shareRoomState } from "./lib/api.ts";
 import { draftStore, isLocalSrc, keepSnapshot, NOTICE, resolveLocalSrc, restoreSnapshots, type Draft } from "./lib/db.ts";
-import { createDraft, currentMeta, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
+import { createDraft, currentDoc, currentMeta, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
 import type { PinWritten } from "./lib/home.ts";
 import { buildHtmlDocument } from "./lib/html.ts";
@@ -76,7 +76,7 @@ function boot() {
       saveSettings(settings);
     }
     if (stored.length) {
-      const drafts = stored.map((draft) => ({ ...draft, meta: currentMeta(draft.meta) }));
+      const drafts = stored.map((draft) => ({ ...draft, doc: currentDoc(draft.doc), meta: currentMeta(draft.meta) }));
       return { drafts: sortDrafts(drafts), settings, config };
     }
     const draft = createDraft();

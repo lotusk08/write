@@ -54,7 +54,7 @@ describe("paste", () => {
 
   it("reads the editor's hidden markup only in a copy made here, which any page could otherwise write", () => {
     const hidden =
-      '<p data-block-ial="{: onmouseover=&quot;alert(1)&quot;}"><b>Hello</b></p>' +
+      '<p data-block-ial="{onmouseover=&quot;alert(1)&quot;}"><b>Hello</b></p>' +
       '<pre data-raw>&lt;img src=x onerror=alert(1)&gt;</pre>' +
       '<p>a <span data-raw-inline>&lt;img src=x&gt;</span></p>';
     expect(markdown(pastedHtml(hidden, "Hello <img src=x onerror=alert(1)> a <img src=x>"))).toBe(
@@ -62,7 +62,7 @@ describe("paste", () => {
     );
     rememberCopy("Hello\n<img src=x onerror=alert(1)>\na <img src=x>");
     expect(markdown(pastedHtml(hidden, "Hello\n\n<img src=x onerror=alert(1)>\n\na <img src=x>"))).toBe(
-      '**Hello**\n{: onmouseover="alert(1)"}\n\n<img src=x onerror=alert(1)>\n\na <img src=x>',
+      '**Hello**\n{onmouseover="alert(1)"}\n\n<img src=x onerror=alert(1)>\n\na <img src=x>',
     );
     rememberCopy("");
   });

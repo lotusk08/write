@@ -182,15 +182,18 @@ describe("marks typed in Markdown", () => {
     expect(root.querySelector("a")).toBeNull();
   });
 
-  it("`x`{.path}, or `x`{: .path}, makes the code a file path", () => {
-    for (const typedList of ["{.path}", "{: .path}"]) {
+  it("`x`{.path} makes the code a file path; kramdown's older `x`{: .path} stays text", () => {
+    for (const [typedList, written] of [
+      ["{.path}", "open `a/b`{.path}"],
+      ["{: .path}", "open `a/b`\\{: .path}"],
+    ]) {
       raw("open `a/b`");
       caretAfter("`a/b`");
       typed("`");
       root.querySelector("code")?.after(typedList);
       caretAfter(typedList);
       typed("}");
-      expect(markdown()).toBe("open `a/b`{.path}");
+      expect(markdown()).toBe(written);
     }
   });
 
@@ -271,18 +274,18 @@ describe("line shortcuts", () => {
 
 describe("a list's attribute list", () => {
   it("stays with the list, not a level Tab makes or a part a toggle splits off", () => {
-    load("- a\n- b\n- c\n{: .cols}");
+    load("- a\n- b\n- c\n{.cols}");
     caretAfter("b");
     handleKeydown(root, new KeyboardEvent("keydown", { key: "Tab" }));
-    expect(markdown()).toBe("- a\n  - b\n- c\n{: .cols}");
-    load("- a\n- b\n- c\n{: .cols}");
+    expect(markdown()).toBe("- a\n  - b\n- c\n{.cols}");
+    load("- a\n- b\n- c\n{.cols}");
     caretAfter("b");
     toggleList(root, "bullet");
-    expect(markdown()).toBe("- a\n\nb\n\n- c\n{: .cols}");
-    load("{: .cols}\n- a\n- b\n- c");
+    expect(markdown()).toBe("- a\n\nb\n\n- c\n{.cols}");
+    load("{.cols}\n- a\n- b\n- c");
     caretAfter("b");
     toggleList(root, "bullet");
-    expect(markdown()).toBe("{: .cols}\n- a\n\nb\n\n- c");
+    expect(markdown()).toBe("{.cols}\n- a\n\nb\n\n- c");
   });
 });
 

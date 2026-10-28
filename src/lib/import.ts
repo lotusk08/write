@@ -6,6 +6,7 @@ import type { PostMeta } from "../../shared/types.ts";
 import { ATTRIBUTES, EMBED_LIQUID, EMBED_TAG, NOTE_CLASSES, embedPlatform, noteOfAlert, noteOfClass } from "../editor/blog.ts";
 import { ENTITY, type InlineToken, type References, entityText, inlineTokens, referenceLabel } from "./inline.ts";
 import { languageOf } from "./topics.ts";
+import { upgradeSyntax } from "./upgrade.ts";
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
 
@@ -831,7 +832,7 @@ let quoteDepth = 0;
 const INDENTED = /^(?: {4}|\t)/;
 const LIST_START = /^ {0,3}(?:[-*+]|\d+[.)])\s+/;
 /** A callout's class on the line under its quote, as the blog's posts wrote it before `> [!info]`. */
-const NOTE = new RegExp(`^\\{:?\\s*\\.(${Object.values(NOTE_CLASSES).join("|")})\\s*\\}\\s*$`);
+const NOTE = new RegExp(`^\\{\\s*\\.(${Object.values(NOTE_CLASSES).join("|")})\\s*\\}\\s*$`);
 const BLOCK_IAL = new RegExp(`^ {0,3}${ATTRIBUTES}\\s*$`);
 const TABLE_DIVIDER = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
 const SETEXT = /^ {0,3}(=+|-+)[^\S\n]*$/;
@@ -1453,7 +1454,7 @@ function definitions(lines: string[]): References {
 }
 
 export function markdownToDoc(markdown: string): JSONContent {
-  const lines = expandTabs(markdown.replace(/\r\n/g, "\n")).split("\n");
+  const lines = expandTabs(upgradeSyntax(markdown.replace(/\r\n/g, "\n"))).split("\n");
   const outer = references;
   references = definitions(lines);
   try {

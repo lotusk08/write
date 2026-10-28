@@ -3,7 +3,7 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { sanitizeHtml } from "@erag/text-editor-vue";
 import { describe, expect, it } from "vitest";
-import { newPostMeta } from "../lib/draft.ts";
+import { currentDoc, newPostMeta } from "../lib/draft.ts";
 import { markdownToDoc, parsePost } from "../lib/import.ts";
 import { buildPostFile, docToMarkdown } from "../lib/markdown.ts";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
@@ -136,10 +136,22 @@ describe("bridge", () => {
     ["a file path in a heading, a link, a table and a footnote", "## Head `src/a.js`{.path}\n\n[`l/p`{.path}](https://example.com) and a note[^1].\n\n| file | n |\n| --- | --- |\n| `t/x`{.path} | 1 |\n\n[^1]: Has `f/p`{.path}."],
     ["a code block without line numbers in a list", "- Code:\n\n  ```text\n  plain\n  ```\n  {.nolines}"],
     ["the social row", '[LinkedIn](https://x.com){icon="linkedin"}\n[GitHub](https://y.com){icon="square-github"}\n{.social}'],
-    ["the older attribute lists", '[In](https://x.com){: icon="linkedin"}\n{: .social}\n\n```text\nplain\n```\n{: .nolines}'],
   ])("keeps %s as written", (_name, markdown) => {
     expect(docToMarkdown(markdownToDoc(markdown))).toBe(markdown);
     expect(roundTrip(markdown)).toBe(markdown);
+  });
+
+  it("writes kramdown's older callouts and attribute lists as the blog reads them now", () => {
+    const old = '> said\n{: .info}\n\n[In](https://x.com){: icon="linkedin"}\n{: .social}\n\n```text\nplain {: .x}\n```\n{: .nolines}\n\nopen `a/b`{: .path} and `{: .x}`';
+    const written = '> [!info]\n> said\n\n[In](https://x.com){icon="linkedin"}\n{.social}\n\n```text\nplain {: .x}\n```\n{.nolines}\n\nopen `a/b`{.path} and `{: .x}`';
+    expect(docToMarkdown(markdownToDoc(old))).toBe(written);
+    expect(roundTrip(old)).toBe(written);
+  });
+
+  it("writes an older list typed as text as text", () => {
+    const doc: JSONContent = { type: "doc", content: [{ type: "paragraph", content: [{ type: "text", text: "kramdown wrote {: .x}" }] }] };
+    expect(docToMarkdown(doc)).toBe("kramdown wrote \\{: .x}");
+    expect(roundTrip("kramdown wrote \\{: .x}")).toBe("kramdown wrote \\{: .x}");
   });
 
   it.each([
@@ -179,7 +191,7 @@ describe("bridge", () => {
       type: "doc",
       content: [{ type: "blockquote", attrs: { note: null, blockIal: "{: .poem }" }, content: [{ type: "paragraph", content: [{ type: "text", text: "a" }] }] }],
     };
-    const doc = throughEditor(saved);
+    const doc = throughEditor(currentDoc(saved));
     expect(doc.content?.[0].attrs?.note).toBe("poem");
     expect(docToMarkdown(doc)).toBe("> [!poem]\n> a");
   });
@@ -192,10 +204,10 @@ describe("bridge", () => {
     expect(roundTrip(markdown)).toBe(markdown);
   });
 
-  it("keeps an old {: .note-info } as it was written, not as a callout", () => {
+  it("writes an old {: .note-info } as Pandoc does, not as a callout", () => {
     const markdown = "> said\n{: .note-info }";
     expect(markdownToDoc(markdown).content?.[0].attrs?.note).toBeNull();
-    expect(roundTrip(markdown)).toBe(markdown);
+    expect(roundTrip(markdown)).toBe("> said\n{.note-info}");
   });
 });
 

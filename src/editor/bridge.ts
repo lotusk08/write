@@ -98,7 +98,7 @@ function blockAttrs(node: JSONContent): string {
     .join("");
 }
 
-/** A draft saved before its class was a callout holds `{: .poem}` as the quote's attribute list; it opens as the callout. */
+/** A draft saved before its class was a callout holds `{.poem}` as the quote's attribute list; it opens as the callout. */
 function liftNote(quote: JSONContent): JSONContent {
   const ial = quote.attrs?.blockIal;
   const note = !quote.attrs?.note && !quote.attrs?.ialAbove && ial ? noteOfIal(String(ial)) : null;

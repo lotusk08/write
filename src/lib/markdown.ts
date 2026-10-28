@@ -1,7 +1,7 @@
 import type { JSONContent } from "../editor/doc.ts";
 import { writtenPin } from "../../shared/pin.ts";
 import type { PostMeta } from "../../shared/types.ts";
-import { ATTRIBUTES, NOTE_CLASSES, embedTag, isNoteType } from "../editor/blog.ts";
+import { ATTRIBUTES, NOTE_CLASSES, OLD_ATTRIBUTES, embedTag, isNoteType, pandocAttributes } from "../editor/blog.ts";
 import { ENTITY, autolinkFor, bareLinks, entityText, escapeChars } from "./inline.ts";
 import { topicSlug } from "./topics.ts";
 
@@ -49,7 +49,8 @@ function entityAt(text: string): boolean {
 }
 
 const IAL = new RegExp(`^${ATTRIBUTES}$`);
-const ATTRIBUTE_LIST = new RegExp(ATTRIBUTES, "g");
+// kramdown's older form too, which the app reads as the list it holds: written as text, it stays text.
+const ATTRIBUTE_LIST = new RegExp(`${ATTRIBUTES}|${OLD_ATTRIBUTES}`, "g");
 
 function escapePlain(text: string, follower = ""): string {
   return text
@@ -182,9 +183,9 @@ function oneLine(address: string): string {
 }
 
 
-/** An attribute list as it is read back, `{.x}` or `{: … }` on one line, or nothing: anything else would be written as text of the post. */
+/** An attribute list as it is read back, `{.x}` (kramdown's `{: .x}` of an older draft as that), or nothing: anything else would be written as text of the post. */
 function ialOf(value: unknown): string {
-  const ial = value ? String(value) : "";
+  const ial = value ? pandocAttributes(String(value)) : "";
   return IAL.test(ial) ? ial : "";
 }
 

@@ -35,9 +35,9 @@ export function noteOfClass(name: string): NoteType | null {
   return NOTE_TYPES.find((type) => NOTE_CLASSES[type] === name) ?? null;
 }
 
-/** The callout an attribute list names on its own, as `{.poem}`, or kramdown's `{: .poem }`, does. */
+/** The callout an attribute list names on its own, as `{.poem}` does. */
 export function noteOfIal(line: string): NoteType | null {
-  const name = /^\{:?\s*\.([\w-]+)\s*\}$/.exec(line.trim())?.[1];
+  const name = /^\{\s*\.([\w-]+)\s*\}$/.exec(line.trim())?.[1];
   return name ? noteOfClass(name) : null;
 }
 
@@ -52,12 +52,20 @@ export function noteOfAlert(line: string): NoteType | null {
 }
 
 const ATTRIBUTE = String.raw`(?:\.[\w-]+|#[\w-]+|[\w-]+=(?:"[^"]*"|'[^']*'|[^\s"'}]+))`;
+const ITEMS = String.raw`[ \t]*${ATTRIBUTE}(?:[ \t]+${ATTRIBUTE})*[ \t]*`;
 
-/**
- * An attribute list as the blog reads one: Pandoc's `{.path}`, which holds attributes and nothing else, so `{x}` or
- * `{a, b}` stays text, or kramdown's `{: .path}`.
- */
-export const ATTRIBUTES = String.raw`\{(?::[^}\n]*|[ \t]*${ATTRIBUTE}(?:[ \t]+${ATTRIBUTE})*[ \t]*)\}`;
+/** An attribute list as the blog reads one, Pandoc's `{.path}`: attributes and nothing else, so `{x}` or `{a, b}` stays text. */
+export const ATTRIBUTES = String.raw`\{${ITEMS}\}`;
+
+/** kramdown's older form of one, `{: .path}`, which the blog no longer reads. */
+export const OLD_ATTRIBUTES = String.raw`\{:${ITEMS}\}`;
+
+const OLD = new RegExp(String.raw`(?<!\\)${OLD_ATTRIBUTES}`, "g");
+
+/** The text with each of kramdown's `{: .a #b c="d"}` as Pandoc writes it, `{.a #b c="d"}`. */
+export function pandocAttributes(text: string): string {
+  return text.replace(OLD, (list) => `{${list.slice(2, -1).trim()}}`);
+}
 
 const PLATFORMS = ["youtube", "x", "audio", "video"] as const;
 
