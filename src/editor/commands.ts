@@ -691,7 +691,7 @@ export function captionOf(figure: HTMLElement): Element | null {
 }
 
 /** An italic caption line left behind by its photo stands on its own. */
-function freeCaption(figure: HTMLElement): void {
+export function freeCaption(figure: HTMLElement): void {
   const caption = captionOf(figure);
   caption?.removeAttribute("data-join");
   caption?.removeAttribute("data-same-line");
@@ -944,6 +944,12 @@ function unlist(list: HTMLElement, range: Range): void {
     return [paragraph];
   });
   items.slice(first, last + 1).forEach((item) => item.remove());
+  if (after.children.length && list.children.length) {
+    // The list's attribute list goes with the part it is written next to: above the first, or under the last.
+    const bare = list.hasAttribute("data-ial-above") ? after : list;
+    bare.removeAttribute("data-block-ial");
+    bare.removeAttribute("data-ial-above");
+  }
   list.after(...blocks, ...(after.children.length ? [after] : []));
   if (!list.children.length) {
     list.remove();

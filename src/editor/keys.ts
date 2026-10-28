@@ -1,6 +1,7 @@
 import {
   continueAfter,
   format,
+  freeCaption,
   insertRule,
   keepCaretInNewItem,
   liftLists,
@@ -261,7 +262,8 @@ function tab(root: HTMLElement, out: boolean): boolean {
       return last;
     }
     const sub = list.cloneNode(false) as HTMLElement;
-    sub.removeAttribute("start");
+    // The new level is a list of its own: the outer list's start and attribute list stay with it.
+    ["start", "data-block-ial", "data-ial-above"].forEach((name) => sub.removeAttribute(name));
     holder.append(sub);
     return sub;
   };
@@ -303,6 +305,7 @@ function removePhotoBefore(root: HTMLElement): boolean {
   if (start.toString() !== "" || start.cloneContents().querySelector("img, br, sup")) {
     return false;
   }
+  freeCaption(photo as HTMLElement);
   photo.remove();
   placeCaret(block, false);
   notify(root);
@@ -354,13 +357,15 @@ const TASK = /^(?:[-*] )?\[[ xX]?\] $/;
 
 const NUMBERED = /^(\d{1,9})[.)] $/;
 
+const BULLET = /^[-*] $/;
+
 const SHORTCUTS: [RegExp, Shortcut][] = [
   [/^#{1,2} $/, () => document.execCommand("formatBlock", false, "h2")],
   [/^### $/, () => document.execCommand("formatBlock", false, "h3")],
   [/^#### $/, () => document.execCommand("formatBlock", false, "h4")],
   [/^(?:>>>|:::) $/, (root) => setCollapsible(root)],
   [/^> $/, (root) => togglePlainQuote(root)],
-  [/^[-*] $/, () => document.execCommand("insertUnorderedList")],
+  [BULLET, () => document.execCommand("insertUnorderedList")],
   [NUMBERED, () => document.execCommand("insertOrderedList")],
   [TASK, (root) => toggleList(root, "task")],
   [/^(?:---|\*\*\*|___) $/, insertRule],
@@ -574,7 +579,10 @@ export function handleInput(root: HTMLElement, event: InputEvent): void {
   placeCaret(block, false);
   shortcut[1](root);
   liftLists(root);
-  keepCaretInNewItem(root);
+  // Only a list shortcut looks for its new item: after `## `, the caret was sent to any empty item in the post.
+  if (shortcut[0] === BULLET || shortcut[0] === NUMBERED || shortcut[0] === TASK) {
+    keepCaretInNewItem(root);
+  }
   const item = currentTextblock(root)?.closest("li");
   if (shortcut[0] === TASK && /\[[xX]\]/.test(text)) {
     item?.setAttribute("data-checked", "true");

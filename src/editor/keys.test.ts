@@ -250,9 +250,49 @@ describe("line shortcuts", () => {
     expect(root.querySelector("li")?.getAttribute("data-checked")).toBe("true");
   });
 
-  it("3. starts a numbered list at 3", () => {
+  it("3. starts a numbered list at 3, and 0. at 0", () => {
     space("3. ");
     expect(root.querySelector("ol")?.getAttribute("start")).toBe("3");
+    load("0. zero\n1. one");
+    expect(markdown()).toBe("0. zero\n1. one");
+  });
+
+  it("leaves the caret on the line a heading was made of, not in an empty item elsewhere", () => {
+    load("- \n\nIntro");
+    root.insertAdjacentHTML("beforeend", "<p>## </p>");
+    caretAfter("## ");
+    typed(" ");
+    const at = window.getSelection()!.getRangeAt(0).startContainer;
+    expect((at instanceof Element ? at : at.parentElement)?.closest("li")).toBeNull();
+  });
+});
+
+describe("a list's attribute list", () => {
+  it("stays with the list, not a level Tab makes or a part a toggle splits off", () => {
+    load("- a\n- b\n- c\n{: .cols}");
+    caretAfter("b");
+    handleKeydown(root, new KeyboardEvent("keydown", { key: "Tab" }));
+    expect(markdown()).toBe("- a\n  - b\n- c\n{: .cols}");
+    load("- a\n- b\n- c\n{: .cols}");
+    caretAfter("b");
+    toggleList(root, "bullet");
+    expect(markdown()).toBe("- a\n\nb\n\n- c\n{: .cols}");
+    load("{: .cols}\n- a\n- b\n- c");
+    caretAfter("b");
+    toggleList(root, "bullet");
+    expect(markdown()).toBe("{: .cols}\n- a\n\nb\n\n- c");
+  });
+});
+
+describe("Backspace under a photo", () => {
+  it("takes the photo and leaves its caption a line of its own", () => {
+    load("Intro\n\n![a](/a.jpg)\n*A caption*");
+    const range = document.createRange();
+    range.setStart(root.querySelector("p[data-join] em")!.firstChild!, 0);
+    window.getSelection()?.removeAllRanges();
+    window.getSelection()?.addRange(range);
+    expect(handleKeydown(root, new KeyboardEvent("keydown", { key: "Backspace" }))).toBe(true);
+    expect(markdown()).toBe("Intro\n\n*A caption*");
   });
 });
 

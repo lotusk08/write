@@ -50,6 +50,52 @@ function wordLists(body: HTMLElement): void {
   }
 }
 
+/**
+ * White space in a page's HTML as the page shows it: a run of it is one space, and none starts or ends a line. The
+ * editor reads a line end in text as a line break, and a page's source is broken into lines wherever its author or Word
+ * pleased. Text the page keeps as written — code, or styled `pre` as Google Docs styles its runs — is left alone.
+ */
+function collapseSpace(body: HTMLElement): void {
+  const walker = body.ownerDocument.createTreeWalker(body, NodeFilter.SHOW_TEXT);
+  const texts: Text[] = [];
+  while (walker.nextNode()) {
+    texts.push(walker.currentNode as Text);
+  }
+  for (const text of texts) {
+    if (text.parentElement?.closest('pre, code, textarea, [style*="white-space:pre" i], [style*="white-space: pre" i]')) {
+      continue;
+    }
+    const block = text.parentElement === body || Boolean(text.parentElement?.matches(`${BLOCKS}, td, th`));
+    const edge = (node: Node | null) => block && (node === null || node.nodeName === "BR" || isBlock(node));
+    let data = text.data.replace(/[\t\n\r ]+/g, " ");
+    if (edge(text.previousSibling)) {
+      data = data.replace(/^ /, "");
+    }
+    if (edge(text.nextSibling)) {
+      data = data.replace(/ $/, "");
+    }
+    if (data) {
+      text.data = data;
+    } else {
+      text.remove();
+    }
+  }
+}
+
+/** A list written straight inside another, as some editors copy a nested one, goes into the item above it; it was dropped. */
+function nestLists(body: HTMLElement): void {
+  for (const list of [...body.querySelectorAll(":is(ul, ol) > :is(ul, ol)")]) {
+    const item = list.previousElementSibling?.tagName === "LI" ? list.previousElementSibling : null;
+    if (item) {
+      item.append(list);
+    } else {
+      const wrapper = body.ownerDocument.createElement("li");
+      list.replaceWith(wrapper);
+      wrapper.append(list);
+    }
+  }
+}
+
 /** A clipboard's HTML, cleaned; the editor's hidden markup is kept only in a copy made here (`own`). */
 function clipboardBody(html: string, own: boolean): HTMLElement {
   const body = new DOMParser().parseFromString(html, "text/html").body;
@@ -57,6 +103,7 @@ function clipboardBody(html: string, own: boolean): HTMLElement {
     for (const element of body.querySelectorAll(HIDDEN.map((name) => `[${name}]`).join(", "))) {
       HIDDEN.forEach((name) => element.removeAttribute(name));
     }
+    collapseSpace(body);
   }
   [...body.querySelectorAll("*")]
     .filter((node) => /^(?:meta|style|script|link|title|o:p)$/i.test(node.tagName))
@@ -68,6 +115,7 @@ function clipboardBody(html: string, own: boolean): HTMLElement {
   }
   comments.forEach((comment) => comment.parentNode?.removeChild(comment));
   wordLists(body);
+  nestLists(body);
   for (const element of [...body.querySelectorAll("b, strong")]) {
     if (NOT_BOLD.test(element.getAttribute("style") ?? "")) {
       unwrap(element);
@@ -139,7 +187,7 @@ export function pastedHtml(html: string, text: string): string | null {
     ? htmlToDoc(body.innerHTML)
     : MARKDOWN_LINE.test(plain) || MARKDOWN_INLINE.test(plain)
       ? markdownToDoc(plain)
-      : plainDoc(plain || (body?.textContent ?? ""));
+      : plainDoc((plain || (body?.textContent ?? "")).replace(/\n+$/, ""));
   if (!doc.content?.length) {
     return null;
   }
@@ -148,7 +196,9 @@ export function pastedHtml(html: string, text: string): string | null {
   return single ? out.replace(/^<p>([\s\S]*)<\/p>$/, "$1") : out;
 }
 
-const TEXTBLOCK = "p, h1, h2, h3, h4, h5, h6, li, td, th, summary, pre, div";
+const TEXTBLOCK = "p, h1, h2, h3, h4, h5, h6, li, td, th, pre, div";
+/** A block that holds one run of text: what is pasted in joins it, broken onto lines but in a section's one-line title. */
+const ONE_RUN = "li, td, th, [data-collapsible-summary]";
 
 function isBlock(node: Node | null): node is Element {
   return node instanceof Element && node.matches(BLOCKS);
@@ -197,11 +247,12 @@ function insertBlocks(root: HTMLElement, range: Range, fragment: DocumentFragmen
     range.collapse(true);
   }
   const block = blockAround(range.startContainer, root);
-  if (block.matches("li, td, th, summary")) {
+  if (block.matches(ONE_RUN)) {
+    const title = block.matches("[data-collapsible-summary]");
     const inline = document.createDocumentFragment();
     [...fragment.childNodes].forEach((node, index) => {
       if (index) {
-        inline.append(document.createElement("br"));
+        inline.append(title ? document.createTextNode(" ") : document.createElement("br"));
       }
       inline.append(...(isBlock(node) ? [...node.childNodes] : [node]));
     });
@@ -271,8 +322,6 @@ export function pasteClipboard(event: ClipboardEvent): boolean {
   event.stopImmediatePropagation();
   const embed = !inCode && /^https?:\/\/\S+$/.test(text.trim()) && range.collapsed ? embedFromUrl(text) : null;
   if (embed) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
     return insertEmbed(root, embed);
   }
   if (inCode) {

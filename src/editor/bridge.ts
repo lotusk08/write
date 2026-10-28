@@ -605,7 +605,9 @@ function blockFrom(element: Element): JSONContent[] {
     const items = tag === "li" ? [element] : children(element, "li");
     const content = items.map(listItem);
     if (tag === "ol") {
-      const start = Number(element.getAttribute("start") ?? 1) || 1;
+      // A list may count from 0; `|| 1` read `0.` as 1.
+      const written = Number.parseInt(element.getAttribute("start") ?? "", 10);
+      const start = Number.isNaN(written) ? 1 : Math.max(0, written);
       return content.length ? [withAttrs({ type: "orderedList", attrs: { start }, content }, attrs)] : [];
     }
     const tasks =

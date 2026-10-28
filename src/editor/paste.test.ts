@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
-import { htmlToDoc } from "./bridge.ts";
+import { docToHtml, htmlToDoc } from "./bridge.ts";
 import { rememberCopy } from "./clipboard.ts";
 import { pasteClipboard, pastedHtml } from "./paste.ts";
 import { docToMarkdown } from "../lib/markdown.ts";
@@ -67,6 +67,22 @@ describe("paste", () => {
     rememberCopy("");
   });
 
+  it("reads white space in a page's source as the page shows it, code as written", () => {
+    expect(markdown(pastedHtml("<ul>\n  <li>\n    First item\n  </li>\n  <li>Second</li>\n</ul>", "First item\nSecond"))).toBe(
+      "- First item\n- Second",
+    );
+    expect(markdown(pastedHtml("<p class=MsoNormal><b>Bold</b> wrapped by\r\nWord<o:p></o:p></p><div><p>a</p> <p>b</p></div>", ""))).toBe(
+      "**Bold** wrapped by Word\n\na\n\nb",
+    );
+    expect(markdown(pastedHtml("<p>one<br>\ntwo</p><pre><code>keep\n  this</code></pre>", ""))).toBe("one\ntwo\n\n```\nkeep\n  this\n```");
+  });
+
+  it("nests a list written straight inside another under the item above it", () => {
+    expect(markdown(pastedHtml("<ul><li><p>a</p></li><ul><li><p>nested</p></li></ul><li><p>b</p></li></ul>", ""))).toBe(
+      "- a\n  - nested\n- b",
+    );
+  });
+
   it("drops a highlight, which has no tool to take it off again", () => {
     expect(markdown(pastedHtml("<p>a <mark>found</mark> c</p>", "a found c"))).toBe("a found c");
     expect(markdown(pastedHtml("<p>a <b><mark>found</mark></b> c</p>", "a found c"))).toBe("a **found** c");
@@ -79,6 +95,7 @@ describe("paste", () => {
   it("pastes other plain text as paragraphs and line breaks, Windows line ends folded", () => {
     expect(markdown(pastedHtml("", "one\r\ntwo\r\n\r\nthree"))).toBe("one\ntwo\n\nthree");
     expect(pastedHtml("", "just words")).toBe("just words");
+    expect(pastedHtml("", "a line copied whole\n")).toBe("a line copied whole");
   });
 
   it("treats a styled-only paste, as from a code editor, as its plain text", () => {
@@ -106,6 +123,34 @@ describe("paste", () => {
     document.execCommand = () => true;
     paste("dQw4w9WgXcQ");
     expect(root.querySelector("[data-embed]")).toBeNull();
+  });
+
+  it("pastes blocks into a section's title as one line of it", () => {
+    document.body.innerHTML = `<div contenteditable="true">${docToHtml({
+      type: "doc",
+      content: [
+        {
+          type: "collapsible",
+          attrs: { open: true },
+          content: [
+            { type: "collapsibleSummary", content: [{ type: "text", text: "Sum" }] },
+            { type: "collapsibleContent", content: [{ type: "paragraph", content: [{ type: "text", text: "Body" }] }] },
+          ],
+        },
+      ],
+    })}</div>`;
+    const root = document.body.firstElementChild as HTMLElement;
+    const range = document.createRange();
+    range.setStart(root.querySelector("[data-collapsible-summary]")!.firstChild!, 3);
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(range);
+    const data = new DataTransfer();
+    data.setData("text/html", "<p>One</p><p>Two</p>");
+    data.setData("text/plain", "One\n\nTwo");
+    const event = new ClipboardEvent("paste", { clipboardData: data, cancelable: true });
+    Object.defineProperty(event, "currentTarget", { value: root });
+    expect(pasteClipboard(event)).toBe(true);
+    expect(markdown(root.innerHTML)).toBe("<details open>\n<summary>SumOne Two</summary>\n\nBody\n\n</details>");
   });
 
   it("pastes blocks where the caret sits on the editor itself, as after a trailing photo", () => {
