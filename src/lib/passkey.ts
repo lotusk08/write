@@ -24,7 +24,7 @@ export function passkeysAvailable(): boolean {
 }
 
 export async function addPasskey(password: string): Promise<string | null> {
-  const options = await passkeyChallenge();
+  const options = await passkeyChallenge("register", password);
   let credential: PublicKeyCredential | null;
   try {
     credential = (await navigator.credentials.create({
@@ -69,7 +69,7 @@ export async function addPasskey(password: string): Promise<string | null> {
 }
 
 export async function signInWithPasskey(): Promise<string | null> {
-  const options = await passkeyChallenge();
+  const options = await passkeyChallenge("login");
   let credential: PublicKeyCredential | null;
   try {
     credential = (await navigator.credentials.get({

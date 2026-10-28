@@ -27,9 +27,12 @@ import { redirectSources, REDIRECTS_PATH } from "../shared/redirects.ts";
 import {
   ALGORITHMS,
   base64url,
+  challengeExpiry,
+  type ChallengePurpose,
   checkCeremony,
   fromBase64url,
   importKey,
+  issueChallenge,
   issueSession,
   type Passkeys,
   validSession,
@@ -642,6 +645,15 @@ async function readPasskeyBody(request: Request): Promise<Record<string, unknown
   }
 }
 
+/** Spends a challenge signed for `purpose` once; anything else is no challenge of the app's. */
+function spender(env: Env, purpose: ChallengePurpose) {
+  return async (challenge: string) => {
+    const expires = await challengeExpiry(env.WRITE_PASSWORD!, purpose, challenge);
+    return expires !== null && (await passkeyStore(env).spend(challenge, expires));
+  };
+}
+
+/** A challenge to sign in with a passkey, or, after the password, to save one: `?for=register`. */
 async function handlePasskeyChallenge(request: Request, env: Env): Promise<Response> {
   if (crossSite(request)) {
     return json({ error: "Passkeys can only be used from the app itself." }, 403);
@@ -650,11 +662,21 @@ async function handlePasskeyChallenge(request: Request, env: Env): Promise<Respo
   if (missing) {
     return misconfigured(missing, env);
   }
-  if (await limited(env.SOURCE_RATE, request, "passkey")) {
+  const purpose: ChallengePurpose = new URL(request.url).searchParams.get("for") === "register" ? "register" : "login";
+  if (purpose === "register") {
+    const denied = await authorize(request, env, { passwordOnly: true });
+    if (denied) {
+      return denied;
+    }
+  } else if (await limited(env.SOURCE_RATE, request, "passkey")) {
     return tooMany();
   }
-  const { challenge, credentials } = await passkeyStore(env).challenge();
-  return json({ challenge, rpId: new URL(request.url).hostname, credentials, algorithms: ALGORITHMS });
+  return json({
+    challenge: await issueChallenge(env.WRITE_PASSWORD!, purpose),
+    rpId: new URL(request.url).hostname,
+    credentials: await passkeyStore(env).credentialIds(),
+    algorithms: ALGORITHMS,
+  });
 }
 
 async function handlePasskeyRegister(request: Request, env: Env): Promise<Response> {
@@ -680,7 +702,7 @@ async function handlePasskeyRegister(request: Request, env: Env): Promise<Respon
     type: "webauthn.create",
     origin: url.origin,
     rpId: url.hostname,
-    consume: (challenge) => store.consume(challenge),
+    consume: spender(env, "register"),
   });
   if (typeof checked === "string") {
     return json({ error: checked }, 400);
@@ -726,7 +748,7 @@ async function handlePasskeyLogin(request: Request, env: Env): Promise<Response>
     type: "webauthn.get",
     origin: url.origin,
     rpId: url.hostname,
-    consume: (challenge) => store.consume(challenge),
+    consume: spender(env, "login"),
   });
   if (typeof checked === "string") {
     return json({ error: checked }, 401);

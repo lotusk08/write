@@ -1,7 +1,6 @@
 import { DurableObject } from "cloudflare:workers";
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
-const MAX_CHALLENGES = 50;
 const MAX_CREDENTIALS = 20;
 const SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 const FAILURE_WINDOW_MS = 15 * 60 * 1000;
@@ -27,7 +26,9 @@ export class Passkeys extends DurableObject {
       sql.exec(
         "CREATE TABLE IF NOT EXISTS credentials (id TEXT PRIMARY KEY, key BLOB NOT NULL, alg INTEGER NOT NULL, counter INTEGER NOT NULL, created INTEGER NOT NULL)",
       );
-      sql.exec("CREATE TABLE IF NOT EXISTS challenges (value TEXT PRIMARY KEY, expires INTEGER NOT NULL)");
+      // Challenges are signed, not kept: a stored pool let anyone push the owner's out by asking for fifty of their own.
+      sql.exec("DROP TABLE IF EXISTS challenges");
+      sql.exec("CREATE TABLE IF NOT EXISTS spent (value TEXT PRIMARY KEY, expires INTEGER NOT NULL)");
       sql.exec("CREATE TABLE IF NOT EXISTS failures (key TEXT PRIMARY KEY, count INTEGER NOT NULL, since INTEGER NOT NULL)");
       this.ready = true;
     }
@@ -53,27 +54,15 @@ export class Passkeys extends DurableObject {
     return "wrong";
   }
 
-  challenge(): { challenge: string; credentials: string[] } {
-    const sql = this.sql;
-    const now = Date.now();
-    sql.exec("DELETE FROM challenges WHERE expires <= ?", now);
-    sql.exec(
-      "DELETE FROM challenges WHERE value IN (SELECT value FROM challenges ORDER BY expires DESC LIMIT -1 OFFSET ?)",
-      MAX_CHALLENGES - 1,
-    );
-    const challenge = base64url(crypto.getRandomValues(new Uint8Array(32)));
-    sql.exec("INSERT INTO challenges (value, expires) VALUES (?, ?)", challenge, now + CHALLENGE_TTL_MS);
-    const credentials = sql.exec<{ id: string }>("SELECT id FROM credentials").toArray().map((row) => row.id);
-    return { challenge, credentials };
+  credentialIds(): string[] {
+    return this.sql.exec<{ id: string }>("SELECT id FROM credentials").toArray().map((row) => row.id);
   }
 
-  consume(challenge: string): boolean {
-    const cursor = this.sql.exec(
-      "DELETE FROM challenges WHERE value = ? AND expires > ? RETURNING value",
-      challenge,
-      Date.now(),
-    );
-    return cursor.toArray().length > 0;
+  /** Marks a signed challenge used, until it would have expired anyway; false if it was used before. */
+  spend(challenge: string, expires: number): boolean {
+    const sql = this.sql;
+    sql.exec("DELETE FROM spent WHERE expires <= ?", Date.now());
+    return sql.exec("INSERT INTO spent (value, expires) VALUES (?, ?) ON CONFLICT(value) DO NOTHING RETURNING value", challenge, expires).toArray().length > 0;
   }
 
   credential(id: string): StoredCredential | null {
@@ -144,6 +133,36 @@ export interface Ceremony {
   origin: string;
   rpId: string;
   consume: (challenge: string) => Promise<boolean>;
+}
+
+export type ChallengePurpose = "register" | "login";
+
+async function challengeKey(secret: string): Promise<CryptoKey> {
+  const material = await sha256(new TextEncoder().encode(`write-challenge\u0000${secret}`));
+  return crypto.subtle.importKey("raw", material, { name: "HMAC", hash: "SHA-256" }, false, ["sign", "verify"]);
+}
+
+/** A challenge the Worker signs rather than stores, for one purpose and five minutes; the browser hands it back as base64url. */
+export async function issueChallenge(secret: string, purpose: ChallengePurpose, now = Date.now()): Promise<string> {
+  const body = `${purpose}.${now + CHALLENGE_TTL_MS}.${base64url(crypto.getRandomValues(new Uint8Array(32)))}`;
+  const mac = await crypto.subtle.sign("HMAC", await challengeKey(secret), new TextEncoder().encode(body));
+  return base64url(new TextEncoder().encode(`${body}.${base64url(new Uint8Array(mac))}`));
+}
+
+/** When a challenge this Worker signed for `purpose` expires, or null if it did not sign it, or it has expired. */
+export async function challengeExpiry(secret: string, purpose: ChallengePurpose, challenge: string, now = Date.now()): Promise<number | null> {
+  const bytes = fromBase64url(challenge, 512);
+  const match = bytes && /^(register|login)\.(\d{13})\.([A-Za-z0-9_-]{43})\.([A-Za-z0-9_-]{43})$/.exec(new TextDecoder().decode(bytes));
+  if (!match || match[1] !== purpose) {
+    return null;
+  }
+  const expires = Number(match[2]);
+  const mac = fromBase64url(match[4]);
+  if (expires <= now || expires > now + CHALLENGE_TTL_MS || !mac) {
+    return null;
+  }
+  const body = new TextEncoder().encode(`${match[1]}.${match[2]}.${match[3]}`);
+  return (await crypto.subtle.verify("HMAC", await challengeKey(secret), mac, body)) ? expires : null;
 }
 
 export interface CheckedData {

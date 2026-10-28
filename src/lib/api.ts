@@ -213,8 +213,12 @@ export interface PasskeyChallenge {
   algorithms: number[];
 }
 
-export async function passkeyChallenge(): Promise<PasskeyChallenge> {
-  const response = await fetch("/api/passkey/challenge", { method: "POST", headers: { accept: "application/json" } });
+/** A challenge to sign in with a passkey, or to save one, which takes the password. */
+export async function passkeyChallenge(purpose: "login" | "register", password = ""): Promise<PasskeyChallenge> {
+  const response = await fetch(`/api/passkey/challenge${purpose === "register" ? "?for=register" : ""}`, {
+    method: "POST",
+    headers: headers(purpose === "register" ? password : "", {}),
+  });
   return readJson<PasskeyChallenge>(response, "Could not start the passkey");
 }
 

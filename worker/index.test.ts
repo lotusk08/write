@@ -3,11 +3,18 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("cloudflare:workers", () => ({ DurableObject: class {} }));
 
 const { default: worker, siteFile } = await import("./index.ts");
+const { challengeExpiry, issueChallenge } = await import("./passkeys.ts");
 
 const failures = new Map<string, number>();
+const spent = new Set<string>();
+const keys = new Map<string, { key: ArrayBuffer; alg: number; counter: number }>();
 const passkeys = {
   idFromName: () => "owner",
   get: () => ({
+    credentialIds: async () => ["cred-1"],
+    credential: async (id: string) => keys.get(id) ?? null,
+    touch: async () => undefined,
+    spend: async (challenge: string) => !spent.has(challenge) && Boolean(spent.add(challenge)),
     attempt: async (key: string, ok: boolean) => {
       const count = failures.get(key) ?? 0;
       if (count >= 10) {
@@ -39,6 +46,7 @@ const post = { path: "src/posts/2026-10-11-trip.md", contentBase64: "aGk=" };
 afterEach(() => {
   vi.unstubAllGlobals();
   failures.clear();
+  spent.clear();
 });
 
 describe("worker", () => {
@@ -216,6 +224,60 @@ describe("the site's posts and drafts", () => {
     expect(time("2026-01-01 10:00")).toBe(time("2026-01-01T03:00:00Z"));
     expect(time("2026-01-01 10:00 +0800")).toBe(time("2026-01-01 09:00 +0700"));
     expect(siteFile("src/posts/2026-01-01-x.md", "---\ntitle: X\n---\n").time).toBe(time("2026-01-01"));
+  });
+});
+
+describe("passkey challenges", () => {
+  const challenge = (query = "", password?: string) =>
+    worker.fetch(
+      new Request(`https://write.test/api/passkey/challenge${query}`, { method: "POST", headers: password ? { "x-write-password": password } : {} }),
+      env,
+    );
+
+  it("are signed, not kept, so no number asked for pushes the owner's out", async () => {
+    const asked = await Promise.all(Array.from({ length: 60 }, () => challenge()));
+    const first = (await asked[0].json()) as { challenge: string; credentials: string[] };
+    expect(first.credentials).toEqual(["cred-1"]);
+    expect(await challengeExpiry("pw", "login", first.challenge)).toBeGreaterThan(Date.now());
+  });
+
+  it("sign in once each, by a passkey's signature over the challenge the Worker signed", async () => {
+    const pair = (await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, true, ["sign", "verify"])) as CryptoKeyPair;
+    keys.set("cred-1", { key: (await crypto.subtle.exportKey("spki", pair.publicKey)) as ArrayBuffer, alg: -7, counter: 0 });
+    const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+    const login = async (purpose = "") => {
+      const { challenge: given } = (await (await challenge(purpose, purpose ? "pw" : undefined)).json()) as { challenge: string };
+      const clientDataJSON = new TextEncoder().encode(JSON.stringify({ type: "webauthn.get", challenge: given, origin: "https://write.test" }));
+      const authenticatorData = new Uint8Array(37);
+      authenticatorData.set(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode("write.test"))));
+      authenticatorData[32] = 0x05;
+      const signed = new Uint8Array([...authenticatorData, ...new Uint8Array(await crypto.subtle.digest("SHA-256", clientDataJSON))]);
+      const raw = new Uint8Array(await crypto.subtle.sign({ name: "ECDSA", hash: "SHA-256" }, pair.privateKey, signed));
+      const integer = (half: Uint8Array) => (half[0] & 0x80 ? [0x02, 33, 0, ...half] : [0x02, 32, ...half]);
+      const parts = [...integer(raw.slice(0, 32)), ...integer(raw.slice(32))];
+      const body = { id: "cred-1", clientDataJSON: b64(clientDataJSON), authenticatorData: b64(authenticatorData), signature: b64(new Uint8Array([0x30, parts.length, ...parts])) };
+      const send = () => worker.fetch(new Request("https://write.test/api/passkey/login", { method: "POST", body: JSON.stringify(body) }), env);
+      return [await send(), await send()];
+    };
+    const [first, replayed] = await login();
+    expect(first.status).toBe(200);
+    expect(((await first.json()) as { session?: string }).session).toMatch(/^v1\./);
+    expect(replayed.status).toBe(401);
+    expect((await login("?for=register"))[0].status).toBe(401);
+    keys.clear();
+  });
+
+  it("to save a passkey only after the password, and each for its own purpose, once, within five minutes", async () => {
+    expect((await challenge("?for=register")).status).toBe(401);
+    expect((await challenge("?for=register", "wrong")).status).toBe(401);
+    const saving = (await (await challenge("?for=register", "pw")).json()) as { challenge: string };
+    expect(await challengeExpiry("pw", "register", saving.challenge)).not.toBeNull();
+    expect(await challengeExpiry("pw", "login", saving.challenge)).toBeNull();
+    expect(await challengeExpiry("other password", "register", saving.challenge)).toBeNull();
+    const old = await issueChallenge("pw", "login", Date.now() - 6 * 60 * 1000);
+    expect(await challengeExpiry("pw", "login", old)).toBeNull();
+    const forged = saving.challenge.slice(0, -4) + (saving.challenge.endsWith("AAAA") ? "BBBB" : "AAAA");
+    expect(await challengeExpiry("pw", "register", forged)).toBeNull();
   });
 });
 
