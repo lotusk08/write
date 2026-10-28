@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { newPostMeta } from "./draft.ts";
 import { parsePost } from "./import.ts";
-import { buildPostFile } from "./markdown.ts";
+import { buildFrontMatter, buildPostFile } from "./markdown.ts";
 
 const written = (source: string) => {
   const { meta, doc } = parsePost(source);
@@ -67,6 +67,13 @@ describe("front matter the app has no field for", () => {
     expect(written(post)).toBe(
       '---\ntitle: X\ndate: 2026-10-11 09:00 +0700\ntags: []\npin: false\ntoc: true\n# a note\nog:image: /a.jpg\nseo.title: Y\n"quoted key": v\n2fa: yes\n---\nText\n',
     );
+  });
+
+  it("writes a date plain, as the posts do, in any form the blog reads", () => {
+    for (const date of ["2026-10-11", "2026-10-11 09:00 +0700", "2026-10-11 09:00:00 +07:00", "2026-10-11T09:00:00Z"]) {
+      expect(buildFrontMatter({ ...newPostMeta(), date })).toContain(`\ndate: ${date}\n`);
+    }
+    expect(buildFrontMatter({ ...newPostMeta(), date: "soon: maybe" })).toContain('\ndate: "soon: maybe"\n');
   });
 
   it("drops what the blog no longer reads", () => {

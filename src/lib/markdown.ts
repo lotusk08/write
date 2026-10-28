@@ -660,12 +660,18 @@ function withoutKey(lines: string[], key: string): string[] {
   });
 }
 
+/**
+ * A date the blog reads (`2026-10-11`, `2026-10-11 09:00 +0700`), written plain as the posts write it: the blog reads
+ * its YAML with the core schema, where none of these is a timestamp, so quoting one only moved its line.
+ */
+const POST_DATE = /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?)?(?: ?(?:Z|[+-]\d{2}:?\d{2}))?$/;
+
 export function buildFrontMatter(meta: PostMeta): string {
   const lines = ["---", `title: ${yamlString(meta.title)}`];
   if (meta.description.trim()) {
     lines.push(`description: ${yamlString(meta.description)}`);
   }
-  lines.push(`date: ${yamlString(meta.date)}`);
+  lines.push(`date: ${POST_DATE.test(meta.date) ? meta.date : yamlString(meta.date)}`);
   if (meta.lang?.trim()) {
     lines.push(`lang: ${yamlString(meta.lang)}`);
   }
