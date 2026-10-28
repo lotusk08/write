@@ -236,7 +236,7 @@ export function toggleInline(root: HTMLElement, tag: string): boolean {
   return true;
 }
 
-/** The blog's `{: .path}` code: plain code gains the class, a file path loses its code, and plain text becomes a file path, a bare caret taking the whole path round it. */
+/** The blog's `{.path}` code: plain code gains the class, a file path loses its code, and plain text becomes a file path, a bare caret taking the whole path round it. */
 export function toggleFilepath(root: HTMLElement): boolean {
   const range = selectionIn(root);
   const code = closestIn(root, anchor(root), "code") ?? (range && codeCovering(root, range));
@@ -341,7 +341,7 @@ function wrapInQuote(root: HTMLElement): HTMLElement | null {
   return quote;
 }
 
-/** A callout of the blog's: `{: .tip }` and the rest, `{: .author }` or `{: .poem }`. Picking the current kind takes it off. */
+/** A callout of the blog's: `> [!tip]` and the rest, `> [!author]` or `> [!poem]`. Picking the current kind takes it off. */
 export function setNote(root: HTMLElement, note: NoteType): boolean {
   const quote = quoteAt(root) ?? wrapInQuote(root);
   if (!quote) {

@@ -381,7 +381,7 @@ const MARKS: [RegExp, string][] = [
 
 const LINK = /(?<!!)\[([^\]\n]+)\]\(([^()\s]+)\)$/;
 
-const FILEPATH = /^\{:\s*\.path\s*\}$/;
+const FILEPATH = /^\{:?\s*\.path\s*\}$/;
 
 /** The marks the browser has a command for, so the change is in its undo history and it stops the mark for what is typed next. */
 const COMMANDS: Record<string, string> = { strong: "bold", em: "italic", s: "strikeThrough" };

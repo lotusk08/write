@@ -20,7 +20,7 @@ export function isNoteType(value: unknown): value is NoteType {
   return (NOTE_TYPES as readonly unknown[]).includes(value);
 }
 
-/** The class each callout is written with on the blog, short as the blog names it: `{: .key }` is Important. */
+/** The name each callout is written with on the blog, short as the blog names it: `> [!key]` is Important. */
 export const NOTE_CLASSES: Record<NoteType, string> = {
   tip: "tip",
   info: "info",
@@ -35,11 +35,29 @@ export function noteOfClass(name: string): NoteType | null {
   return NOTE_TYPES.find((type) => NOTE_CLASSES[type] === name) ?? null;
 }
 
-/** The callout an attribute list names on its own, as `{: .poem }` does. */
+/** The callout an attribute list names on its own, as `{.poem}`, or kramdown's `{: .poem }`, does. */
 export function noteOfIal(line: string): NoteType | null {
-  const name = /^\{:\s*\.([\w-]+)\s*\}$/.exec(line.trim())?.[1];
+  const name = /^\{:?\s*\.([\w-]+)\s*\}$/.exec(line.trim())?.[1];
   return name ? noteOfClass(name) : null;
 }
+
+/** A callout named on a quote's first line, as GitHub writes its alerts: `> [!info]`, by the blog's names or GitHub's. */
+export const ALERT = /^\[!([A-Za-z]+)\][ \t]*$/;
+
+const GITHUB_ALERTS: Record<string, string> = { note: "info", important: "key", warning: "warn", caution: "risk", danger: "risk" };
+
+export function noteOfAlert(line: string): NoteType | null {
+  const name = ALERT.exec(line.trim())?.[1].toLowerCase();
+  return name ? noteOfClass(GITHUB_ALERTS[name] ?? name) : null;
+}
+
+const ATTRIBUTE = String.raw`(?:\.[\w-]+|#[\w-]+|[\w-]+=(?:"[^"]*"|'[^']*'|[^\s"'}]+))`;
+
+/**
+ * An attribute list as the blog reads one: Pandoc's `{.path}`, which holds attributes and nothing else, so `{x}` or
+ * `{a, b}` stays text, or kramdown's `{: .path}`.
+ */
+export const ATTRIBUTES = String.raw`\{(?::[^}\n]*|[ \t]*${ATTRIBUTE}(?:[ \t]+${ATTRIBUTE})*[ \t]*)\}`;
 
 const PLATFORMS = ["youtube", "x", "audio", "video"] as const;
 

@@ -48,7 +48,7 @@ export function rememberSource(text: string, meta: PostMeta, doc: JSONContent): 
 /**
  * The post as one Markdown file, front matter and all, for the source view. Each half is the text as it was written
  * while the post still reads as it; a half changed since — in the page view or the menu — is written afresh. Rebuilt
- * on every switch, `_a_` came back `*a*`, `{: .info }` `{: .info}`, and blank lines moved.
+ * on every switch, `_a_` came back `*a*`, `{: .path }` `{.path}`, and blank lines moved.
  */
 export function sourceFor(meta: PostMeta, doc: JSONContent, kept?: SourceText): string {
   const written = kept ? parts(kept.text) : null;

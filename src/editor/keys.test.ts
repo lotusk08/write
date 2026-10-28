@@ -182,14 +182,16 @@ describe("marks typed in Markdown", () => {
     expect(root.querySelector("a")).toBeNull();
   });
 
-  it("`x`{: .path} makes the code a file path", () => {
-    raw("open `a/b`");
-    caretAfter("`a/b`");
-    typed("`");
-    root.querySelector("code")?.after("{: .path}");
-    caretAfter("{: .path}");
-    typed("}");
-    expect(markdown()).toBe("open `a/b`{: .path}");
+  it("`x`{.path}, or `x`{: .path}, makes the code a file path", () => {
+    for (const typedList of ["{.path}", "{: .path}"]) {
+      raw("open `a/b`");
+      caretAfter("`a/b`");
+      typed("`");
+      root.querySelector("code")?.after(typedList);
+      caretAfter(typedList);
+      typed("}");
+      expect(markdown()).toBe("open `a/b`{.path}");
+    }
   });
 
   it("leaves snake_case_names, spaced stars, half-closed bold and Vietnamese mid-word marks alone", () => {
@@ -368,7 +370,7 @@ describe("toolbar commands", () => {
     load("alpha beta gamma");
     selectText("beta");
     toggleFilepath(root);
-    expect(markdown()).toBe("alpha `beta`{: .path} gamma");
+    expect(markdown()).toBe("alpha `beta`{.path} gamma");
     toggleFilepath(root);
     expect(markdown()).toBe("alpha beta gamma");
   });
@@ -377,7 +379,7 @@ describe("toolbar commands", () => {
     load("open src/main.ts now");
     caretAfter("src/ma");
     toggleFilepath(root);
-    expect(markdown()).toBe("open `src/main.ts`{: .path} now");
+    expect(markdown()).toBe("open `src/main.ts`{.path} now");
   });
 
   it("a code block comes off as one paragraph, a line break per line", () => {

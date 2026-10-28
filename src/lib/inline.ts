@@ -61,7 +61,7 @@ const HTML_TAG = new RegExp(
 );
 const BAD_PROTOCOL = /^(vbscript|javascript|file|data):/;
 const GOOD_DATA = /^data:image\/(gif|png|jpeg|webp);/;
-const FILEPATH = /^\{:\s*\.path\s*\}/;
+const FILEPATH = /^\{:?\s*\.path\s*\}/;
 
 const ZCC = "[\\p{Z}\\p{Cc}]";
 const ZPCC = "[\\p{Z}\\p{P}\\p{Cc}]";

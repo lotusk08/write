@@ -42,16 +42,19 @@ browser.
   quoting, empty fields omitted — so re-publishing a post never moves a line
   of its front matter.
 - **Quotes and callouts.** A plain quote has its own button; quotes can carry
-  the blog's five note styles, exported as `{: .info}` and friends, plus
-  `{: .author}` for a quote with its author, and `{: .poem}` for a poem
-  without one: the same centred quote, its last stanza kept a stanza.
+  the blog's five note styles, named on the quote's first line as GitHub
+  writes its alerts — `> [!info]` and friends — plus `> [!author]` for a
+  quote with its author, and `> [!poem]` for a poem without one: the same
+  centred quote, its last stanza kept a stanza. GitHub's own names
+  (`[!NOTE]`, `[!WARNING]` …) and the older `{: .info}` under a quote are
+  read too.
 - **Shortcuts.** Markdown as you type (`**bold**`, `[text](url)`, `- [x] `,
   `---` …) and the ⌘ keys the old editor had; Tab nests list items.
 - **Paste.** From Google Docs, Word or a web page, keeping headings, lists,
   bold and italic and dropping fonts and colours; pasted Markdown becomes
   formatting.
   Body headings start at H2, since the title lives in front matter.
-- **The blog's own formats.** `{: .path}` code, the ```` ```gallery ````
+- **The blog's own formats.** `{.path}` code, the ```` ```gallery ````
   fence, made from a run of photos with one button (several photos added at
   once become one), its photos added, moved and removed in place, and
   `<EmbedYoutube id="…" />` players are first-class here — paste a YouTube or X

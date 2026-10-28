@@ -1,7 +1,7 @@
 import type { JSONContent } from "../editor/doc.ts";
 import { writtenPin } from "../../shared/pin.ts";
 import type { PostMeta } from "../../shared/types.ts";
-import { NOTE_CLASSES, embedTag, isNoteType } from "../editor/blog.ts";
+import { ATTRIBUTES, NOTE_CLASSES, embedTag, isNoteType } from "../editor/blog.ts";
 import { ENTITY, autolinkFor, bareLinks, entityText, escapeChars } from "./inline.ts";
 import { topicSlug } from "./topics.ts";
 
@@ -48,6 +48,9 @@ function entityAt(text: string): boolean {
   return Boolean(match && entityText(match) !== null);
 }
 
+const IAL = new RegExp(`^${ATTRIBUTES}$`);
+const ATTRIBUTE_LIST = new RegExp(ATTRIBUTES, "g");
+
 function escapePlain(text: string, follower = ""): string {
   return text
     .split(/(\[\^[^\]\s]+\])/)
@@ -56,6 +59,8 @@ function escapePlain(text: string, follower = ""): string {
         ? part
         : part
             .replace(/\\(?=[!-/:-@[-`{-~])/g, "\\\\")
+            // Text that reads as an attribute list would give its attributes to the code, link or photo before it.
+            .replace(ATTRIBUTE_LIST, (list) => `\\${list}`)
             .replace(/([`*_[\]|])/g, "\\$1")
             .replace(/&(?=#[xX]?[0-9a-fA-F]+;|[a-zA-Z][a-zA-Z0-9]*;)/g, (amp, at, whole) =>
               entityAt(whole.slice(at)) ? "\\&" : amp,
@@ -68,7 +73,7 @@ function escapePlain(text: string, follower = ""): string {
     .join("");
 }
 
-const ANY_LINE = /^ {0,3}(?:(?:#{1,6}|[-+])(?=[ \t]|$)|>|\{:|-+[ \t]*$)/;
+const ANY_LINE = new RegExp(String.raw`^ {0,3}(?:(?:#{1,6}|[-+])(?=[ \t]|$)|>|${ATTRIBUTES}|-+[ \t]*$)`);
 const FIRST_LINE = /^ {0,3}\d{1,9}[.)](?=[ \t]|$)/;
 const LATER_LINE = /^ {0,3}(?:\d{1,9}[.)](?=[ \t]|$)|=+[ \t]*$)/;
 
@@ -114,7 +119,7 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
     const longest = Math.max(0, ...[...text.matchAll(/`+/g)].map((run) => run[0].length));
     const fence = "`".repeat(longest + 1);
     const padding = /^`|`$|^[ \n][\s\S]+[ \n]$/.test(text) ? " " : "";
-    const filepath = code.attrs?.filepath ? "{: .path}" : "";
+    const filepath = code.attrs?.filepath ? "{.path}" : "";
     out = `${fence}${padding}${text}${padding}${fence}${filepath}`;
   }
 
@@ -176,10 +181,11 @@ function oneLine(address: string): string {
   return address.replace(/[\r\n]/g, encodeURIComponent);
 }
 
-/** An attribute list as it is read back, `{: … }` on one line, or nothing: anything else would be written as text of the post. */
+
+/** An attribute list as it is read back, `{.x}` or `{: … }` on one line, or nothing: anything else would be written as text of the post. */
 function ialOf(value: unknown): string {
   const ial = value ? String(value) : "";
-  return /^\{:[^}\n]*\}$/.test(ial) ? ial : "";
+  return IAL.test(ial) ? ial : "";
 }
 
 /** A footnote's label as it is read back, with no space or closing bracket in it. */
@@ -441,7 +447,7 @@ function collapsibleBlock(node: JSONContent, options: SerializeOptions): string 
   return `<details${open}>\n<summary>${summary}</summary>\n\n${body}\n\n</details>`;
 }
 
-const ENDS_WITH_IAL = /\n\{:[^}\n]*\}$/;
+const ENDS_WITH_IAL = new RegExp(`\\n${ATTRIBUTES}$`);
 
 function blockIal(nodes: JSONContent[], index: number): string {
   if (nodes[index].attrs?.ialAbove) {
@@ -488,8 +494,9 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
           .map((line) => (line ? `> ${line}` : ">"))
           .join("\n");
         const name = node.attrs?.note ? String(node.attrs.note) : "";
-        const note = name ? `\n{: .${isNoteType(name) ? NOTE_CLASSES[name] : name}}` : "";
-        out.push(quoted + note);
+        // A callout is named on its quote's first line, as GitHub writes its alerts, by the blog's name for it.
+        const note = name ? `> [!${isNoteType(name) ? NOTE_CLASSES[name] : name}]\n` : "";
+        out.push(note + quoted);
         break;
       }
       case "bulletList":

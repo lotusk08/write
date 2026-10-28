@@ -3,7 +3,7 @@ import { frontMatter } from "../../shared/front.ts";
 import { decoded } from "../../shared/paths.ts";
 import { readPin } from "../../shared/pin.ts";
 import type { PostMeta } from "../../shared/types.ts";
-import { EMBED_LIQUID, EMBED_TAG, NOTE_CLASSES, embedPlatform, noteOfClass } from "../editor/blog.ts";
+import { ATTRIBUTES, EMBED_LIQUID, EMBED_TAG, NOTE_CLASSES, embedPlatform, noteOfAlert, noteOfClass } from "../editor/blog.ts";
 import { ENTITY, type InlineToken, type References, entityText, inlineTokens, referenceLabel } from "./inline.ts";
 import { languageOf } from "./topics.ts";
 
@@ -636,9 +636,16 @@ function parseInline(source: string, images = true): JSONContent[] {
     }
     switch (token.type) {
       case "text":
-      case "text_special":
-        emit(token.content);
+      case "text_special": {
+        // An attribute list right after a link, a mark or code is the blog's, kept as written: `[In](…){icon="linkedin"}`.
+        const before = tokens[index - 1];
+        const attributes = token.type === "text" && before && (before.nesting === -1 || before.type === "code_inline") ? IAL.exec(token.content) : null;
+        if (attributes) {
+          emit(attributes[0], [RAW]);
+        }
+        emit(token.content.slice(attributes?.[0].length ?? 0));
         break;
+      }
       case "softbreak":
       case "hardbreak":
         out.push(withMarks({ type: "hardBreak" }));
@@ -687,7 +694,7 @@ function trimRun(nodes: JSONContent[]): JSONContent[] {
   return out;
 }
 
-const IAL = /^\{:[^}\n]*\}/;
+const IAL = new RegExp(`^${ATTRIBUTES}`);
 
 function blocksFromInline(nodes: JSONContent[]): JSONContent[] {
   if (!nodes.some((node) => node.type === "image")) {
@@ -752,7 +759,7 @@ function paragraph(source: string): JSONContent {
 }
 
 const FENCE = /^(\s*)(```+|~~~+)(.*)$/;
-const GALLERY_IAL = /^\{:[^}\n]*\}$/;
+const GALLERY_IAL = new RegExp(`^${ATTRIBUTES}$`);
 
 interface Fence {
   marker: string;
@@ -823,8 +830,9 @@ let quoteDepth = 0;
 /** Code indented four columns, where no paragraph is open. */
 const INDENTED = /^(?: {4}|\t)/;
 const LIST_START = /^ {0,3}(?:[-*+]|\d+[.)])\s+/;
-const NOTE = new RegExp(`^\\{:\\s*\\.(${Object.values(NOTE_CLASSES).join("|")})\\s*\\}\\s*$`);
-const BLOCK_IAL = /^ {0,3}\{:[^}\n]*\}\s*$/;
+/** A callout's class on the line under its quote, as the blog's posts wrote it before `> [!info]`. */
+const NOTE = new RegExp(`^\\{:?\\s*\\.(${Object.values(NOTE_CLASSES).join("|")})\\s*\\}\\s*$`);
+const BLOCK_IAL = new RegExp(`^ {0,3}${ATTRIBUTES}\\s*$`);
 const TABLE_DIVIDER = /^\s*\|?[\s:|-]*-[\s:|-]*\|?\s*$/;
 const SETEXT = /^ {0,3}(=+|-+)[^\S\n]*$/;
 const FENCE_LINE = /^ {0,3}(?:```|~~~)/;
@@ -1143,8 +1151,11 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
         quoted.push(marked ? lines[i].trimStart().replace(/^>\s?/, "") : lines[i]);
         i += 1;
       }
-      let note: string | null = null;
-      const attribute = i < lines.length ? NOTE.exec(lines[i].trim()) : null;
+      let note: string | null = noteOfAlert(quoted[0] ?? "");
+      if (note) {
+        quoted.shift();
+      }
+      const attribute = !note && i < lines.length ? NOTE.exec(lines[i].trim()) : null;
       if (attribute) {
         note = noteOfClass(attribute[1]);
         i += 1;

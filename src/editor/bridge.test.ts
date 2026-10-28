@@ -28,11 +28,11 @@ describe("bridge", () => {
     ["marks", "**bold** *italic* ~~gone~~ <u>under</u> <mark>lit</mark> m<sup>2</sup> H<sub>2</sub>O `code`"],
     ["nested marks and links", "*[Title](https://example.com)* and [*Title*](https://example.com \"t\")"],
     ["bold inside italic", "*__both__* and ***swap***"],
-    ["file path", "Open `src/main.ts`{: .path} now"],
+    ["file path", "Open `src/main.ts`{.path} now"],
     ["raw inline", "*a *b* c* and <span>tag</span>"],
     ["lists", "- one\n- two\n  - nested\n\n3. three\n4. four"],
     ["task lists", "- [ ] todo\n- [x] done\n- plain"],
-    ["callouts", "> A tip\n{: .tip }\n\n> Said\n>\n> Someone\n{: .author }"],
+    ["callouts", "> [!tip]\n> A tip\n\n> [!author]\n> Said\n>\n> Someone"],
     ["code fences", "```js\nconst a = 1;\n\nconst b = 2;\n```\n\n````\n```\nfence\n```\n````"],
     ["diagrams", "```diagram\ngraph TD\nA-->B\n```"],
     ["tables", "| a | b |\n|:--|--:|\n| 1 | 2 |\n| 3 | 4 |"],
@@ -111,29 +111,40 @@ describe("bridge", () => {
     ["risk", "danger"],
     ["author", "author"],
     ["poem", "poem"],
-  ])("reads {: .%s } as the %s callout and writes it back", (name, note) => {
-    const markdown = `> said\n{: .${name}}`;
+  ])("reads > [!%s] as the %s callout and writes it back, and the older {: .%s } as it", (name, note) => {
+    const markdown = `> [!${name}]\n> said`;
     expect(markdownToDoc(markdown).content?.[0].attrs?.note).toBe(note);
+    expect(roundTrip(markdown)).toBe(markdown);
+    expect(markdownToDoc(`> said\n{: .${name}}`).content?.[0].attrs?.note).toBe(note);
+    expect(roundTrip(`> said\n{: .${name} }`)).toBe(markdown);
+  });
+
+  it("reads GitHub's own names for its alerts, in any case, as the blog's callouts", () => {
+    for (const [name, note] of [["NOTE", "info"], ["Important", "important"], ["warning", "warning"], ["CAUTION", "danger"], ["Tip", "tip"]]) {
+      expect(markdownToDoc(`> [!${name}]\n> said`).content?.[0].attrs?.note).toBe(note);
+    }
+    expect(markdownToDoc("> [!other]\n> said").content?.[0].attrs?.note).toBeNull();
+    expect(roundTrip("> [!NOTE]\n> said")).toBe("> [!info]\n> said");
+  });
+
+  it.each([
+    ["a callout holding a list and a file path", "> [!info]\n> A list:\n> - one with `a/b`{.path}\n> - two"],
+    ["a callout holding a plain quote", "> [!warn]\n> Outer\n>\n> > Inner"],
+    ["a callout holding code", "> [!tip]\n> Code:\n>\n> ```js\n> const a = 1;\n> ```"],
+    ["a callout holding a photo", '> [!key]\n> A photo:\n>\n> ![Cua](/assets/img/post/cua.webp "Cua")'],
+    ["a callout inside a list item", "- An item\n  > [!info]\n  > Inside\n- Next"],
+    ["a file path in a heading, a link, a table and a footnote", "## Head `src/a.js`{.path}\n\n[`l/p`{.path}](https://example.com) and a note[^1].\n\n| file | n |\n| --- | --- |\n| `t/x`{.path} | 1 |\n\n[^1]: Has `f/p`{.path}."],
+    ["a code block without line numbers in a list", "- Code:\n\n  ```text\n  plain\n  ```\n  {.nolines}"],
+    ["the social row", '[LinkedIn](https://x.com){icon="linkedin"}\n[GitHub](https://y.com){icon="square-github"}\n{.social}'],
+    ["the older attribute lists", '[In](https://x.com){: icon="linkedin"}\n{: .social}\n\n```text\nplain\n```\n{: .nolines}'],
+  ])("keeps %s as written", (_name, markdown) => {
+    expect(docToMarkdown(markdownToDoc(markdown))).toBe(markdown);
     expect(roundTrip(markdown)).toBe(markdown);
   });
 
   it.each([
-    ["a callout holding a list and a file path", "> A list:\n> - one with `a/b`{: .path}\n> - two\n{: .info}"],
-    ["a callout holding a plain quote", "> Outer\n>\n> > Inner\n{: .warn}"],
-    ["a callout holding code", "> Code:\n>\n> ```js\n> const a = 1;\n> ```\n{: .tip}"],
-    ["a callout holding a photo", '> A photo:\n>\n> ![Cua](/assets/img/post/cua.webp "Cua")\n{: .key}'],
-    ["a callout inside a list item", "- An item\n  > Inside\n  {: .info}\n- Next"],
-    ["a file path in a heading, a link, a table and a footnote", "## Head `src/a.js`{: .path}\n\n[`l/p`{: .path}](https://example.com) and a note[^1].\n\n| file | n |\n| --- | --- |\n| `t/x`{: .path} | 1 |\n\n[^1]: Has `f/p`{: .path}."],
-    ["a code block without line numbers in a list", "- Code:\n\n  ```text\n  plain\n  ```\n  {: .nolines}"],
-    ["the social row", '[LinkedIn](https://x.com){: icon="linkedin"}\n[GitHub](https://y.com){: icon="square-github"}\n{: .social}'],
-  ])("keeps %s as written", (_name, markdown) => {
-    expect(roundTrip(markdown)).toBe(docToMarkdown(markdownToDoc(markdown)));
-    expect(docToMarkdown(markdownToDoc(markdown))).toContain(markdown.match(/\{: \.(?:info|warn|tip|key|path|nolines|social)\}/)![0]);
-  });
-
-  it.each([
-    ["a list under its lead-in, inside a quote", "> A list:\n> - one\n> - two\n{: .info}"],
-    ["a quote under an item's text", "- An item\n  > Inside\n  {: .info}\n- Next"],
+    ["a list under its lead-in, inside a quote", "> [!info]\n> A list:\n> - one\n> - two"],
+    ["a quote under an item's text", "- An item\n  > [!info]\n  > Inside\n- Next"],
     ["code under a paragraph", "Run:\n```sh\nls\n```"],
     ["a heading under a paragraph", "Text\n## Head"],
     ["a table under a paragraph", "Para\n| a | b |\n| --- | --- |\n| 1 | 2 |"],
@@ -170,11 +181,11 @@ describe("bridge", () => {
     };
     const doc = throughEditor(saved);
     expect(doc.content?.[0].attrs?.note).toBe("poem");
-    expect(docToMarkdown(doc)).toBe("> a\n{: .poem}");
+    expect(docToMarkdown(doc)).toBe("> [!poem]\n> a");
   });
 
   it("keeps a poem's lines and stanzas", () => {
-    const markdown = "> Line one\n> line two\n>\n> Last line\n> of all\n{: .poem}";
+    const markdown = "> [!poem]\n> Line one\n> line two\n>\n> Last line\n> of all";
     const quote = markdownToDoc(markdown).content?.[0];
     expect(quote?.attrs?.note).toBe("poem");
     expect(quote?.content?.map((node) => node.type)).toEqual(["paragraph", "paragraph"]);
