@@ -188,8 +188,12 @@ export async function planImages(
       renames.push({ src, baseName: "", site: found });
     }
   }
+  // One file on the site written two ways (`a.jpg` in the post, `a.webp` as its cover) takes one new name.
+  const named = new Map<string, string>();
   for (const rename of renames) {
-    rename.baseName = photoName(slug, photos.get(rename.src) ?? "", taken);
+    const name = rename.site!.name;
+    rename.baseName = named.get(name) ?? photoName(slug, photos.get(rename.src) ?? "", taken);
+    named.set(name, rename.baseName);
   }
 
   const planned = renames;
@@ -258,16 +262,21 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
   const any = Boolean(draft.meta.cover?.path) || collectImages(draft.doc).size > 0;
 
   const site = any ? await fetchSitePhotos(own) : { files: [], redirected: [] };
+  const renamed = new Set<string>();
   for (const image of await planImages(draft, slug, images.url, site.files, site.redirected)) {
     if (image.site) {
       const file = `${image.baseName}${/\.[^.]*$/.exec(image.site.name)?.[0] ?? ""}`;
+      imageUrls.set(image.src, `/${images.url}/${file}`);
+      if (renamed.has(image.site.name)) {
+        continue;
+      }
+      renamed.add(image.site.name);
       renames.push({ path: `${images.dir}/${file}`, sha: image.site.sha });
       if (!image.site.shared) {
         remove.push(`${images.dir}/${image.site.name}`);
         redirects.push([image.site.name, file].map((name) => `/${images.url}/${encodeURIComponent(servedName(name))}`) as [string, string]);
       }
       moved.push([image.site.name, file]);
-      imageUrls.set(image.src, `/${images.url}/${file}`);
       continue;
     }
     if (!image.stored) {

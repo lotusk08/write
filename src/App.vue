@@ -191,10 +191,23 @@ async function flush() {
   const next: Draft = { ...base, ...patch, updatedAt: Date.now() };
   writing = writingId === id ? { ...writing, ...patch } : patch;
   writingId = id;
-  await draftStore.put(next);
-  if (writingId === id) {
-    writing = {};
-    writingId = null;
+  try {
+    await draftStore.put(next);
+  } catch (cause) {
+    // A full disk, say: the change stays waiting for the next save, kept meanwhile in case the page is left.
+    if (pendingId === null || pendingId === id) {
+      pending = { ...patch, ...pending };
+      pendingId = id;
+    }
+    keepSnapshot(id, patch);
+    saveState.value = "idle";
+    showToast(`Could not save the draft: ${errorText(cause)}`, "error");
+    return;
+  } finally {
+    if (writingId === id) {
+      writing = {};
+      writingId = null;
+    }
   }
   drafts.value = sortDrafts(drafts.value.map((draft) => (draft.id === id ? next : draft)));
   saveState.value = "saved";

@@ -28,6 +28,23 @@ describe("buildPublishPlan", () => {
     expect(plan.expect).toEqual([{ path: "src/posts/2026-10-11-trip.md", sha: "" }]);
   });
 
+  it("renames a site photo written two ways once, both addresses pointed at its new name", async () => {
+    sitePhotos.mockResolvedValueOnce({ files: [{ name: "IMG_1.jpg", sha: "a".repeat(40), shared: false }], redirected: [] });
+    const plan = await buildPublishPlan(
+      draft({
+        publishedPath: "src/posts/2026-10-11-trip.md",
+        publishedSha: "c".repeat(40),
+        meta: { ...draft({}).meta, cover: { path: "/assets/img/post/IMG_1.webp", alt: "Sea" } },
+      }, [["/assets/img/post/IMG_1.jpg", "Sea"]]),
+      settings,
+    );
+    expect(plan.renames.map((rename) => rename.path)).toEqual(["public/assets/img/post/sea.jpg"]);
+    expect(plan.remove).toEqual(["public/assets/img/post/IMG_1.jpg"]);
+    expect(plan.redirects).toHaveLength(1);
+    expect(plan.markdown).toContain("![Sea](/assets/img/post/sea.jpg)");
+    expect(plan.markdown).toContain("path: /assets/img/post/sea.jpg");
+  });
+
   it("redirects a renamed JPEG at the WebP the site serves, and keeps a file another post uses", async () => {
     sitePhotos.mockResolvedValueOnce({
       files: [

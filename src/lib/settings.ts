@@ -26,13 +26,6 @@ const defaultSettings: Settings = {
   focusMode: false,
 };
 
-export function resolvedTheme(theme: Settings["theme"]): "light" | "dark" {
-  if (theme === "light" || theme === "dark") {
-    return theme;
-  }
-  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
-}
-
 export function loadSettings(): Settings {
   try {
     const raw = localStorage.getItem(KEY);

@@ -42,9 +42,12 @@ function answeredJson(response: Response): boolean {
   return response.ok && (response.headers.get("content-type") ?? "").includes("application/json");
 }
 
+/** How long the drafts wait on the Worker at startup; past it, they open without its settings. */
+const CONFIG_WAIT_MS = 6000;
+
 export async function fetchAppConfig(): Promise<AppConfig | null> {
   try {
-    const response = await fetch("/api/config", { headers: { accept: "application/json" } });
+    const response = await fetch("/api/config", { headers: { accept: "application/json" }, signal: AbortSignal.timeout(CONFIG_WAIT_MS) });
     if (!answeredJson(response)) {
       return null;
     }

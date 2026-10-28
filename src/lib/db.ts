@@ -69,7 +69,8 @@ async function tx<T>(
   return new Promise<T>((resolve, reject) => {
     const transaction = db.transaction(store, mode);
     const request = run(transaction.objectStore(store));
-    request.onsuccess = () => resolve(request.result);
+    // Done once the transaction commits, not when its request succeeds: a write could still be lost to a page left then.
+    transaction.oncomplete = () => resolve(request.result);
     request.onerror = () => reject(request.error);
     transaction.onabort = () => reject(transaction.error ?? request.error);
     transaction.commit?.();

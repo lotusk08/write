@@ -2,7 +2,7 @@
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import type { PostMeta } from "../../shared/types.ts";
 import type { PinWritten } from "../lib/home.ts";
-import { resolvedTheme, type Settings } from "../lib/settings.ts";
+import type { Settings } from "../lib/settings.ts";
 import { PHONE_QUERY, useMediaQuery } from "../lib/viewport.ts";
 import Icon from "./Icon.vue";
 import type { IconName } from "./icons.ts";
@@ -50,7 +50,8 @@ const frame = ref<DOMRect | null>(null);
 const chosen = ref<ExportFormat[]>([]);
 const sheet = useMediaQuery(PHONE_QUERY);
 
-const scheme = computed(() => resolvedTheme(props.settings.theme));
+const systemDark = useMediaQuery("(prefers-color-scheme: dark)");
+const scheme = computed(() => (props.settings.theme === "system" ? (systemDark.value ? "dark" : "light") : props.settings.theme));
 
 const DONE_TEXT: Record<DoneAction, string> = {
   share: "Share link copied",
