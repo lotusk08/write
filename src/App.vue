@@ -15,7 +15,7 @@ import { docToHtml } from "./editor/bridge.ts";
 import type { JSONContent } from "./editor/doc.ts";
 import { createShareRoom, endShareRoom, fetchAppConfig, fetchPostSource, shareRoomState } from "./lib/api.ts";
 import { draftStore, isLocalSrc, keepSnapshot, NOTICE, resolveLocalSrc, restoreSnapshots, type Draft } from "./lib/db.ts";
-import { createDraft, currentDoc, currentMeta, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
+import { createDraft, currentDoc, currentMeta, currentSource, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
 import type { PinWritten } from "./lib/home.ts";
 import { buildHtmlDocument } from "./lib/html.ts";
@@ -77,7 +77,12 @@ function boot() {
       saveSettings(settings);
     }
     if (stored.length) {
-      const drafts = stored.map((draft) => ({ ...draft, doc: currentDoc(draft.doc), meta: currentMeta(draft.meta) }));
+      const drafts = stored.map((draft) => ({
+        ...draft,
+        doc: currentDoc(draft.doc),
+        meta: currentMeta(draft.meta),
+        sourceText: currentSource(draft.sourceText),
+      }));
       return { drafts: sortDrafts(drafts), settings, config };
     }
     const draft = createDraft();
@@ -307,7 +312,8 @@ watch(
         }
       });
 
-      const stopRemote = onRemoteChange(joined, () => postEditor.value?.takeUnsent() ?? null, replaceDoc);
+      // A peer on an older version of the app may still send kramdown's forms.
+      const stopRemote = onRemoteChange(joined, () => postEditor.value?.takeUnsent() ?? null, (doc) => replaceDoc(currentDoc(doc)));
       const onSync = (synced: boolean) => {
         const local = findDraft(currentId.value)?.doc;
         if (synced && joined.text.length === 0 && local) {
@@ -385,7 +391,10 @@ async function importPost(path: string) {
       throw cause;
     });
     const mine = existing ? await draftPrint(existing) : "";
-    const same = Boolean(existing && fetched) && mine === (await printOf(fetched!.markdown));
+    // The same as the site's file, read and written by this app: a print stored by an older writer cannot tell.
+    const same =
+      Boolean(existing && fetched) &&
+      (mine === (await printOf(fetched!.markdown)) || mine === (await draftPrint(await sitePost(path, fetched!.markdown))));
     if (existing && (!fetched || !existing.publishedSha || fetched.sha === existing.publishedSha || same)) {
       if (same && fetched!.sha !== existing.publishedSha) {
         const known = { ...existing, publishedSha: fetched!.sha, publishedPrint: mine };
@@ -403,15 +412,14 @@ async function importPost(path: string) {
       );
       return;
     }
-    const { parsePost } = await loadReader();
-    const parsed = parsePost(fetched!.markdown);
+    const post = await sitePost(path, fetched!.markdown);
     const now = Date.now();
     const draft: Draft = {
       id: crypto.randomUUID(),
-      title: parsed.meta.title ?? slugFromPath(path),
+      title: post.title ?? slugFromPath(path),
       slug: slugFromPath(path),
-      doc: parsed.doc,
-      meta: { ...newPostMeta(), ...dateOf(path), ...parsed.meta },
+      doc: post.doc,
+      meta: post.meta,
       createdAt: now,
       updatedAt: now,
       publishedPath: path,
@@ -449,6 +457,13 @@ async function onPinned(written: PinWritten[]) {
     }
     await storeDraft(next);
   }
+}
+
+/** A post on the site as the app opens it: its body, and its fields with the date its file is named by. */
+async function sitePost(path: string, markdown: string): Promise<{ title?: string; meta: PostMeta; doc: JSONContent }> {
+  const { parsePost } = await loadReader();
+  const parsed = parsePost(markdown);
+  return { title: parsed.meta.title, meta: { ...newPostMeta(), ...dateOf(path), ...parsed.meta }, doc: parsed.doc };
 }
 
 function dateOf(path: string): { date?: string } {

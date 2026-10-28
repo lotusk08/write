@@ -3,7 +3,7 @@ import type { PostMeta, PublishResult, SitePhoto } from "../../shared/types.ts";
 import { fetchSitePhotos, publish, uploadPhoto } from "./api.ts";
 import type { Draft, StoredImage } from "./db.ts";
 import { imageStore, isLocalSrc, localId } from "./db.ts";
-import { blobToBase64, extensionFor, MAX_UPLOAD_BYTES, shrinkImage, tooBig, withoutLocation } from "./images.ts";
+import { blobToBase64, extensionFor, keepsLocation, MAX_UPLOAD_BYTES, shrinkImage, tooBig, withoutLocation } from "./images.ts";
 import { buildPostFile } from "./markdown.ts";
 import { decoded, servedName, stem, trimSlashes } from "../../shared/paths.ts";
 import type { Settings } from "./settings.ts";
@@ -325,6 +325,12 @@ export async function sendPlan(
   const big = plan.photos.find((photo) => tooBig(photo.blob));
   if (big) {
     throw new Error(`${fileName(big.path)} is ${megabytes(big.blob.size)}; one photo can be ${megabytes(MAX_UPLOAD_BYTES)} at most.`);
+  }
+  const placed = plan.photos.find((photo) => keepsLocation(photo.blob));
+  if (placed) {
+    throw new Error(
+      `${fileName(placed.path)} may hold where it was taken, which the app can take out of JPEG, PNG and WebP photos only: save it as one of those and add it again.`,
+    );
   }
   const uploaded = [];
   for (const photo of plan.photos) {

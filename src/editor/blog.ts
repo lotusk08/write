@@ -31,7 +31,7 @@ export const NOTE_CLASSES: Record<NoteType, string> = {
   poem: "poem",
 };
 
-export function noteOfClass(name: string): NoteType | null {
+function noteOfClass(name: string): NoteType | null {
   return NOTE_TYPES.find((type) => NOTE_CLASSES[type] === name) ?? null;
 }
 

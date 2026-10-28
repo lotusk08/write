@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { JSONContent } from "../editor/doc.ts";
-import { currentDoc } from "./draft.ts";
+import { currentDoc, currentSource } from "./draft.ts";
 import { upgradeSyntax } from "./upgrade.ts";
 
 describe("kramdown's older forms", () => {
@@ -32,13 +32,38 @@ describe("kramdown's older forms", () => {
       content: [
         { type: "blockquote", attrs: { blockIal: "{: .poem }" }, content: [] },
         { type: "image", attrs: { src: "/a.webp", ial: "{: .light}" } },
-        { type: "paragraph", content: [{ type: "text", text: '{: icon="x"}', marks: [{ type: "rawInline" }] }, { type: "text", text: "{: .x}" }] },
+        // As the app before kept them: the list after a link or a mark as text, as raw text once it held it so.
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "{: .first} " },
+            { type: "text", text: "In", marks: [{ type: "link", attrs: { href: "/in" } }] },
+            { type: "text", text: '{: icon="x"} and ' },
+            { type: "text", text: "b", marks: [{ type: "bold" }] },
+            { type: "text", text: "{: .y}" },
+            { type: "text", text: "{: .z}", marks: [{ type: "rawInline" }] },
+          ],
+        },
       ],
     });
     expect(doc.content?.[0].attrs?.blockIal).toBe("{.poem}");
     expect(doc.content?.[1].attrs?.ial).toBe("{.light}");
-    expect(doc.content?.[2].content?.map((node) => node.text)).toEqual(['{icon="x"}', "{: .x}"]);
+    expect(doc.content?.[2].content).toEqual([
+      { type: "text", text: "{: .first} " },
+      { type: "text", text: "In", marks: [{ type: "link", attrs: { href: "/in" } }] },
+      { type: "text", text: '{icon="x"}', marks: [{ type: "rawInline" }] },
+      { type: "text", text: " and " },
+      { type: "text", text: "b", marks: [{ type: "bold" }] },
+      { type: "text", text: "{.y}", marks: [{ type: "rawInline" }] },
+      { type: "text", text: "{.z}", marks: [{ type: "rawInline" }] },
+    ]);
     const current: JSONContent = { type: "doc", content: [{ type: "paragraph", attrs: { blockIal: "{.x}" }, content: [{ type: "text", text: "a" }] }] };
     expect(currentDoc(current)).toBe(current);
+  });
+
+  it("drops the source view's text typed in them, so the view shows what is published", () => {
+    expect(currentSource({ text: "> q\n{: .info}\n", front: "", body: "" })).toBeUndefined();
+    const typed = { text: "> [!info]\n> q\n", front: "", body: "" };
+    expect(currentSource(typed)).toBe(typed);
   });
 });

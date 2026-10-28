@@ -127,4 +127,13 @@ describe("buildPublishPlan", () => {
     };
     await expect(sendPlan(plan, "m", "pw", () => {})).rejects.toThrow("trip-1.gif is 9.0 MB");
   });
+
+  it("refuses a photo whose place it cannot take out, as a HEIC, before uploading any", async () => {
+    const heic = new Blob([new Uint8Array(64)], { type: "image/heic" });
+    const plan = {
+      ...(await buildPublishPlan(draft({}), settings)),
+      photos: [{ path: "public/assets/img/post/trip-1.heic", blob: heic, src: "local:1", alt: "" }],
+    };
+    await expect(sendPlan(plan, "m", "pw", () => {})).rejects.toThrow("trip-1.heic may hold where it was taken");
+  });
 });

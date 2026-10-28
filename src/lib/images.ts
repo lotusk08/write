@@ -202,6 +202,13 @@ function webpWithoutLocation(bytes: Uint8Array): Uint8Array[] {
   return [header, ...chunks];
 }
 
+/** Photos whose place the app takes out, and those that never hold one. */
+const PLACE_REMOVED = new Set(["image/jpeg", "image/png", "image/webp"]);
+const PLACELESS = new Set(["image/gif", "image/svg+xml"]);
+
+/** Whether a photo may hold where it was taken in a form the app cannot take out, as HEIC, AVIF or TIFF can. */
+export const keepsLocation = (blob: Blob): boolean => !PLACE_REMOVED.has(blob.type) && !PLACELESS.has(blob.type);
+
 /**
  * A photo as it is published: with nothing in it of where it was taken. Its pixels are not touched; a JPEG keeps its
  * orientation, which sits beside the place in the Exif block.
