@@ -58,7 +58,9 @@ const ZCC = "[\\p{Z}\\p{Cc}]";
 const ZPCC = "[\\p{Z}\\p{P}\\p{Cc}]";
 const SEPARATORS = "[><\\uff5c]";
 const LETTER = `(?:(?!${SEPARATORS}|${ZPCC})[\\s\\S])`;
-const DOMAIN = `(?:xn--[a-z0-9\\-]{1,59}|${LETTER}|${LETTER}(?:-|${LETTER}){0,61}${LETTER})`;
+// linkify-it also lists `xn--…` labels on their own; the last form already takes them, and the overlap backtracked
+// exponentially, seconds on a line of two dozen `xn--a.` labels.
+const DOMAIN = `(?:${LETTER}|${LETTER}(?:-|${LETTER}){0,61}${LETTER})`;
 const PATH =
   "(?:[/?#](?:" +
   `(?!${ZCC}|${SEPARATORS}|[()[\\]{}.,"'?!\\-;]).|` +

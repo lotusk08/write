@@ -799,7 +799,8 @@ function interrupts(line: string): boolean {
   const name = HTML_BLOCK.test(line) ? /^\s*<\/?([a-zA-Z][\w-]*)/.exec(line)?.[1] : "";
   return name !== "" && (!name || /^(?:script|pre|style|iframe)$/i.test(name) || !INLINE_TAGS.has(name));
 }
-const HEADING = /^(#{1,6})\s+(.*?)\s*#*\s*$/;
+/** A heading line; a closing run of `#` is dropped, as kramdown drops it even with no space before, unless escaped. */
+const HEADING = /^(#{1,6})\s+(.*?)\s*(?:(?<!\\)#+\s*)?$/;
 const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
 const BULLET = /^(\s*)([-*+])\s+(.*)$/;
 const ORDERED = /^(\s*)(\d+)[.)]\s+(.*)$/;
@@ -979,13 +980,16 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
       !lines[i + 1]?.trim()
     ) {
       const trimmed = line.trim();
-      const tag = EMBED_TAG.exec(trimmed) ?? EMBED_LIQUID.exec(trimmed);
+      const component = EMBED_TAG.exec(trimmed);
+      const tag = component ?? EMBED_LIQUID.exec(trimmed);
       const platform = tag ? embedPlatform(tag[1]) : null;
       const joins = out.length > 0 && Boolean(lines[i - 1]?.trim());
       const attrs = joins ? { joinPrevious: true } : {};
+      // A component's attribute is read as HTML, the way `embedTag` writes it; a Liquid include's as written.
+      const id = component ? tag![3].replace(/&quot;/g, '"').replace(/&amp;/g, "&") : tag?.[3];
       out.push(
         platform && tag
-          ? { type: "embed", attrs: { platform, id: tag[3], ...attrs } }
+          ? { type: "embed", attrs: { platform, id, ...attrs } }
           : {
               type: "rawBlock",
               attrs,
@@ -1001,13 +1005,24 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
       const open = !/\bopen\s*=?\s*"?(false)"?/.test(line) && /\bopen\b/.test(line);
       i += 1;
       let depth = 1;
+      let fence: string | null = null;
       while (i < lines.length && depth > 0) {
-        if (lines[i].includes("<details")) {
+        const fenced = FENCE.exec(lines[i])?.[2];
+        if (fenced && (fence === null || (fenced[0] === fence[0] && fenced.length >= fence.length))) {
+          fence = fence === null ? fenced : null;
+        }
+        // A tag written in a code block, a code span or escaped is text of the section, not one of its ends.
+        const tags = fence !== null || fenced ? "" : lines[i].replace(/(`+)[\s\S]*?\1/g, "").replace(/\\</g, "");
+        if (tags.includes("<details")) {
           depth += 1;
         }
-        if (lines[i].includes("</details>")) {
+        if (tags.includes("</details>")) {
           depth -= 1;
           if (depth === 0) {
+            const before = lines[i].slice(0, lines[i].lastIndexOf("</details>"));
+            if (before.trim()) {
+              body.push(before);
+            }
             break;
           }
         }
@@ -1034,7 +1049,8 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
       continue;
     }
 
-    if (HTML_BLOCK.test(line) || DESCRIPTION.test(lines[i + 1] ?? "")) {
+    // Only a block-level tag, or a tag alone on its line, opens raw HTML; `<u>Note</u>: read this` is a paragraph.
+    if ((HTML_BLOCK.test(line) && (interrupts(line) || /^\s*<[^<>]+>\s*$/.test(line))) || DESCRIPTION.test(lines[i + 1] ?? "")) {
       const verbatim: string[] = [];
       while (i < lines.length && lines[i].trim()) {
         verbatim.push(lines[i]);

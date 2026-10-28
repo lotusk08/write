@@ -63,6 +63,39 @@ describe("text that looks like Markdown", () => {
   });
 });
 
+describe("what the text ends with", () => {
+  it("keeps a heading's closing #, and a backslash before a mark or a line end", () => {
+    const heading = { type: "doc", content: [{ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Learning C#" }] }] };
+    expect(docToMarkdown(heading)).toBe("## Learning C\\#");
+    expect(markdownToDoc(docToMarkdown(heading))).toEqual(heading);
+    const slash = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          content: [
+            { type: "text", text: "C:\\" },
+            { type: "text", text: "Users", marks: [{ type: "bold" }] },
+            { type: "text", text: " D:\\" },
+            { type: "hardBreak" },
+            { type: "text", text: "end \\" },
+          ],
+        },
+      ],
+    };
+    expect(docToMarkdown(slash)).toBe("C:\\\\**Users** D:\\\\\nend \\");
+    expect(markdownToDoc(docToMarkdown(slash))).toEqual(slash);
+  });
+});
+
+describe("players", () => {
+  it("read an address with an ampersand back as written", () => {
+    const written = '<EmbedAudio src="https://a.com/x.mp3?v=1&amp;t=2" />';
+    expect(markdownToDoc(written).content?.[0].attrs?.id).toBe("https://a.com/x.mp3?v=1&t=2");
+    expect(docToMarkdown(markdownToDoc(written))).toBe(written);
+  });
+});
+
 describe("photos", () => {
   it("fold a line break in alt or caption, which would end the line a gallery photo needs", () => {
     const doc: JSONContent = {
@@ -80,5 +113,22 @@ describe("sections", () => {
     expect(doc.content?.[0].type).toBe("collapsible");
     expect(doc.content?.[0].content?.[0].content).toEqual([{ type: "text", text: "a_b *em* <x> &" }]);
     expect(docToMarkdown(doc)).toBe(written);
+  });
+
+  it("end at their own closing tag, not one written in code, and keep text before it on its line", () => {
+    for (const written of [
+      "<details>\n<summary>S</summary>\n\nUse the `<details>` element.\n\n</details>\n\n## After",
+      "<details>\n<summary>S</summary>\n\n```html\n<details>\n</details>\n```\n\n</details>\n\n## After",
+      "<details>\n<summary>Outer</summary>\n\n<details>\n<summary>Inner</summary>\n\nIn\n\n</details>\n\n</details>\n\n## After",
+    ]) {
+      expect(docToMarkdown(markdownToDoc(written))).toBe(written);
+    }
+    expect(docToMarkdown(markdownToDoc("<details>\n<summary>S</summary>\n\nText.</details>"))).toBe(
+      "<details>\n<summary>S</summary>\n\nText.\n\n</details>",
+    );
+  });
+
+  it("reads a line of many internationalised labels at once", () => {
+    expect(docToMarkdown(markdownToDoc(`see http://${"xn--a.".repeat(40)}xn--a_`))).toContain("xn--a\\_");
   });
 });

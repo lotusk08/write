@@ -321,6 +321,10 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions, lin
   }
   return rendered
     .map((piece, at) => (bangs.has(at) && rendered[at + 1]?.startsWith("[") ? `${piece.slice(0, -1)}\\!` : piece))
+    .map((piece, at, pieces) =>
+      // A backslash ending one piece would escape what the next opens with, a mark or a line end: `C:\**Users**`.
+      /(?<!\\)(?:\\\\)*\\$/.test(piece) && /^[!-/:-@[-`{-~\n]/.test(pieces[at + 1] ?? "") ? `${piece}\\` : piece,
+    )
     .join("");
 }
 
@@ -466,7 +470,8 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
       }
       case "heading": {
         const level = Math.min(Math.max(Number(node.attrs?.level ?? 2), 1), 6);
-        const text = inline(node.content, options);
+        // A `#` closing the text would be read as the heading's optional closing run, and dropped: `C#` came back `C`.
+        const text = inline(node.content, options).replace(/#+$/, (run) => run.replace(/#/g, "\\#"));
         out.push(
           level < 3 && text.includes("\n")
             ? `${text}\n${level === 1 ? "===" : "---"}`
