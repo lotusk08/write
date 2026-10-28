@@ -1,9 +1,10 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
 import { rememberCopy } from "./clipboard.ts";
 import { pasteClipboard, pastedHtml } from "./paste.ts";
 import { docToMarkdown } from "../lib/markdown.ts";
+import { loadReader, loadedReader } from "../lib/reader.ts";
 
 const DOCS_SPAN = "font-size:11pt;font-family:Arial;color:#000000;background-color:transparent;font-variant:normal;text-decoration:none;vertical-align:baseline;white-space:pre-wrap;";
 const DOCS =
@@ -35,7 +36,28 @@ const WEB =
 
 const markdown = (html: string | null) => docToMarkdown(htmlToDoc(html ?? ""));
 
+describe("Markdown pasted before the reader has loaded", () => {
+  it("goes in as Markdown once it has", async () => {
+    expect(loadedReader()).toBeNull();
+    document.body.innerHTML = '<div contenteditable="true"><p><br></p></div>';
+    const root = document.body.firstElementChild as HTMLElement;
+    const range = document.createRange();
+    range.setStart(root.querySelector("p")!, 0);
+    getSelection()!.removeAllRanges();
+    getSelection()!.addRange(range);
+    const data = new DataTransfer();
+    data.setData("text/plain", "## Title\n\n**bold** text");
+    const event = new ClipboardEvent("paste", { clipboardData: data, cancelable: true });
+    Object.defineProperty(event, "currentTarget", { value: root });
+    expect(pasteClipboard(event)).toBe(true);
+    expect(event.defaultPrevented).toBe(true);
+    await vi.waitFor(() => expect(markdown(root.innerHTML)).toBe("## Title\n\n**bold** text"));
+  });
+});
+
 describe("paste", () => {
+  beforeAll(() => loadReader());
+
   it("reads a Google Docs paste as its paragraphs, heading, marks, link and list", () => {
     expect(markdown(pastedHtml(DOCS, ""))).toBe(
       "Plain first para\n\n**Bold then *both*** *italic*\n\n## Heading\n\n[link](https://example.com/a)\n\n- item one\n- item two",

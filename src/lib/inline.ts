@@ -1,5 +1,3 @@
-import markdownit from "markdown-it";
-
 /**
  * What the reader, markdown-it as the blog sets it up, reads as a link or an entity in plain text: the writer escapes
  * these so text typed in the editor stays text.
@@ -87,17 +85,5 @@ export function escapeChars(text: string, chars: string): string {
   return text.replace(new RegExp(`\\\\(?=[${ASCII_PUNCTUATION}]|$)|[${chars.replace(/[\\\]^-]/g, "\\$&")}]`, "g"), "\\$&");
 }
 
+/** An entity, named or numbered, as markdown-it reads one: written as text, its `&` is escaped. */
 export const ENTITY = /^&(?:#[xX]([0-9a-fA-F]{1,6})|#(\d{1,7})|([a-zA-Z][a-zA-Z0-9]{1,31}));/;
-
-const { fromCodePoint, isValidEntityCode, unescapeAll } = markdownit().utils;
-
-/** The character an entity stands for, as markdown-it reads it, or null when it reads the text as written. */
-export function entityText(match: RegExpExecArray): string | null {
-  const [whole, hex, decimal] = match;
-  if (hex ?? decimal) {
-    const code = parseInt(hex ?? decimal, hex ? 16 : 10);
-    return fromCodePoint(isValidEntityCode(code) ? code : 0xfffd);
-  }
-  const decoded = unescapeAll(whole);
-  return decoded === whole ? null : decoded;
-}

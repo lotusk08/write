@@ -1,7 +1,8 @@
 import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join, resolve } from "node:path";
-import { describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it } from "vitest";
 import { newPostMeta } from "./draft.ts";
+import { loadReader } from "./reader.ts";
 import { readSource, rememberSource, sourceFor, withFront } from "./source.ts";
 
 const BLOG = resolve(process.env.BLOG_DIR ?? join(import.meta.dirname, "../../../stevehoang.com"));
@@ -10,6 +11,7 @@ const POSTS = join(BLOG, "src/posts");
 const post = '---\ntitle: "Trip"\ndescription: "A day: out"\ndate: 2026-10-11 09:00 +0700\ntags: [sea, trip]\n---\nSome _text_ here.\n\n{: .info }\n';
 
 describe("the source view", () => {
+  beforeAll(() => loadReader());
   it("shows a post as it was typed while it reads the same", () => {
     const { meta, doc } = readSource(post, newPostMeta());
     const kept = rememberSource(post, meta, doc);

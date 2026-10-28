@@ -3,7 +3,7 @@ import { embedFromUrl } from "./blog.ts";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
 import { copiedHere } from "./clipboard.ts";
 import { insertEmbed, notify } from "./commands.ts";
-import { markdownToDoc } from "../lib/import.ts";
+import { loadReader, loadedReader } from "../lib/reader.ts";
 
 const BLOCKS = "address, article, aside, blockquote, details, div, dl, figure, footer, h1, h2, h3, h4, h5, h6, header, hr, li, ol, p, pre, section, table, ul";
 const SEMANTIC = "a, b, strong, i, em, u, s, del, strike, sup, sub, code, pre, h1, h2, h3, h4, h5, h6, ul, ol, li, table, blockquote, img, hr";
@@ -178,15 +178,34 @@ function plainDoc(text: string): JSONContent {
   };
 }
 
-/** Clipboard contents as the editor's own HTML, built from the doc model, so a paste carries only what the blog can show. */
-export function pastedHtml(html: string, text: string): string | null {
+interface Clipboard {
+  plain: string;
+  body: HTMLElement | null;
+  /** Whether the HTML holds any of what the blog can show; when not, its text is what is pasted. */
+  rich: boolean;
+}
+
+function readClipboard(html: string, text: string): Clipboard {
   const plain = text.replace(/\r\n?/g, "\n");
   const body = html ? clipboardBody(html, copiedHere(plain)) : null;
-  const rich = body !== null && body.querySelector(SEMANTIC) !== null;
+  return { plain, body, rich: body !== null && body.querySelector(SEMANTIC) !== null };
+}
+
+const isMarkdown = ({ plain, rich }: Clipboard) => !rich && (MARKDOWN_LINE.test(plain) || MARKDOWN_INLINE.test(plain));
+
+/** Clipboard contents as the editor's own HTML, built from the doc model, so a paste carries only what the blog can show. */
+export function pastedHtml(html: string, text: string): string | null {
+  return htmlOf(readClipboard(html, text));
+}
+
+/** The editor's HTML for what was copied; Markdown is read as Markdown once the reader has loaded, as text before. */
+function htmlOf(clipboard: Clipboard): string | null {
+  const { plain, body, rich } = clipboard;
+  const reader = loadedReader();
   const doc = rich
-    ? htmlToDoc(body.innerHTML)
-    : MARKDOWN_LINE.test(plain) || MARKDOWN_INLINE.test(plain)
-      ? markdownToDoc(plain)
+    ? htmlToDoc(body!.innerHTML)
+    : isMarkdown(clipboard) && reader
+      ? reader.markdownToDoc(plain)
       : plainDoc((plain || (body?.textContent ?? "")).replace(/\n+$/, ""));
   if (!doc.content?.length) {
     return null;
@@ -313,13 +332,32 @@ export function pasteClipboard(event: ClipboardEvent): boolean {
   }
   const text = data.getData("text/plain").replace(/\r\n?/g, "\n");
   const start = range.startContainer;
-  const inCode = (start instanceof Element ? start : start.parentElement)?.closest("pre, code");
-  const html = inCode ? null : pastedHtml(data.getData("text/html"), text);
+  const inCode = Boolean((start instanceof Element ? start : start.parentElement)?.closest("pre, code"));
+  const clipboard = inCode ? null : readClipboard(data.getData("text/html"), text);
+  if (clipboard && isMarkdown(clipboard) && !loadedReader()) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    // Markdown pasted before the reader has loaded goes in once it has, or as text if it cannot load, at the caret.
+    void loadReader()
+      .catch(() => null)
+      .then(() => insertPaste(root, text, htmlOf(clipboard), false));
+    return true;
+  }
+  const html = clipboard ? htmlOf(clipboard) : null;
   if (!inCode && html === null) {
     return false;
   }
   event.preventDefault();
   event.stopImmediatePropagation();
+  return insertPaste(root, text, html, inCode);
+}
+
+function insertPaste(root: HTMLElement, text: string, html: string | null, inCode: boolean): boolean {
+  const selection = window.getSelection();
+  const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+  if (!range || !root.contains(range.startContainer) || (!inCode && html === null)) {
+    return false;
+  }
   const embed = !inCode && /^https?:\/\/\S+$/.test(text.trim()) && range.collapsed ? embedFromUrl(text) : null;
   if (embed) {
     return insertEmbed(root, embed);

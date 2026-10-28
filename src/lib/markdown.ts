@@ -2,7 +2,7 @@ import type { JSONContent } from "../editor/doc.ts";
 import { writtenPin } from "../../shared/pin.ts";
 import type { PostMeta } from "../../shared/types.ts";
 import { ATTRIBUTES, NOTE_CLASSES, OLD_ATTRIBUTES, embedTag, isNoteType, pandocAttributes } from "../editor/blog.ts";
-import { ENTITY, autolinkFor, bareLinks, entityText, escapeChars } from "./inline.ts";
+import { ENTITY, autolinkFor, bareLinks, escapeChars } from "./inline.ts";
 import { topicSlug } from "./topics.ts";
 
 export interface SerializeOptions {
@@ -43,9 +43,12 @@ function marksOf(node: JSONContent): Mark[] {
   return [];
 }
 
+/**
+ * Whether text opens with what reads as an entity. A name markdown-it does not know is escaped too: the blog shows
+ * `\&name;` as written, and the writer needs no table of the names, which load with the reader.
+ */
 function entityAt(text: string): boolean {
-  const match = ENTITY.exec(text);
-  return Boolean(match && entityText(match) !== null);
+  return ENTITY.test(text);
 }
 
 const IAL = new RegExp(`^${ATTRIBUTES}$`);

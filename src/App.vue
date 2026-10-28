@@ -19,7 +19,8 @@ import { createDraft, currentDoc, currentMeta, draftLabel, newPostMeta, sortDraf
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
 import type { PinWritten } from "./lib/home.ts";
 import { buildHtmlDocument } from "./lib/html.ts";
-import { parsePost, postPathFromLink, slugFromPath } from "./lib/import.ts";
+import { postPathFromLink, slugFromPath } from "./lib/paths.ts";
+import { loadReader, preloadReader } from "./lib/reader.ts";
 import { keptFront, readSource, rememberSource, sameMeta, sourceFor, withFront } from "./lib/source.ts";
 import { docToPlainText } from "./lib/markdown.ts";
 import { mindmapUrl } from "./lib/mindmap.ts";
@@ -401,6 +402,7 @@ async function importPost(path: string) {
       );
       return;
     }
+    const { parsePost } = await loadReader();
     const parsed = parsePost(fetched!.markdown);
     const now = Date.now();
     const draft: Draft = {
@@ -502,6 +504,12 @@ async function joinRequested(token: string) {
 
 /** The post as one Markdown file, front matter included, shown as it was last typed or opened while it reads the same. */
 async function editSource() {
+  try {
+    await loadReader();
+  } catch (cause) {
+    showToast(errorText(cause, "Could not load the Markdown reader."), "error");
+    return;
+  }
   await settle();
   const draft = findDraft(currentId.value);
   source.value = draft ? sourceFor(draft.meta, draft.doc, draft.sourceText) : "";
@@ -1004,6 +1012,7 @@ onMounted(() => {
     currentId.value = stored[0].id;
     ready.value = true;
     openRequested();
+    preloadReader();
   });
 });
 

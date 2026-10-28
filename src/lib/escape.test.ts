@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { JSONContent } from "../editor/doc.ts";
-import { markdownToDoc, postPathFromLink } from "./import.ts";
+import { markdownToDoc } from "./import.ts";
+import { postPathFromLink } from "./paths.ts";
 import { docToMarkdown } from "./markdown.ts";
 
 function paragraph(...lines: string[]): JSONContent {
@@ -27,7 +28,7 @@ describe("text that looks like Markdown", () => {
     [["> q"], "\\> q"],
     [["{: .info}"], "\\{: .info}"],
     [["a | b"], "a \\| b"],
-    [["&copy; &amp; &#169; &foo;"], "\\&copy; \\&amp; \\&#169; &foo;"],
+    [["&copy; &amp; &#169; &foo;"], "\\&copy; \\&amp; \\&#169; \\&foo;"],
     [["Title", "==="], "Title\n\\==="],
     [["Title", "---"], "Title\n\\---"],
     [["a", "2. two"], "a\n2\\. two"],

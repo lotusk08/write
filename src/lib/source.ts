@@ -1,8 +1,8 @@
 import { frontMatter } from "../../shared/front.ts";
 import type { PostMeta } from "../../shared/types.ts";
 import type { JSONContent } from "../editor/doc.ts";
-import { parsePost } from "./import.ts";
 import { buildFrontMatter, docToMarkdown } from "./markdown.ts";
+import { loadedReader } from "./reader.ts";
 
 /**
  * The Markdown file as it was last typed in the source view or opened from the blog, with a print of the front matter
@@ -65,10 +65,14 @@ export function withFront(text: string, meta: PostMeta): string {
 /**
  * Reads the source view's text back: the body, and the post's fields from its front matter — a field taken out of it
  * is cleared, as it would be on the blog, though a post with no date keeps its own. With the front matter gone
- * altogether, the fields stay as they were.
+ * altogether, the fields stay as they were. The reader is loaded before the source view opens.
  */
 export function readSource(text: string, meta: PostMeta): { meta: PostMeta; doc: JSONContent } {
-  const parsed = parsePost(text);
+  const reader = loadedReader();
+  if (!reader) {
+    throw new Error("The Markdown reader has not loaded.");
+  }
+  const parsed = reader.parsePost(text);
   if (!frontMatter(text.replace(/\r\n/g, "\n"))) {
     return { meta, doc: parsed.doc };
   }

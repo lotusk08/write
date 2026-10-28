@@ -70,7 +70,8 @@ browser.
   is read with markdown-it, set up as the blog sets it up — its plugins and its
   own rules for quotes, callouts, attribute lists and tables (`src/lib/kramdown.ts`
   follows the blog's `scripts/markdown/content.ts`) — so a post opens as the
-  blog renders it.
+  blog renders it. The reader loads apart from the app, once it is idle, so
+  the editor itself starts without it.
 - **Editing published posts.** *Open from the site* in the menu, or a link to
   `?edit=src/posts/…`, opens a post here. Its images are not re-encoded or re-uploaded,
   and re-publishing commits back to the file it came from, refusing if the post

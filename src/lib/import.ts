@@ -1,6 +1,5 @@
 import type { JSONContent } from "../editor/doc.ts";
 import { frontMatter } from "../../shared/front.ts";
-import { decoded } from "../../shared/paths.ts";
 import { readPin } from "../../shared/pin.ts";
 import type { PostMeta } from "../../shared/types.ts";
 import { markdownToDoc } from "./read.ts";
@@ -412,24 +411,6 @@ function parseFrontMatter(yaml: string): Partial<PostMeta> {
     meta.extra = extra;
   }
   return meta;
-}
-
-export function postPathFromLink(value: string): string | null {
-  const trimmed = value.trim();
-  if (!trimmed) {
-    return null;
-  }
-  const github = /^https?:\/\/(?:www\.)?github\.com\/[^/]+\/[^/]+\/(?:edit|blob|blame|raw)\/[^/]+\/(.+)$/.exec(
-    trimmed,
-  );
-  const raw = /^https?:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[^/]+\/(.+)$/.exec(trimmed);
-  const path = (github?.[1] ?? raw?.[1] ?? trimmed).split(/[?#]/)[0].replace(/^\/+/, "");
-  return /\.(md|markdown)$/i.test(path) ? decoded(path) : null;
-}
-
-export function slugFromPath(path: string): string {
-  const file = path.split("/").pop() ?? "";
-  return file.replace(/\.(md|markdown)$/i, "").replace(/^\d{4}-\d{2}-\d{2}-/, "");
 }
 
 export interface ImportedPost {
