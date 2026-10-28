@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import type { AppConfig, PublishResult } from "../../shared/types.ts";
 import { fetchPostSource, PasswordRejected } from "../lib/api.ts";
 import { isLocalSrc, resolveDisplaySrc, type Draft } from "../lib/db.ts";
@@ -58,33 +58,46 @@ onMounted(() => {
   void nextTick(() => (asking.value ? signIn.value?.focus() : primary.value?.focus()));
 });
 
+/** A draft that keeps changing while the dialog is open — someone typing in a shared one — is planned once it pauses. */
+const REPLAN_MS = 300;
 let generation = 0;
+let replan: number | undefined;
 watch(
-  () => [props.draft, props.settings] as const,
+  [() => props.draft, () => props.settings],
   ([draft, settings]) => {
     if (state.value !== "review") {
       return;
     }
     const mine = ++generation;
+    const planned = plan.value !== null;
     plan.value = null;
-    void buildPublishPlan(draft, settings)
-      .then((next) => {
-        if (mine === generation) {
-          plan.value = next;
-          next.photos.forEach((photo) => {
-            void thumb(photo.src);
-            measure(photo.src, photo.blob);
-          });
-        }
-      })
-      .catch((cause: unknown) => {
-        if (mine === generation) {
-          error.value = cause instanceof Error ? cause.message : String(cause);
-        }
-      });
+    window.clearTimeout(replan);
+    const build = () =>
+      void buildPublishPlan(draft, settings)
+        .then((next) => {
+          if (mine === generation) {
+            plan.value = next;
+            next.photos.forEach((photo) => {
+              void thumb(photo.src);
+              measure(photo.src, photo.blob);
+            });
+          }
+        })
+        .catch((cause: unknown) => {
+          if (mine === generation) {
+            error.value = cause instanceof Error ? cause.message : String(cause);
+          }
+        });
+    if (planned) {
+      replan = window.setTimeout(build, REPLAN_MS);
+    } else {
+      build();
+    }
   },
   { immediate: true },
 );
+
+onBeforeUnmount(() => window.clearTimeout(replan));
 
 watch(state, async (now) => {
   await nextTick();

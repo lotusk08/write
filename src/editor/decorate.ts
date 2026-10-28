@@ -51,6 +51,22 @@ function fallBackToWebp(this: HTMLImageElement): void {
   }
 }
 
+/**
+ * Sets what differs and nothing else: this runs on every frame the writer types in, and a write of the same text or
+ * attribute still replaces nodes, records a mutation and invalidates style, for every photo in the post.
+ */
+function setText(element: HTMLElement, text: string): void {
+  if (element.textContent !== text) {
+    element.textContent = text;
+  }
+}
+
+function setAttr(element: Element, name: string, value: string): void {
+  if (element.getAttribute(name) !== value) {
+    element.setAttribute(name, value);
+  }
+}
+
 function toolButton(className: string, text = "", label = ""): HTMLButtonElement {
   const button = document.createElement("button");
   button.type = "button";
@@ -91,15 +107,17 @@ function imageTools(figure: HTMLElement, img: HTMLImageElement): void {
   const [alt, caption, ...edits] = [...tools.children] as HTMLButtonElement[];
   const gallery = Boolean(figure.closest("[data-gallery]"));
   const altText = img.getAttribute("alt") ?? "";
-  alt.textContent = altText || "Add alt text";
-  alt.title = altText;
+  setText(alt, altText || "Add alt text");
+  setAttr(alt, "title", altText);
   alt.classList.toggle("is-empty", !altText);
   const text = img.getAttribute("title") ?? "";
-  caption.textContent = text || "Add caption";
-  caption.title = text;
+  setText(caption, text || "Add caption");
+  setAttr(caption, "title", text);
   caption.classList.toggle("is-empty", !text);
   for (const edit of edits) {
-    edit.hidden = !gallery;
+    if (edit.hidden === gallery) {
+      edit.hidden = !gallery;
+    }
   }
 }
 
@@ -111,8 +129,8 @@ function images(root: HTMLElement): void {
     }
     applyTheme(figure);
     imageTools(figure, img);
-    img.draggable = false;
-    figure.draggable = true;
+    setAttr(img, "draggable", "false");
+    setAttr(figure, "draggable", "true");
     const local = img.getAttribute("data-local-src");
     if (local && isLocalSrc(local)) {
       if (img.getAttribute("src") === BLANK_SRC) {
@@ -140,9 +158,7 @@ function galleries(root: HTMLElement): void {
       label.title = "Drag to move the gallery";
       gallery.prepend(label);
     }
-    if (label.textContent !== "Gallery") {
-      label.textContent = "Gallery";
-    }
+    setText(label, "Gallery");
   }
 }
 
@@ -201,8 +217,8 @@ function sections(root: HTMLElement): void {
       section.prepend(toggle);
     }
     const open = section.getAttribute("data-open") !== "false";
-    toggle.setAttribute("aria-expanded", String(open));
-    toggle.textContent = open ? "▾" : "▸";
+    setAttr(toggle, "aria-expanded", String(open));
+    setText(toggle, open ? "▾" : "▸");
   }
 }
 

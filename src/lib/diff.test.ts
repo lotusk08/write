@@ -24,6 +24,14 @@ describe("diffLines", () => {
   });
 
   it("handles a new file", () => {
-    expect(diffLines("", "x\ny").added).toBe(2);
+    expect(diffLines("", "x\ny")).toMatchObject({ added: 2, removed: 0 });
+  });
+
+  it("shows a middle too long to match line by line as taken out and put in, in bounded memory", () => {
+    const before = Array.from({ length: 4000 }, (_, at) => `old ${at}`);
+    const after = Array.from({ length: 4000 }, (_, at) => `new ${at}`);
+    const diff = diffLines(["same", ...before, "end"].join("\n"), ["same", ...after, "end"].join("\n"));
+    expect(diff).toMatchObject({ added: 4000, removed: 4000 });
+    expect(diff.hunks[0][0]).toEqual({ kind: " ", text: "same" });
   });
 });

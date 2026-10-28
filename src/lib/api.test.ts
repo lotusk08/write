@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { PasswordRejected, uploadPhoto } from "./api.ts";
+import { fetchSitePhotos, PasswordRejected, publish, uploadPhoto } from "./api.ts";
 
 function answers(...statuses: number[]) {
   const calls = vi.fn(async () => {
@@ -11,6 +11,22 @@ function answers(...statuses: number[]) {
 }
 
 afterEach(() => vi.unstubAllGlobals());
+
+describe("fetchSitePhotos", () => {
+  it("reads the site's photos once a minute for the same post, and afresh after a publish", async () => {
+    const calls = vi.fn(async (url: string) =>
+      Response.json(url.includes("/api/images") ? { files: [{ name: "a.webp", sha: "a".repeat(40), shared: false }], redirected: [] } : {}),
+    );
+    vi.stubGlobal("fetch", calls);
+    const own = [`src/posts/${Math.random()}.md`];
+    await fetchSitePhotos(own);
+    expect((await fetchSitePhotos(own)).files).toHaveLength(1);
+    expect(calls).toHaveBeenCalledTimes(1);
+    await publish({ message: "m", files: [] }, "pw");
+    await fetchSitePhotos(own);
+    expect(calls).toHaveBeenCalledTimes(3);
+  });
+});
 
 describe("uploadPhoto", () => {
   it("tries once more after a server error", async () => {

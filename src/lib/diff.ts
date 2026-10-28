@@ -6,9 +6,12 @@ export interface LineDiff {
   hunks: DiffLine[][];
 }
 
+/** The most cells the table of common lines may take, 32 MB; past it, the changed middle is shown as taken out and put in. */
+const MAX_CELLS = 8_000_000;
+
 export function diffLines(before: string, after: string, context = 2): LineDiff {
-  const all = before.split("\n");
-  const next = after.split("\n");
+  const all = before ? before.split("\n") : [];
+  const next = after ? after.split("\n") : [];
   let head = 0;
   while (head < all.length && head < next.length && all[head] === next[head]) {
     head += 1;
@@ -19,8 +22,9 @@ export function diffLines(before: string, after: string, context = 2): LineDiff 
   }
   const a = all.slice(head, all.length - tail);
   const b = next.slice(head, next.length - tail);
-  const table = Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1));
-  for (let i = a.length - 1; i >= 0; i -= 1) {
+  const whole = (a.length + 1) * (b.length + 1) <= MAX_CELLS;
+  const table = whole ? Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1)) : [];
+  for (let i = whole ? a.length - 1 : -1; i >= 0; i -= 1) {
     for (let j = b.length - 1; j >= 0; j -= 1) {
       table[i][j] = a[i] === b[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
     }
@@ -29,10 +33,10 @@ export function diffLines(before: string, after: string, context = 2): LineDiff 
   let i = 0;
   let j = 0;
   while (i < a.length || j < b.length) {
-    if (i < a.length && j < b.length && a[i] === b[j]) {
+    if (whole && i < a.length && j < b.length && a[i] === b[j]) {
       lines.push({ kind: " ", text: a[i++] });
       j += 1;
-    } else if (i < a.length && (j === b.length || table[i + 1][j] >= table[i][j + 1])) {
+    } else if (i < a.length && (j === b.length || !whole || table[i + 1][j] >= table[i][j + 1])) {
       lines.push({ kind: "-", text: a[i++] });
     } else {
       lines.push({ kind: "+", text: b[j++] });

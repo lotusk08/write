@@ -120,14 +120,29 @@ export async function fetchSiteFiles(password: string): Promise<SiteFiles> {
   };
 }
 
-export async function fetchSitePhotos(own: string[]): Promise<{ files: SitePhoto[]; redirected: string[] }> {
-  const query = new URLSearchParams(own.map((path) => ["own", path]));
-  const response = await fetch(`/api/images?${query}`, { headers: { accept: "application/json" } });
-  const result = await readJson<{ files?: SitePhoto[]; redirected?: string[] }>(response, "Could not read the site's photos");
-  return {
-    files: Array.isArray(result.files) ? result.files : [],
-    redirected: Array.isArray(result.redirected) ? result.redirected : [],
-  };
+type SitePhotos = { files: SitePhoto[]; redirected: string[] };
+
+/** How long a read of the site's photos serves the plans built after it: reading them reads every post on the site. */
+const PHOTOS_TTL_MS = 60_000;
+const photosRead = new Map<string, { at: number; read: Promise<SitePhotos> }>();
+
+export function fetchSitePhotos(own: string[]): Promise<SitePhotos> {
+  const query = new URLSearchParams(own.map((path) => ["own", path])).toString();
+  const kept = photosRead.get(query);
+  if (kept && Date.now() - kept.at < PHOTOS_TTL_MS) {
+    return kept.read;
+  }
+  const read = (async () => {
+    const response = await fetch(`/api/images?${query}`, { headers: { accept: "application/json" } });
+    const result = await readJson<{ files?: SitePhoto[]; redirected?: string[] }>(response, "Could not read the site's photos");
+    return {
+      files: Array.isArray(result.files) ? result.files : [],
+      redirected: Array.isArray(result.redirected) ? result.redirected : [],
+    };
+  })();
+  photosRead.set(query, { at: Date.now(), read });
+  read.catch(() => photosRead.delete(query));
+  return read;
 }
 
 export async function uploadPhoto(contentBase64: string, password: string, signal?: AbortSignal): Promise<string> {
@@ -198,6 +213,8 @@ export async function publish(
   request: PublishRequest,
   password: string,
 ): Promise<PublishResult> {
+  // A publish, done or refused, changes or questions the site's photos: the next plan reads them afresh.
+  photosRead.clear();
   const response = await fetch("/api/publish", {
     method: "POST",
     headers: headers(password, { "content-type": "application/json" }),
