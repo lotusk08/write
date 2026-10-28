@@ -6,43 +6,145 @@ export interface LineDiff {
   hunks: DiffLine[][];
 }
 
-/** The most cells the table of common lines may take, 32 MB; past it, the changed middle is shown as taken out and put in. */
-const MAX_CELLS = 8_000_000;
-
+/**
+ * The fewest lines taken out and put in that turn `before` into `after`, by Myers' bisection as diff-match-patch does
+ * it: memory in proportion to the lines, not to one side's lines times the other's, so a post of any length is diffed
+ * whole.
+ */
 export function diffLines(before: string, after: string, context = 2): LineDiff {
   const all = before ? before.split("\n") : [];
   const next = after ? after.split("\n") : [];
-  let head = 0;
-  while (head < all.length && head < next.length && all[head] === next[head]) {
-    head += 1;
-  }
-  let tail = 0;
-  while (tail < all.length - head && tail < next.length - head && all[all.length - 1 - tail] === next[next.length - 1 - tail]) {
-    tail += 1;
-  }
-  const a = all.slice(head, all.length - tail);
-  const b = next.slice(head, next.length - tail);
-  const whole = (a.length + 1) * (b.length + 1) <= MAX_CELLS;
-  const table = whole ? Array.from({ length: a.length + 1 }, () => new Uint32Array(b.length + 1)) : [];
-  for (let i = whole ? a.length - 1 : -1; i >= 0; i -= 1) {
-    for (let j = b.length - 1; j >= 0; j -= 1) {
-      table[i][j] = a[i] === b[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+  // Each distinct line as a number, so the search compares integers.
+  const ids = new Map<string, number>();
+  const id = (text: string) => {
+    let found = ids.get(text);
+    if (found === undefined) {
+      found = ids.size;
+      ids.set(text, found);
     }
-  }
-  const lines: DiffLine[] = all.slice(0, head).map((text) => ({ kind: " ", text }));
+    return found;
+  };
+  const ofAll = Int32Array.from(all, id);
+  const ofNext = Int32Array.from(next, id);
+  // A line found on one side only is taken out or put in whatever the rest does: it is left out of the search, which
+  // then has only the lines that can match to go through, and a post rewritten whole is diffed at once.
+  const inAll = new Set(ofAll);
+  const inNext = new Set(ofNext);
+  const aAt = [...ofAll.keys()].filter((at) => inNext.has(ofAll[at]));
+  const bAt = [...ofNext.keys()].filter((at) => inAll.has(ofNext[at]));
+  const a = Int32Array.from(aAt, (at) => ofAll[at]);
+  const b = Int32Array.from(bAt, (at) => ofNext[at]);
+  const forward = new Int32Array(a.length + b.length + 2);
+  const backward = new Int32Array(a.length + b.length + 2);
+  /** The lines left alone, as pairs of their places in `all` and `next`, in order. */
+  const kept: number[] = [];
+  const keep = (aFrom: number, bFrom: number, count: number) => {
+    for (let at = 0; at < count; at += 1) {
+      kept.push(aAt[aFrom + at], bAt[bFrom + at]);
+    }
+  };
+
+  /** A point on a shortest path through `a[aLo, aHi)` and `b[bLo, bHi)`, found from both ends at once; null if they share nothing. */
+  const bisect = (aLo: number, aHi: number, bLo: number, bHi: number): [number, number] | null => {
+    const n = aHi - aLo;
+    const m = bHi - bLo;
+    const most = Math.ceil((n + m) / 2);
+    const length = 2 * most;
+    forward.fill(-1, 0, length + 1);
+    backward.fill(-1, 0, length + 1);
+    forward[most + 1] = 0;
+    backward[most + 1] = 0;
+    const delta = n - m;
+    const odd = delta % 2 !== 0;
+    let forwardStart = 0;
+    let forwardEnd = 0;
+    let backwardStart = 0;
+    let backwardEnd = 0;
+    for (let d = 0; d < most; d += 1) {
+      for (let k = -d + forwardStart; k <= d - forwardEnd; k += 2) {
+        const at = most + k;
+        let x = k === -d || (k !== d && forward[at - 1] < forward[at + 1]) ? forward[at + 1] : forward[at - 1] + 1;
+        let y = x - k;
+        while (x < n && y < m && a[aLo + x] === b[bLo + y]) {
+          x += 1;
+          y += 1;
+        }
+        forward[at] = x;
+        if (x > n) {
+          forwardEnd += 2;
+        } else if (y > m) {
+          forwardStart += 2;
+        } else if (odd) {
+          const other = most + delta - k;
+          if (other >= 0 && other < length && backward[other] !== -1 && x >= n - backward[other]) {
+            return [aLo + x, bLo + y];
+          }
+        }
+      }
+      for (let k = -d + backwardStart; k <= d - backwardEnd; k += 2) {
+        const at = most + k;
+        let x = k === -d || (k !== d && backward[at - 1] < backward[at + 1]) ? backward[at + 1] : backward[at - 1] + 1;
+        let y = x - k;
+        while (x < n && y < m && a[aHi - 1 - x] === b[bHi - 1 - y]) {
+          x += 1;
+          y += 1;
+        }
+        backward[at] = x;
+        if (x > n) {
+          backwardEnd += 2;
+        } else if (y > m) {
+          backwardStart += 2;
+        } else if (!odd) {
+          const other = most + delta - k;
+          if (other >= 0 && other < length && forward[other] !== -1 && forward[other] >= n - x) {
+            return [aLo + forward[other], bLo + forward[other] - (other - most)];
+          }
+        }
+      }
+    }
+    return null;
+  };
+
+  const walk = (aLo: number, aHi: number, bLo: number, bHi: number): void => {
+    let head = 0;
+    while (aLo + head < aHi && bLo + head < bHi && a[aLo + head] === b[bLo + head]) {
+      head += 1;
+    }
+    keep(aLo, bLo, head);
+    aLo += head;
+    bLo += head;
+    let tail = 0;
+    while (aLo < aHi - tail && bLo < bHi - tail && a[aHi - 1 - tail] === b[bHi - 1 - tail]) {
+      tail += 1;
+    }
+    const split = aLo < aHi - tail && bLo < bHi - tail ? bisect(aLo, aHi - tail, bLo, bHi - tail) : null;
+    if (split) {
+      walk(aLo, split[0], bLo, split[1]);
+      walk(split[0], aHi - tail, split[1], bHi - tail);
+    }
+    keep(aHi - tail, bHi - tail, tail);
+  };
+  walk(0, a.length, 0, b.length);
+
+  // Between two lines left alone, the lines taken out before the lines put in, as a review reads it.
+  const lines: DiffLine[] = [];
+  const put = (kind: DiffLine["kind"], texts: string[], from: number, to: number) => {
+    for (let at = from; at < to; at += 1) {
+      lines.push({ kind, text: texts[at] });
+    }
+  };
   let i = 0;
   let j = 0;
-  while (i < a.length || j < b.length) {
-    if (whole && i < a.length && j < b.length && a[i] === b[j]) {
-      lines.push({ kind: " ", text: a[i++] });
-      j += 1;
-    } else if (i < a.length && (j === b.length || !whole || table[i + 1][j] >= table[i][j + 1])) {
-      lines.push({ kind: "-", text: a[i++] });
-    } else {
-      lines.push({ kind: "+", text: b[j++] });
-    }
+  for (let pair = 0; pair <= kept.length; pair += 2) {
+    const aNext = pair < kept.length ? kept[pair] : all.length;
+    const bNext = pair < kept.length ? kept[pair + 1] : next.length;
+    put("-", all, i, aNext);
+    put("+", next, j, bNext);
+    put(" ", all, aNext, Math.min(aNext + 1, all.length));
+    i = aNext + 1;
+    j = bNext + 1;
   }
-  lines.push(...all.slice(all.length - tail).map((text): DiffLine => ({ kind: " ", text })));
+
   const near = lines.map((_, index) =>
     lines.slice(Math.max(0, index - context), index + context + 1).some((line) => line.kind !== " "),
   );

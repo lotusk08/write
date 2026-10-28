@@ -27,11 +27,30 @@ describe("diffLines", () => {
     expect(diffLines("", "x\ny")).toMatchObject({ added: 2, removed: 0 });
   });
 
-  it("shows a middle too long to match line by line as taken out and put in, in bounded memory", () => {
-    const before = Array.from({ length: 4000 }, (_, at) => `old ${at}`);
-    const after = Array.from({ length: 4000 }, (_, at) => `new ${at}`);
+  it("finds the fewest changes, as a table of every line against every other does, in memory as long as the lines", () => {
+    /** The length of the longest common run of lines, by the full table: the diff must leave that many lines alone. */
+    const common = (a: string[], b: string[]) => {
+      let row = new Array<number>(b.length + 1).fill(0);
+      for (const line of a) {
+        const nextRow = [0];
+        b.forEach((other, j) => nextRow.push(line === other ? row[j] + 1 : Math.max(row[j + 1], nextRow[j])));
+        row = nextRow;
+      }
+      return row[b.length];
+    };
+    let seed = 7;
+    const random = () => (seed = (seed * 48271) % 2147483647) / 2147483647;
+    for (let round = 0; round < 300; round += 1) {
+      const a = Array.from({ length: Math.floor(random() * 30) }, () => "abcde"[Math.floor(random() * 5)]);
+      const b = Array.from({ length: Math.floor(random() * 30) }, () => "abcde"[Math.floor(random() * 5)]);
+      const diff = diffLines(a.join("\n"), b.join("\n"));
+      const kept = a.length - diff.removed;
+      expect([kept, b.length - diff.added]).toEqual([common(a, b), common(a, b)]);
+    }
+    const before = Array.from({ length: 8000 }, (_, at) => `old ${at}`);
+    const after = Array.from({ length: 8000 }, (_, at) => (at % 2 ? `old ${at}` : `new ${at}`));
     const diff = diffLines(["same", ...before, "end"].join("\n"), ["same", ...after, "end"].join("\n"));
     expect(diff).toMatchObject({ added: 4000, removed: 4000 });
-    expect(diff.hunks[0][0]).toEqual({ kind: " ", text: "same" });
+    expect(diff.hunks[0].slice(0, 4).map((line) => line.kind + line.text)).toEqual([" same", "-old 0", "+new 0", " old 1"]);
   });
 });
