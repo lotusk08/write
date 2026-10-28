@@ -48,7 +48,7 @@ const GITHUB_ALERTS: Record<string, string> = { note: "info", important: "key", 
 
 export function noteOfAlert(line: string): NoteType | null {
   const name = ALERT.exec(line.trim())?.[1].toLowerCase();
-  return name ? noteOfClass(GITHUB_ALERTS[name] ?? name) : null;
+  return name ? noteOfClass(Object.hasOwn(GITHUB_ALERTS, name) ? GITHUB_ALERTS[name] : name) : null;
 }
 
 const ATTRIBUTE = String.raw`(?:\.[\w-]+|#[\w-]+|[\w-]+=(?:"[^"]*"|'[^']*'|[^\s"'}]+))`;

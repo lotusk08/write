@@ -10,9 +10,12 @@ const COPIED = "write:copied";
 
 let copied = "";
 
-/** What a page's own copy and its selection share, whitespace aside — the browser breaks lines where the selection does not — hashed. */
+/**
+ * What a page's own copy and its selection share, hashed: white space aside, as browsers break lines differently, and
+ * a list's marks, which some write into a copy's text and not into the selection's.
+ */
 function print(text: string): string {
-  const flat = text.replace(/\s+/g, "");
+  const flat = text.replace(/^[ \t]*(?:[-*+•◦▪]|\d{1,9}[.)])[ \t]+/gm, "").replace(/\s+/g, "");
   let hash = 0x811c9dc5;
   for (let index = 0; index < flat.length; index += 1) {
     hash = Math.imul(hash ^ flat.charCodeAt(index), 0x01000193);

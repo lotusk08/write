@@ -29,24 +29,26 @@ export function currentMeta(meta: StoredMeta): PostMeta {
   return { ...rest, lang: rest.lang ?? languageOf(categories ?? []) };
 }
 
-/** A body kept from before the blog read only Pandoc's attribute lists, with each of kramdown's `{: .x}` in it as `{.x}`. */
+/**
+ * A body kept from before the blog read only Pandoc's attribute lists, with each of kramdown's `{: .x}` in it as `{.x}`;
+ * a body, or any part of one, with none is given back as it is.
+ */
 export function currentDoc(node: JSONContent): JSONContent {
-  const out = { ...node };
-  if (out.attrs) {
-    out.attrs = { ...out.attrs };
-    for (const key of ["blockIal", "ial"]) {
-      if (typeof out.attrs[key] === "string") {
-        out.attrs[key] = pandocAttributes(out.attrs[key]);
-      }
+  let attrs = node.attrs;
+  for (const key of ["blockIal", "ial"]) {
+    const value: unknown = attrs?.[key];
+    if (typeof value === "string" && value.includes("{:")) {
+      attrs = { ...attrs, [key]: pandocAttributes(value) };
     }
   }
-  if (out.text && out.marks?.some((mark) => mark.type === "rawInline")) {
-    out.text = pandocAttributes(out.text);
+  const raw = node.text?.includes("{:") && node.marks?.some((mark) => mark.type === "rawInline");
+  const text = raw ? pandocAttributes(node.text!) : node.text;
+  const content = node.content?.map(currentDoc);
+  const kept = !content || content.every((child, index) => child === node.content![index]);
+  if (attrs === node.attrs && text === node.text && kept) {
+    return node;
   }
-  if (out.content) {
-    out.content = out.content.map(currentDoc);
-  }
-  return out;
+  return { ...node, ...(attrs ? { attrs } : {}), ...(text !== undefined ? { text } : {}), ...(content ? { content } : {}) };
 }
 
 export function createDraft(title = ""): Draft {

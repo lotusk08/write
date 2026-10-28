@@ -1,6 +1,6 @@
 import { isLocalSrc } from "../lib/db.ts";
 import { previewSrc } from "../lib/site.ts";
-import { noteOfIal } from "./blog.ts";
+import { isNoteType, noteOfIal } from "./blog.ts";
 import type { DocMark, JSONContent } from "./doc.ts";
 
 /**
@@ -586,8 +586,9 @@ function blockFrom(element: Element): JSONContent[] {
     return textblocks("heading", { level: Number(heading[1]), ...attrs }, element.childNodes);
   }
   if (tag === "blockquote") {
+    // Only a callout the blog has: the name is written into the post.
     const note = element.getAttribute("data-note");
-    return [withAttrs({ type: "blockquote", content: blocksOrParagraph(element.childNodes) }, { ...(note ? { note } : {}), ...attrs })];
+    return [withAttrs({ type: "blockquote", content: blocksOrParagraph(element.childNodes) }, { ...(isNoteType(note) ? { note } : {}), ...attrs })];
   }
   if (tag === "pre") {
     const text = codeText(element);

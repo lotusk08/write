@@ -201,6 +201,26 @@ describe("bridge", () => {
     expect(docToMarkdown(doc)).toBe("> [!poem]\n> a");
   });
 
+  it("takes only the callouts the blog has, from a page or a doc, so no name can write into the post", () => {
+    const pasted = htmlToDoc('<blockquote data-note="x]\n\n<script>alert(1)</script>\n\n> [!y"><p>hi</p></blockquote>');
+    expect(pasted.content?.[0].attrs?.note).toBeUndefined();
+    expect(docToMarkdown(pasted)).toBe("> hi");
+    const stored: JSONContent = { type: "doc", content: [{ type: "blockquote", attrs: { note: "foo" }, content: [{ type: "paragraph", content: [{ type: "text", text: "hi" }] }] }] };
+    expect(docToMarkdown(stored)).toBe("> hi");
+  });
+
+  it.each([
+    ["a rule", "> [!warn]\n>\n> ---\n>\n> after"],
+    ["text that reads as an underline", "> [!tip]\n>\n> ===\n> more"],
+    ["a player", '> [!info]\n>\n> <EmbedYoutube id="abc" />'],
+    ["a list counting from 3", "> [!key]\n>\n> 3. three\n> 4. four"],
+  ])("keeps a callout opening with %s a callout", (_name, markdown) => {
+    const doc = markdownToDoc(markdown);
+    expect(doc.content?.[0].attrs?.note).not.toBeNull();
+    expect(docToMarkdown(doc)).toBe(markdown);
+    expect(roundTrip(markdown)).toBe(markdown);
+  });
+
   it("keeps a poem's lines and stanzas", () => {
     const markdown = "> [!poem]\n> Line one\n> line two\n>\n> Last line\n> of all";
     const quote = markdownToDoc(markdown).content?.[0];

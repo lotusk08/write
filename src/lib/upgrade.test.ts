@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import type { JSONContent } from "../editor/doc.ts";
 import { currentDoc } from "./draft.ts";
 import { upgradeSyntax } from "./upgrade.ts";
 
@@ -16,6 +17,8 @@ describe("kramdown's older forms", () => {
 
   it.each([
     ["in a fence", "```md\n> said\n{: .info}\n```"],
+    ["in indented code", "Para\n\n    > q\n    {: .info}\n    code {: .x}"],
+    ["in an HTML block", "<div>\n> x\n{: .info}\n</div>"],
     ["in a code span", "`{: .path}`"],
     ["escaped", "\\{: .path}"],
     ["holding more than attributes", "{:toc} and {: a, b}"],
@@ -35,5 +38,7 @@ describe("kramdown's older forms", () => {
     expect(doc.content?.[0].attrs?.blockIal).toBe("{.poem}");
     expect(doc.content?.[1].attrs?.ial).toBe("{.light}");
     expect(doc.content?.[2].content?.map((node) => node.text)).toEqual(['{icon="x"}', "{: .x}"]);
+    const current: JSONContent = { type: "doc", content: [{ type: "paragraph", attrs: { blockIal: "{.x}" }, content: [{ type: "text", text: "a" }] }] };
+    expect(currentDoc(current)).toBe(current);
   });
 });

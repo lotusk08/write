@@ -195,7 +195,8 @@ async function flush() {
   try {
     await draftStore.put(next);
   } catch (cause) {
-    // A full disk, say: the change stays waiting for the next save, kept meanwhile in case the page is left.
+    // A full disk, say: the change stays in the app, waiting for the next save, and kept in case the page is left.
+    drafts.value = sortDrafts(drafts.value.map((draft) => (draft.id === id ? next : draft)));
     if (pendingId === null || pendingId === id) {
       pending = { ...patch, ...pending };
       pendingId = id;
@@ -861,6 +862,8 @@ async function onPublished(id: string, result: PublishResult, plan: PublishPlan)
   };
 
   if (id !== currentId.value) {
+    // A change to it still waiting is written first, so it cannot later put back the photos' local addresses.
+    await flush();
     const draft = findDraft(id);
     if (draft) {
       const next: Draft = {

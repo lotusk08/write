@@ -1,10 +1,26 @@
+import markdownit from "markdown-it";
+import type { MarkdownIt } from "markdown-it";
 import { NOTE_CLASSES, pandocAttributes } from "../editor/blog.ts";
 
 const KINDS = new Set(Object.values(NOTE_CLASSES));
-const FENCE = /^((?:\s*>)*\s*)(`{3,}|~{3,})/;
 const NOTE_LINE = /^(\s*)\{:\s*\.([\w-]+)\s*\}\s*$/;
 const ENDS_QUOTE = /^\s*(?:<[a-zA-Z!/]|\{:|([-*_=])(\s*\1){2,}\s*$)/;
 const OPENS_BLOCK = /^\s*(?:<[a-zA-Z!/]|\{:|([-*_=])(\s*\1){2,}\s*$|[-*+] |\d+[.)] )/;
+
+let parser: MarkdownIt | null = null;
+
+/** The lines of code blocks, fenced or indented, and of HTML blocks: they show what was written, as it was written. */
+function verbatimLines(markdown: string): Set<number> {
+  const lines = new Set<number>();
+  for (const token of (parser ??= markdownit({ html: true })).parse(markdown, {})) {
+    if ((token.type === "fence" || token.type === "code_block" || token.type === "html_block") && token.map) {
+      for (let line = token.map[0]; line < token.map[1]; line++) {
+        lines.add(line);
+      }
+    }
+  }
+  return lines;
+}
 
 /** A line with the text outside its code spans changed by `change`, the spans as written. */
 function outsideCode(line: string, change: (text: string) => string): string {
@@ -51,8 +67,8 @@ function quoteAbove(lines: string[], code: Set<number>, at: number, indent: numb
 }
 
 /**
- * Markdown written for the blog's older reader, kramdown's, in the forms it reads now; code blocks and code spans as
- * written.
+ * Markdown written for the blog's older reader, kramdown's, in the forms it reads now; code, in blocks or spans, and
+ * HTML blocks as written.
  *
  *   > text            > [!info]
  *   {: .info}    →    > text
@@ -64,20 +80,7 @@ export function upgradeSyntax(markdown: string): string {
     return markdown;
   }
   const lines = markdown.split("\n");
-  const code = new Set<number>();
-  let fence: string | null = null;
-  lines.forEach((line, at) => {
-    const found = FENCE.exec(line);
-    if (fence) {
-      code.add(at);
-      if (found && found[2][0] === fence[0] && found[2].length >= fence.length && !line.slice(found[0].length).trim()) {
-        fence = null;
-      }
-    } else if (found) {
-      code.add(at);
-      fence = found[2];
-    }
-  });
+  const code = verbatimLines(markdown);
 
   const out: (string | null)[] = [...lines];
   const marks = new Map<number, string>();

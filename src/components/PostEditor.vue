@@ -375,7 +375,8 @@ function onClipboard(event: ClipboardEvent): void {
   const photo = figure && document.activeElement === figure ? figure : null;
   const media = !photo && range && !range.collapsed && [...element.querySelectorAll(MEDIA)].some((node) => holds(range, node));
   if (!photo && !media) {
-    rememberCopy(range?.toString() ?? "");
+    // The selection's text, which the browser writes into the copy, lines and all.
+    rememberCopy(document.getSelection()?.toString() ?? "");
     return;
   }
   const caption = photo && captionOf(photo);

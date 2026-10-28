@@ -361,6 +361,20 @@ function galleryBlock(node: JSONContent, options: SerializeOptions): string {
   return fenced("gallery", photos.map((photo) => image(photo, options)).join("\n"));
 }
 
+/**
+ * Whether a callout's first block needs a line of its own under the callout's name: the name is a line of text, which
+ * `---` or `===` under it would make a heading, and which HTML, a link's definition or a list counting from other than
+ * 1 would only go on.
+ */
+function opensOwnLine(first: JSONContent | undefined, inner: string): boolean {
+  return (
+    /^ {0,3}(?:=+|-+)[ \t]*$/.test(inner.split("\n")[0]) ||
+    first?.type === "rawBlock" ||
+    first?.type === "embed" ||
+    (first?.type === "orderedList" && Number(first.attrs?.start ?? 1) !== 1)
+  );
+}
+
 /** A numbered list counting from anything but 1 cannot start under a paragraph: markdown reads it as more of the paragraph. */
 function canHug(node: JSONContent, previous: JSONContent | undefined): boolean {
   return !(node.type === "orderedList" && Number(node.attrs?.start ?? 1) !== 1 && previous?.type === "paragraph");
@@ -501,9 +515,9 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
           .split("\n")
           .map((line) => (line ? `> ${line}` : ">"))
           .join("\n");
-        const name = node.attrs?.note ? String(node.attrs.note) : "";
         // A callout is named on its quote's first line, as GitHub writes its alerts, by the blog's name for it.
-        const note = name ? `> [!${isNoteType(name) ? NOTE_CLASSES[name] : name}]\n` : "";
+        const name = node.attrs?.note;
+        const note = isNoteType(name) ? `> [!${NOTE_CLASSES[name]}]\n${opensOwnLine(node.content?.[0], inner) ? ">\n" : ""}` : "";
         out.push(note + quoted);
         break;
       }
