@@ -35,8 +35,9 @@ import { emptyTools, readTools, type ToolState } from "../editor/tools.ts";
 import SelectionBubble from "./SelectionBubble.vue";
 import Toolbar from "./Toolbar.vue";
 
-const props = defineProps<{ doc: JSONContent; lang: string; dark: boolean; toolbar: boolean }>();
-const emit = defineEmits<{ change: [doc: JSONContent] }>();
+const props = defineProps<{ doc: JSONContent; draftId: string; lang: string; dark: boolean; toolbar: boolean }>();
+/** An edit, with the draft it was made in: the last one is sent as the editor goes, after another draft has opened. */
+const emit = defineEmits<{ change: [doc: JSONContent, draftId: string] }>();
 
 const EMIT_DEBOUNCE_MS = 150;
 /** The width of the margin a task's box is drawn in, left of its text. */
@@ -87,7 +88,7 @@ function flush(): JSONContent {
   const doc = currentDoc();
   if (pending !== null) {
     pending = null;
-    emit("change", doc);
+    emit("change", doc, props.draftId);
   }
   return doc;
 }

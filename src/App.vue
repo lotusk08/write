@@ -116,8 +116,11 @@ const focusButton = ref<HTMLButtonElement | null>(null);
 const mainRegion = ref<HTMLDivElement | null>(null);
 const scrollRegion = ref<HTMLDivElement | null>(null);
 
+/** A change waiting to be written, and the draft it belongs to, which by then need not be the open one. */
 let pending: Partial<Draft> = {};
+let pendingId: string | null = null;
 let writing: Partial<Draft> = {};
+let writingId: string | null = null;
 let saveTimer: number | undefined;
 let parseTimer: number | undefined;
 let toastTimer: number | undefined;
@@ -171,13 +174,14 @@ function errorText(cause: unknown, fallback?: string): string {
 }
 
 async function flush() {
-  const id = currentId.value;
+  const id = pendingId;
   const patch = pending;
   pending = {};
+  pendingId = null;
   if (!id || Object.keys(patch).length === 0) {
     return;
   }
-  if (patch.doc !== undefined && session.value && shareRoom && !("shareToken" in patch)) {
+  if (patch.doc !== undefined && id === currentId.value && session.value && shareRoom && !("shareToken" in patch)) {
     patch.shareSeed = shareRoom.sessionSnapshot(session.value);
   }
   const base = findDraft(id);
@@ -185,14 +189,28 @@ async function flush() {
     return;
   }
   const next: Draft = { ...base, ...patch, updatedAt: Date.now() };
-  writing = { ...writing, ...patch };
+  writing = writingId === id ? { ...writing, ...patch } : patch;
+  writingId = id;
   await draftStore.put(next);
-  writing = {};
+  if (writingId === id) {
+    writing = {};
+    writingId = null;
+  }
   drafts.value = sortDrafts(drafts.value.map((draft) => (draft.id === id ? next : draft)));
   saveState.value = "saved";
 }
 
-function queueSave(patch: Partial<Draft>) {
+/** The change still waiting for a draft, if any. */
+function pendingFor(id: string | null): Partial<Draft> {
+  return id !== null && id === pendingId ? pending : {};
+}
+
+/** Queues a change to a draft, the open one unless another is named; one still waiting for another draft is written first. */
+function queueSave(patch: Partial<Draft>, id = currentId.value) {
+  if (pendingId !== null && pendingId !== id) {
+    void flush();
+  }
+  pendingId = id;
   pending = { ...pending, ...patch };
   saveState.value = "saving";
   window.clearTimeout(saveTimer);
@@ -219,10 +237,11 @@ function gather() {
   }
 }
 
-function onEditorChange(doc: JSONContent) {
+/** An edit, sent by the editor of the draft it was made in — after a switch, the one going away. */
+function onEditorChange(doc: JSONContent, id: string) {
   contentVersion.value += 1;
-  queueSave({ doc });
-  if (session.value && shareRoom) {
+  queueSave({ doc }, id);
+  if (id === currentId.value && session.value && shareRoom) {
     shareRoom.pushDoc(session.value, doc);
   }
 }
@@ -238,13 +257,14 @@ function endedShare() {
   if (!currentId.value) {
     return;
   }
-  pending = { ...pending, shareToken: undefined, shareOwner: undefined, shareSeed: undefined };
+  queueSave({ shareToken: undefined, shareOwner: undefined, shareSeed: undefined });
   void flush();
   showToast("Sharing ended.");
 }
 
+// Two sources, each compared on its own: one getter returning a fresh pair fired on every save, and left and rejoined the room.
 watch(
-  () => [current.value?.shareToken ?? null, currentId.value] as const,
+  [() => current.value?.shareToken ?? null, currentId],
   ([token], _previous, onCleanup) => {
     if (!token) {
       session.value = null;
@@ -489,7 +509,7 @@ function applySource(text: string) {
   if (!draft) {
     return;
   }
-  const was = { ...draft.meta, ...pending.meta };
+  const was = { ...draft.meta, ...pendingFor(draft.id).meta };
   const { meta, doc } = readSource(text, was);
   queueSave({ doc, sourceText: rememberSource(text, meta, doc) });
   if (!sameMeta(meta, was)) {
@@ -508,7 +528,7 @@ watch(
   () => current.value?.meta,
   (meta) => {
     const draft = findDraft(currentId.value);
-    const kept = pending.sourceText ?? writing.sourceText ?? draft?.sourceText;
+    const kept = pendingFor(currentId.value).sourceText ?? (writingId === currentId.value ? writing.sourceText : undefined) ?? draft?.sourceText;
     if (source.value === null || !meta || !draft || keptFront(kept, meta)) {
       return;
     }
@@ -527,7 +547,10 @@ async function deleteDraft(id: string) {
   if (!draft || !window.confirm(`Delete "${draftLabel(draft)}"? This cannot be undone.`)) {
     return;
   }
-  pending = {};
+  if (pendingId === id) {
+    pending = {};
+    pendingId = null;
+  }
   if (draft.shareToken && draft.shareOwner) {
     void endShareRoom(draft.shareToken, draft.shareOwner).catch(() => undefined);
   }
@@ -553,7 +576,7 @@ function updateMeta(patch: Partial<PostMeta>) {
   if (!draft) {
     return;
   }
-  const meta = { ...draft.meta, ...pending.meta, ...patch };
+  const meta = { ...draft.meta, ...pendingFor(draft.id).meta, ...patch };
   const next: Partial<Draft> = { meta };
   if (patch.title !== undefined) {
     next.title = patch.title;
@@ -635,10 +658,10 @@ async function enableShare() {
     }
     const update = (await loadShare()).seedUpdate(draft.doc);
     const { token, owner } = await createShareRoom(update);
-    if (source.value !== null) {
+    if (source.value !== null && currentId.value === draft.id) {
       await editRich();
     }
-    queueSave({ shareToken: token, shareOwner: owner, shareSeed: update });
+    queueSave({ shareToken: token, shareOwner: owner, shareSeed: update }, draft.id);
     await flush();
   } catch (cause) {
     shareError.value = errorText(cause);
@@ -657,7 +680,7 @@ async function disableShare() {
   shareError.value = null;
   try {
     await endShareRoom(token, draft.shareOwner);
-    queueSave({ shareToken: undefined, shareOwner: undefined, shareSeed: undefined });
+    queueSave({ shareToken: undefined, shareOwner: undefined, shareSeed: undefined }, draft.id);
     await flush();
   } catch (cause) {
     shareError.value = errorText(cause);
@@ -739,7 +762,7 @@ function openMindmap() {
   }
   try {
     const doc = source.value !== null ? readSource(source.value, draft.meta).doc : (postEditor.value?.flush() ?? draft.doc);
-    const meta = { ...draft.meta, ...pending.meta };
+    const meta = { ...draft.meta, ...pendingFor(draft.id).meta };
     window.open(mindmapUrl(doc, meta.title), "_blank", "noopener");
   } catch (cause) {
     showToast(errorText(cause, "Could not open the mindmap."), "error");
@@ -849,7 +872,7 @@ async function onPublished(id: string, result: PublishResult, plan: PublishPlan)
   }
   const draft = findDraft(id);
   if (draft) {
-    const meta = { ...draft.meta, ...pending.meta };
+    const meta = { ...draft.meta, ...pendingFor(id).meta };
     const repointed = repointCover(meta, urls);
     if (repointed !== meta) {
       updateMeta({ cover: repointed.cover });
@@ -939,8 +962,11 @@ const onScheme = () => {
 const onLeave = (event: Event) => {
   if (event.type === "pagehide" || document.visibilityState === "hidden") {
     gather();
-    if (currentId.value) {
-      keepSnapshot(currentId.value, { ...writing, ...pending });
+    if (writingId && writingId !== pendingId) {
+      keepSnapshot(writingId, writing);
+    }
+    if (pendingId) {
+      keepSnapshot(pendingId, { ...(writingId === pendingId ? writing : {}), ...pending });
     }
     void flush();
   }
@@ -1029,6 +1055,7 @@ onBeforeUnmount(() => {
                 v-else
                 :key="currentId ?? ''"
                 ref="postEditor"
+                :draft-id="currentId ?? ''"
                 :doc="current.doc"
                 :lang="current.meta.lang || 'en'"
                 :dark="dark"
@@ -1122,7 +1149,7 @@ onBeforeUnmount(() => {
       :config="config"
       @settings="updateSettings"
       @close="publishOpen = false"
-      @published="(result, plan) => void onPublished(current!.id, result, plan)"
+      @published="(id, result, plan) => void onPublished(id, result, plan)"
       @fix-photo="fixPhoto"
       @edit-post="editPost"
       @fix-field="fixField"

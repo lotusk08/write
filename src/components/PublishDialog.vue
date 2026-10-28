@@ -20,7 +20,7 @@ const props = defineProps<{ draft: Draft; settings: Settings; config: AppConfig 
 const emit = defineEmits<{
   settings: [patch: Partial<Settings>];
   close: [];
-  published: [result: PublishResult, plan: PublishPlan];
+  published: [draftId: string, result: PublishResult, plan: PublishPlan];
   fixPhoto: [src: string];
   editPost: [];
   fixField: [field: "title" | "description"];
@@ -200,11 +200,13 @@ const run = async () => {
   error.value = null;
   refused.value = false;
   controller = new AbortController();
+  const id = props.draft.id;
+  const sending = plan.value;
   try {
-    result.value = await sendPlan(plan.value, message.value, credential(), (done) => (sent.value = done), controller.signal);
+    result.value = await sendPlan(sending, message.value, credential(), (done) => (sent.value = done), controller.signal);
     accepted();
     state.value = "done";
-    emit("published", result.value, plan.value);
+    emit("published", id, result.value, sending);
   } catch (cause) {
     state.value = "review";
     if (controller.signal.aborted) {
