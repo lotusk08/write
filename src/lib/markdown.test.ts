@@ -67,3 +67,32 @@ describe("front matter the app has no field for", () => {
     expect(written(post)).toBe("---\ntitle: X\ndate: 2026-10-11 09:00 +0700\nlang: vi\ntags: []\npin: false\ntoc: true\n---\nText\n");
   });
 });
+
+describe("what a node carries that the page does not show", () => {
+  it("never lets an address, title, attribute list, language or label end its line", () => {
+    const doc = {
+      type: "doc",
+      content: [
+        {
+          type: "paragraph",
+          attrs: { blockIal: "{: .x}\n\n<script>1</script>" },
+          content: [
+            { type: "text", text: "this", marks: [{ type: "link", attrs: { href: "https://a.com/\n\n<script>2</script>", title: "t\n\n<b>" } }] },
+            { type: "footnoteRef", attrs: { label: "1]\n\n<script>3</script>" } },
+          ],
+        },
+        { type: "image", attrs: { src: "/a.jpg\n\n<script>4</script>", alt: "", ial: "{: .y}\n<script>5</script>" } },
+        { type: "codeBlock", attrs: { language: "js\n<script>6</script>\n```" }, content: [{ type: "text", text: "x" }] },
+      ],
+    };
+    const markdown = buildPostFile({ ...newPostMeta(), title: "T" }, doc);
+    expect(markdown).not.toMatch(/^<script>/m);
+    expect(markdown).toContain("[this](https://a.com/%0A%0A<script>2</script> \"t <b>\")");
+    expect(markdown).toContain("![](/a.jpg%0A%0A<script>4</script>)");
+    expect(markdown).toContain("```js<script>6</script>\nx\n```");
+  });
+
+  it("reads no script link, a spaced one included", () => {
+    expect(JSON.stringify(parsePost("[x](javascript:location=name )").doc)).not.toContain('"link"');
+  });
+});

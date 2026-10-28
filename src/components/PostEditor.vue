@@ -3,7 +3,7 @@ import { Editor, type EditorInstance } from "@erag/text-editor-vue";
 import "@erag/text-editor-vue/style.css";
 import { nextTick, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import { docToHtml, htmlToDoc } from "../editor/bridge.ts";
-import { clipboardOf, copiedBlocks, MEDIA } from "../editor/clipboard.ts";
+import { clipboardOf, copiedBlocks, MEDIA, rememberCopy } from "../editor/clipboard.ts";
 import {
   askLink,
   captionOf,
@@ -333,7 +333,7 @@ function addImages(files: File[], spot: DropSpot | null = null): void {
 }
 
 function onPaste(event: ClipboardEvent): void {
-  const own = copiedBlocks(event.clipboardData?.getData("text/html") ?? "");
+  const own = copiedBlocks(event.clipboardData?.getData("text/html") ?? "", event.clipboardData?.getData("text/plain") ?? "");
   if (own) {
     event.preventDefault();
     event.stopImmediatePropagation();
@@ -374,6 +374,7 @@ function onClipboard(event: ClipboardEvent): void {
   const photo = figure && document.activeElement === figure ? figure : null;
   const media = !photo && range && !range.collapsed && [...element.querySelectorAll(MEDIA)].some((node) => holds(range, node));
   if (!photo && !media) {
+    rememberCopy(range?.toString() ?? "");
     return;
   }
   const caption = photo && captionOf(photo);

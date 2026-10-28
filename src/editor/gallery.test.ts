@@ -199,15 +199,18 @@ describe("dragging photos about", () => {
   });
 
   it("copies a photo and pastes it into a gallery, address and alt as they were", () => {
-    const copied = copiedBlocks(clipboardOf([figure("c")]).html)!;
+    const { html, text } = clipboardOf([figure("c")]);
+    const copied = copiedBlocks(html, text)!;
     selectFigure(root, figure("a"));
     insertDoc(root, copied);
     expect(stable()).toContain("```gallery\n![a](/assets/img/post/a.webp)\n![c](/assets/img/post/c.webp)\n![b](/assets/img/post/b.webp)\n```");
-    expect(copiedBlocks("<p>from elsewhere</p>")).toBeNull();
+    expect(copiedBlocks("<p>from elsewhere</p>", "from elsewhere")).toBeNull();
+    expect(copiedBlocks('<div data-write-blocks=""><p><a href="javascript:alert(1)">x</a></p></div>', "x")).toBeNull();
   });
 
   it("pastes a gallery or a paragraph on a gallery photo after the gallery, never into it", () => {
-    const copied = copiedBlocks(clipboardOf([root.querySelector("[data-gallery]")!, block("Middle")]).html)!;
+    const { html, text } = clipboardOf([root.querySelector("[data-gallery]")!, block("Middle")]);
+    const copied = copiedBlocks(html, text)!;
     selectFigure(root, figure("a"));
     insertDoc(root, copied);
     expect(root.querySelectorAll("[data-gallery] [data-gallery], [data-gallery] p")).toHaveLength(0);

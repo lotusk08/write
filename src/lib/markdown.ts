@@ -145,9 +145,8 @@ function applyMarks(text: string, marks: Mark[] | undefined): string {
         out = `<sub>${out}</sub>`;
         break;
       case "link": {
-        const href = String(mark.attrs?.href ?? "");
-        const title = quotedTitle(mark.attrs?.title);
-        out = `[${out}](${balanced(href) ? href : `<${href}>`}${title})`;
+        const href = oneLine(String(mark.attrs?.href ?? ""));
+        out = `[${out}](${balanced(href) ? href : `<${href}>`}${quotedTitle(mark.attrs?.title)})`;
         break;
       }
       default:
@@ -170,6 +169,22 @@ function balanced(href: string): boolean {
     }
   }
   return depth === 0 || /[<>\n]/.test(href);
+}
+
+/** An address kept to its line: a line end in it would close the link and leave the rest to be read as Markdown of its own. */
+function oneLine(address: string): string {
+  return address.replace(/[\r\n]/g, encodeURIComponent);
+}
+
+/** An attribute list as it is read back, `{: … }` on one line, or nothing: anything else would be written as text of the post. */
+function ialOf(value: unknown): string {
+  const ial = value ? String(value) : "";
+  return /^\{:[^}\n]*\}$/.test(ial) ? ial : "";
+}
+
+/** A footnote's label as it is read back, with no space or closing bracket in it. */
+function footnoteLabel(value: unknown): string {
+  return String(value ?? "").replace(/[\]\s]/g, "");
 }
 
 function nextLine(block: string, addition: string): string {
@@ -298,7 +313,7 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions, lin
     } else if (node.type === "image") {
       rendered.push(image(node, options));
     } else if (node.type === "footnoteRef") {
-      rendered.push(applyMarks(`[^${String(node.attrs?.label ?? "")}]`, marks));
+      rendered.push(applyMarks(`[^${footnoteLabel(node.attrs?.label)}]`, marks));
     } else {
       rendered.push(inline(node.content, options, linked));
     }
@@ -310,22 +325,20 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions, lin
 }
 
 function quotedTitle(title: unknown): string {
-  return title ? ` "${escapeChars(String(title), '"')}"` : "";
+  return title ? ` "${escapeChars(String(title).replace(/\s*\n\s*/g, " "), '"')}"` : "";
 }
 
 function image(node: JSONContent, options: SerializeOptions): string {
   const rawSrc = String(node.attrs?.src ?? "");
   const src = options.resolveImage ? options.resolveImage(rawSrc) : rawSrc;
   const alt = escapeChars(String(node.attrs?.alt ?? "").replace(/\s*\n\s*/g, " "), "[]`*_<~");
-  const title = quotedTitle(String(node.attrs?.title ?? "").replace(/\s*\n\s*/g, " "));
-  const ial = node.attrs?.ial ? String(node.attrs.ial) : "";
-  return `![${alt}](${src}${title})${ial}`;
+  return `![${alt}](${oneLine(src)}${quotedTitle(node.attrs?.title)})${ialOf(node.attrs?.ial)}`;
 }
 
 function fenced(info: string, body: string): string {
   const inner = Math.max(2, ...[...body.matchAll(/^[ \t]*(`{3,})/gm)].map((run) => run[1].length));
   const fence = "`".repeat(inner + 1);
-  return `${fence}${info}\n${body}\n${fence}`;
+  return `${fence}${info.replace(/[\r\n`]/g, "")}\n${body}\n${fence}`;
 }
 
 function galleryBlock(node: JSONContent, options: SerializeOptions): string {
@@ -430,7 +443,7 @@ function blockIal(nodes: JSONContent[], index: number): string {
   if (nodes[index].attrs?.ialAbove) {
     return "";
   }
-  return nodes[index].attrs?.blockIal ? String(nodes[index].attrs.blockIal) : "";
+  return ialOf(nodes[index].attrs?.blockIal);
 }
 
 function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): string[] {
@@ -510,7 +523,7 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         break;
       case "footnoteDef":
         out.push(
-          `[^${String(node.attrs?.label ?? "")}]: ${indentedBody(node.content, "    ", options)}`,
+          `[^${footnoteLabel(node.attrs?.label)}]: ${indentedBody(node.content, "    ", options)}`,
         );
         break;
       case "listItem":
@@ -525,8 +538,8 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         break;
     }
 
-    if (node.attrs?.ialAbove && node.attrs?.blockIal && out.length > start) {
-      out[start] = `${String(node.attrs.blockIal)}\n${out[start]}`;
+    if (node.attrs?.ialAbove && ialOf(node.attrs?.blockIal) && out.length > start) {
+      out[start] = `${ialOf(node.attrs.blockIal)}\n${out[start]}`;
     }
 
     if (node.attrs?.joinPrevious && out.length === start + 1 && start > 0 && canHug(node, nodes[index - 1])) {

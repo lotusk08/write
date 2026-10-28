@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { describe, expect, it } from "vitest";
 import { htmlToDoc } from "./bridge.ts";
+import { rememberCopy } from "./clipboard.ts";
 import { pasteClipboard, pastedHtml } from "./paste.ts";
 import { docToMarkdown } from "../lib/markdown.ts";
 
@@ -49,6 +50,21 @@ describe("paste", () => {
     const html = pastedHtml(WEB, "") ?? "";
     expect(html).not.toMatch(/style=|script|javascript:/);
     expect(markdown(html)).toBe("# Title\n\nText with big and **bold** bad [rel](/rel)\n\n![](https://x.com/a.jpg \"Cap\")");
+  });
+
+  it("reads the editor's hidden markup only in a copy made here, which any page could otherwise write", () => {
+    const hidden =
+      '<p data-block-ial="{: onmouseover=&quot;alert(1)&quot;}"><b>Hello</b></p>' +
+      '<pre data-raw>&lt;img src=x onerror=alert(1)&gt;</pre>' +
+      '<p>a <span data-raw-inline>&lt;img src=x&gt;</span></p>';
+    expect(markdown(pastedHtml(hidden, "Hello <img src=x onerror=alert(1)> a <img src=x>"))).toBe(
+      "**Hello**\n\n```\n<img src=x onerror=alert(1)>\n```\n\na \\<img src=x>",
+    );
+    rememberCopy("Hello\n<img src=x onerror=alert(1)>\na <img src=x>");
+    expect(markdown(pastedHtml(hidden, "Hello\n\n<img src=x onerror=alert(1)>\n\na <img src=x>"))).toBe(
+      '**Hello**\n{: onmouseover="alert(1)"}\n\n<img src=x onerror=alert(1)>\n\na <img src=x>',
+    );
+    rememberCopy("");
   });
 
   it("drops a highlight, which has no tool to take it off again", () => {

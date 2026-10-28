@@ -569,7 +569,7 @@ function target(state: State, labelEnd: number, image: boolean): number {
     return -1;
   }
   const spaced = SPACED_LINK.exec(src.slice(labelEnd, max));
-  if (spaced) {
+  if (spaced && validLink(spaced[1])) {
     return labelEnd + spaced[0].length - 1;
   }
   pos = skipSpace(src, pos + 1, max);

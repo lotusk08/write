@@ -1,6 +1,7 @@
 import type { JSONContent } from "./doc.ts";
 import { embedFromUrl } from "./blog.ts";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
+import { copiedHere } from "./clipboard.ts";
 import { insertEmbed, notify } from "./commands.ts";
 import { markdownToDoc } from "../lib/import.ts";
 
@@ -17,6 +18,8 @@ const STYLES: [RegExp, string][] = [
   [/vertical-align:\s*sub/i, "sub"],
 ];
 const SAFE_HREF = /^(?:https?:|mailto:|tel:|[/#?.]|[^:]*$)/i;
+/** The editor's own markup for what a post writes but the page does not show: raw HTML, attribute lists, locked blocks. */
+const HIDDEN = ["data-raw", "data-raw-inline", "data-ial", "data-block-ial", "data-ial-above", "contenteditable"];
 const MARKDOWN_LINE = /^ {0,3}(?:#{1,6}[ \t]|[-*+][ \t]+\S|\d{1,9}[.)][ \t]+\S|>|```|~~~|\|.*\|[ \t]*$|-{3,}[ \t]*$)/m;
 const MARKDOWN_INLINE = /\*\*[^*\n]+\*\*|__[^_\n]+__|~~[^~\n]+~~|`[^`\n]+`|!?\[[^\]\n]+\]\([^)\s]+\)/;
 
@@ -47,8 +50,14 @@ function wordLists(body: HTMLElement): void {
   }
 }
 
-function clipboardBody(html: string): HTMLElement {
+/** A clipboard's HTML, cleaned; the editor's hidden markup is kept only in a copy made here (`own`). */
+function clipboardBody(html: string, own: boolean): HTMLElement {
   const body = new DOMParser().parseFromString(html, "text/html").body;
+  if (!own) {
+    for (const element of body.querySelectorAll(HIDDEN.map((name) => `[${name}]`).join(", "))) {
+      HIDDEN.forEach((name) => element.removeAttribute(name));
+    }
+  }
   [...body.querySelectorAll("*")]
     .filter((node) => /^(?:meta|style|script|link|title|o:p)$/i.test(node.tagName))
     .forEach((node) => node.remove());
@@ -124,7 +133,7 @@ function plainDoc(text: string): JSONContent {
 /** Clipboard contents as the editor's own HTML, built from the doc model, so a paste carries only what the blog can show. */
 export function pastedHtml(html: string, text: string): string | null {
   const plain = text.replace(/\r\n?/g, "\n");
-  const body = html ? clipboardBody(html) : null;
+  const body = html ? clipboardBody(html, copiedHere(plain)) : null;
   const rich = body !== null && body.querySelector(SEMANTIC) !== null;
   const doc = rich
     ? htmlToDoc(body.innerHTML)
