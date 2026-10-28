@@ -101,6 +101,8 @@ describe("worker", () => {
       { files: [{ ...post, path: "src/posts/%2e%2e/x.md" }] },
       { files: [{ ...post, path: ".github/workflows/x.yml" }] },
       { files: [{ path: photo.path, sha: "not-a-sha" }] },
+      { files: ["src/posts/x.md"] },
+      { files: [5] },
       { files: Array.from({ length: 51 }, (_, index) => ({ ...photo, path: `public/assets/img/post/${index}.webp` })) },
       { files: [post], remove: ["src/posts/2026-10-11-trip.md"] },
       { files: [post], remove: ["src/drafts/notes.txt"] },

@@ -289,8 +289,9 @@ function validateFiles(files: unknown, env: Env): { files: PublishFile[] } | { e
   const validated: PublishFile[] = [];
 
   for (const file of files as PublishFile[]) {
-    const sha = file && "sha" in file ? file.sha : undefined;
-    const content = file && "contentBase64" in file ? file.contentBase64 : undefined;
+    const entry = typeof file === "object" && file !== null;
+    const sha = entry && "sha" in file ? file.sha : undefined;
+    const content = entry && "contentBase64" in file ? file.contentBase64 : undefined;
     if (typeof file?.path !== "string" || (typeof content !== "string" && !(typeof sha === "string" && SHA.test(sha)))) {
       return { error: "Malformed file entry." };
     }
