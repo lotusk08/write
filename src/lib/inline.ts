@@ -33,6 +33,15 @@ interface State {
   backticks: Record<number, number>;
   backticksScanned: boolean;
   linkLevel: number;
+  references: References;
+}
+
+/** A link reference definition, `[label]: address "title"`, by its label as `referenceLabel` normalises it. */
+export type References = ReadonlyMap<string, { href: string; title?: string }>;
+
+/** A reference's label as CommonMark matches it: case-folded, its white space one space. */
+export function referenceLabel(label: string): string {
+  return label.trim().replace(/\s+/g, " ").toLowerCase().toUpperCase();
 }
 
 type Rule = (state: State, silent: boolean) => boolean;
@@ -606,6 +615,27 @@ function linkAttrs(inner: string): Record<string, string> {
   return quoted?.[1] ? { href, title: quoted[1].replace(ESCAPE, "$1") } : { href };
 }
 
+/** A full (`[text][label]`), collapsed (`[text][]`) or shortcut (`[text]`) reference to a definition the post holds. */
+function reference(state: State, start: number, labelEnd: number): { close: number; attrs: Record<string, string> } | null {
+  if (!state.references.size) {
+    return null;
+  }
+  let label = state.src.slice(start, labelEnd);
+  let close = labelEnd;
+  if (state.src.charCodeAt(labelEnd + 1) === 0x5b) {
+    const named = parseLinkLabel(state, labelEnd + 1, false);
+    if (named >= 0) {
+      label = state.src.slice(labelEnd + 2, named).trim() ? state.src.slice(labelEnd + 2, named) : label;
+      close = named;
+    }
+  }
+  const found = state.references.get(referenceLabel(label));
+  if (!found || !validLink(found.href)) {
+    return null;
+  }
+  return { close, attrs: found.title ? { href: found.href, title: found.title } : { href: found.href } };
+}
+
 const link: Rule = (state, silent) => {
   if (state.src.charCodeAt(state.pos) !== 0x5b) {
     return false;
@@ -616,7 +646,9 @@ const link: Rule = (state, silent) => {
   if (labelEnd < 0) {
     return false;
   }
-  const close = target(state, labelEnd, false);
+  const inline = target(state, labelEnd, false);
+  const referred = inline < 0 ? reference(state, start + 1, labelEnd) : null;
+  const close = referred?.close ?? inline;
   if (close < 0) {
     return false;
   }
@@ -624,7 +656,7 @@ const link: Rule = (state, silent) => {
     state.pos = start + 1;
     state.posMax = labelEnd;
     const open = push(state, "link_open", 1);
-    const attrs = linkAttrs(state.src.slice(labelEnd + 2, close));
+    const attrs = referred?.attrs ?? linkAttrs(state.src.slice(labelEnd + 2, close));
     open.attrs = { ...attrs, href: attrs.href.replace(/^<([^<>\n]*)>$/, "$1") };
     open.start = start;
     open.end = close + 1;
@@ -648,12 +680,14 @@ const image: Rule = (state, silent) => {
   if (labelEnd < 0) {
     return false;
   }
-  const close = target(state, labelEnd, true);
+  const inline = target(state, labelEnd, true);
+  const referred = inline < 0 ? reference(state, labelStart, labelEnd) : null;
+  const close = referred?.close ?? inline;
   if (close < 0) {
     return false;
   }
   if (!silent) {
-    const { href, title } = linkAttrs(src.slice(labelEnd + 2, close));
+    const { href, title } = referred?.attrs ?? linkAttrs(src.slice(labelEnd + 2, close));
     const found = push(state, "image", 0);
     found.attrs = { src: href, alt: src.slice(labelStart, labelEnd).replace(ESCAPE, "$1"), ...(title ? { title } : {}) };
     found.start = labelStart - 2;
@@ -814,11 +848,19 @@ const RULES: Rule[] = [
   entity,
 ];
 
+/** As markdown-it's: past this depth of brackets or marks the rest of the text is read as text, not a stack overflow. */
+const MAX_NESTING = 100;
+
 function skipToken(state: State): void {
   const pos = state.pos;
   const cached = state.cache.get(pos);
   if (cached !== undefined) {
     state.pos = cached;
+    return;
+  }
+  if (state.level >= MAX_NESTING) {
+    state.pos = state.posMax;
+    state.cache.set(pos, state.pos);
     return;
   }
   let ok = false;
@@ -840,7 +882,7 @@ function tokenize(state: State): void {
   const end = state.posMax;
   while (state.pos < end) {
     let ok = false;
-    for (const rule of RULES) {
+    for (const rule of state.level < MAX_NESTING ? RULES : []) {
       ok = rule(state, false);
       if (ok) {
         break;
@@ -1023,7 +1065,7 @@ function boldItalic(tokens: InlineToken[]): void {
   }
 }
 
-export function inlineTokens(src: string): InlineToken[] {
+export function inlineTokens(src: string, references: References = new Map()): InlineToken[] {
   const state: State = {
     src,
     pos: 0,
@@ -1039,6 +1081,7 @@ export function inlineTokens(src: string): InlineToken[] {
     backticks: {},
     backticksScanned: false,
     linkLevel: 0,
+    references,
   };
   tokenize(state);
   const scopes = [state.delimiters, ...state.meta.filter((meta): meta is Delimiter[] => meta !== null)];

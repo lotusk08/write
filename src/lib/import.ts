@@ -4,7 +4,7 @@ import { decoded } from "../../shared/paths.ts";
 import { readPin } from "../../shared/pin.ts";
 import type { PostMeta } from "../../shared/types.ts";
 import { EMBED_LIQUID, EMBED_TAG, NOTE_CLASSES, embedPlatform, noteOfClass } from "../editor/blog.ts";
-import { ENTITY, type InlineToken, entityText, inlineTokens } from "./inline.ts";
+import { ENTITY, type InlineToken, type References, entityText, inlineTokens, referenceLabel } from "./inline.ts";
 import { languageOf } from "./topics.ts";
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
@@ -590,7 +590,7 @@ function codeText(content: string): string {
 }
 
 function parseInline(source: string, images = true): JSONContent[] {
-  const tokens = inlineTokens(source);
+  const tokens = inlineTokens(source, references);
   const pairs = pairsOf(tokens);
   const rawLinks = settlePairs(tokens, pairs, images);
   const out: JSONContent[] = [];
@@ -806,11 +806,22 @@ function interrupts(line: string): boolean {
   const name = HTML_BLOCK.test(line) ? /^\s*<\/?([a-zA-Z][\w-]*)/.exec(line)?.[1] : "";
   return name !== "" && (!name || /^(?:script|pre|style|iframe)$/i.test(name) || !INLINE_TAGS.has(name));
 }
-/** A heading line; a closing run of `#` is dropped, as kramdown drops it even with no space before, unless escaped. */
-const HEADING = /^(#{1,6})\s+(.*?)\s*(?:(?<!\\)#+\s*)?$/;
+/** A heading line, as CommonMark reads it: a closing run of `#` is dropped only after a space, so `C#` keeps its `#`. */
+const HEADING = /^ {0,3}(#{1,6})[ \t]+(.*?)(?:[ \t]+#+)?[ \t]*$/;
 const RULE = /^\s*(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$/;
-const BULLET = /^(\s*)([-*+])\s+(.*)$/;
-const ORDERED = /^(\s*)(\d+)[.)]\s+(.*)$/;
+const BULLET = /^(\s*)([-*+])(?:\s+(.*)|\s*)$/;
+const ORDERED = /^(\s*)(\d+)[.)](?:\s+(.*)|\s*)$/;
+/** A link reference definition on one line; it renders as nothing and is kept as written. */
+const DEFINITION = /^ {0,3}\[(?!\^)((?:[^\\[\]]|\\.){1,999})\]:[ \t]*(?:<([^<>\n]*)>|(\S+))(?:[ \t]+("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*'|\((?:[^()\\]|\\.)*\)))?[ \t]*$/;
+/** A line the blog's quotes do not take lazily: a rule, as `> q` then `---`. */
+const RULE_LINE = /^ {0,3}([-*_=])(\s*\1){2,}\s*$/;
+/** A list item with nothing after its marker: a new item, not more of the one above, nor its heading's underline. */
+const EMPTY_ITEM = /^ {0,3}(?:[-*+]|\d{1,9}[.)])[ \t]*$/;
+/** Quotes in quotes past this depth are read as text, as markdown-it stops nesting, not overflow the stack. */
+const MAX_QUOTES = 100;
+let quoteDepth = 0;
+/** Code indented four columns, where no paragraph is open. */
+const INDENTED = /^(?: {4}|\t)/;
 const LIST_START = /^ {0,3}(?:[-*+]|\d+[.)])\s+/;
 const NOTE = new RegExp(`^\\{:\\s*\\.(${Object.values(NOTE_CLASSES).join("|")})\\s*\\}\\s*$`);
 const BLOCK_IAL = /^ {0,3}\{:[^}\n]*\}\s*$/;
@@ -835,6 +846,17 @@ function isBlockStart(line: string, except: "" | "table" | "footnote" = ""): boo
     line.trimStart().startsWith("<details") ||
     (except !== "table" && line.trimStart().startsWith("|"))
   );
+}
+
+/**
+ * Whether a line ends the paragraph above it, as CommonMark reads it: a line indented four columns is more of it, and so
+ * is a numbered item counting from other than 1, as in `in\n2019. It was`.
+ */
+function endsParagraph(line: string, except: "" | "table"): boolean {
+  if (line.trim() && (INDENTED.test(line) || (ORDERED.exec(line)?.[2] ?? "1") !== "1")) {
+    return false;
+  }
+  return isBlockStart(line, except);
 }
 
 const hasCell = (line: string) => /(?<!\\)\|/.test(line.replace(/(`+)[^`]*?\1/g, (span) => " ".repeat(span.length)));
@@ -949,6 +971,19 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
 
     if (!line.trim()) {
       i += 1;
+      continue;
+    }
+
+    if (INDENTED.test(line) && !lazy?.has(i)) {
+      const code: string[] = [];
+      while (i < lines.length && (INDENTED.test(lines[i]) || !lines[i].trim())) {
+        code.push(lines[i].replace(/^ {4}/, ""));
+        i += 1;
+      }
+      while (!code[code.length - 1].trim()) {
+        code.pop();
+      }
+      out.push({ type: "codeBlock", attrs: { language: null }, content: [{ type: "text", text: code.join("\n") }] });
       continue;
     }
 
@@ -1067,6 +1102,16 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
       continue;
     }
 
+    if (DEFINITION.test(line)) {
+      const written: string[] = [];
+      while (i < lines.length && DEFINITION.test(lines[i])) {
+        written.push(lines[i]);
+        i += 1;
+      }
+      out.push({ type: "rawBlock", content: [{ type: "text", text: written.join("\n") }] });
+      continue;
+    }
+
     const fence = openingFence(line);
     if (fence) {
       const code: string[] = [];
@@ -1087,11 +1132,12 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
       continue;
     }
 
-    if (line.trimStart().startsWith(">")) {
+    if (line.trimStart().startsWith(">") && quoteDepth < MAX_QUOTES) {
       const quoted: string[] = [];
       while (i < lines.length && lines[i].trim()) {
         const marked = lines[i].trimStart().startsWith(">");
-        if (!marked && (BLOCK_IAL.test(lines[i]) || FENCE_LINE.test(lines[i]))) {
+        // As the blog's quotes end: a line not marked is the quote's own unless it is an attribute list, a fence, a rule or block HTML.
+        if (!marked && (BLOCK_IAL.test(lines[i]) || FENCE_LINE.test(lines[i]) || RULE_LINE.test(lines[i]) || interrupts(lines[i]))) {
           break;
         }
         quoted.push(marked ? lines[i].trimStart().replace(/^>\s?/, "") : lines[i]);
@@ -1103,16 +1149,17 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
         note = noteOfClass(attribute[1]);
         i += 1;
       }
-      out.push({
-        type: "blockquote",
-        attrs: { note },
-        content: blocksOrEmpty(quoted),
-      });
+      quoteDepth += 1;
+      try {
+        out.push({ type: "blockquote", attrs: { note }, content: blocksOrEmpty(quoted) });
+      } finally {
+        quoteDepth -= 1;
+      }
       continue;
     }
 
     if (
-      line.trimStart().startsWith("|") &&
+      (line.trimStart().startsWith("|") || (hasCell(line) && lines[i + 1]?.includes("|"))) &&
       !lazy?.has(i) &&
       i + 1 < lines.length &&
       TABLE_DIVIDER.test(lines[i + 1])
@@ -1215,7 +1262,7 @@ function parseBlocks(lines: string[], lazy?: ReadonlySet<number>): JSONContent[]
     i += 1;
     while (
       i < lines.length &&
-      !isBlockStart(lines[i], lazy?.has(i) ? "table" : "") &&
+      !endsParagraph(lines[i], lazy?.has(i) ? "table" : "") &&
       !SETEXT.test(lines[i])
     ) {
       buffer.push(lines[i]);
@@ -1294,13 +1341,15 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
       break;
     }
 
-    const marker = match[0].length - match[3].length;
+    // An item with nothing on its marker's line holds what is indented under it, or is empty.
+    const written = match[3] ?? "";
+    const marker = match[3] === undefined ? match[1].length + match[2].length + 1 + (numbered ? 1 : 0) : match[0].length - written.length;
     content = marker;
     const body: string[] = [];
     const carried = new Set<number>();
-    const task = TASK.exec(match[3]);
+    const task = TASK.exec(written);
     tasks = tasks || Boolean(task);
-    body.push(task ? task[2] : match[3]);
+    body.push(task ? task[2] : written);
     i += 1;
 
     while (i < lines.length) {
@@ -1319,7 +1368,7 @@ function parseList(lines: string[], start: number, indent: number): [JSONContent
         i += 1;
         continue;
       }
-      if (!isBlockStart(next, "table")) {
+      if (!isBlockStart(next, "table") && !EMPTY_ITEM.test(next)) {
         carried.add(body.length);
         body.push(next);
         i += 1;
@@ -1369,9 +1418,39 @@ function expandTabs(markdown: string): string {
     .join("\n");
 }
 
+/** The post's link reference definitions, which links anywhere in it may name; read once per post. */
+let references: References = new Map();
+
+function definitions(lines: string[]): References {
+  const found = new Map<string, { href: string; title?: string }>();
+  let fence = false;
+  for (const [at, line] of lines.entries()) {
+    if (FENCE_LINE.test(line)) {
+      fence = !fence;
+    }
+    const definition = fence ? null : DEFINITION.exec(line);
+    if (!definition || (at > 0 && lines[at - 1].trim() && !DEFINITION.test(lines[at - 1]))) {
+      continue;
+    }
+    const label = referenceLabel(definition[1]);
+    const title = definition[4]?.slice(1, -1).replace(/\\(.)/g, "$1");
+    if (label && !found.has(label)) {
+      found.set(label, { href: definition[2] ?? definition[3], ...(title ? { title } : {}) });
+    }
+  }
+  return found;
+}
+
 export function markdownToDoc(markdown: string): JSONContent {
-  const content = parseBlocks(expandTabs(markdown.replace(/\r\n/g, "\n")).split("\n"));
-  return { type: "doc", content: content.length ? content : [{ type: "paragraph" }] };
+  const lines = expandTabs(markdown.replace(/\r\n/g, "\n")).split("\n");
+  const outer = references;
+  references = definitions(lines);
+  try {
+    const content = parseBlocks(lines);
+    return { type: "doc", content: content.length ? content : [{ type: "paragraph" }] };
+  } finally {
+    references = outer;
+  }
 }
 
 export function postPathFromLink(value: string): string | null {

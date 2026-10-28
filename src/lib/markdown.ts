@@ -465,13 +465,15 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         const content = withoutEdgeBreaks(node.content, before, after);
         const caption = before && nodes[index - 1]?.type === "image";
         const written = inline(caption ? captionContent(content) : content, options);
-        out.push(escapeLineStarts(written, !(before && node.attrs?.sameLine)));
+        // A paragraph of no-break spaces alone, a spacer, is written as the entity: the character reads back as a blank line.
+        const spacer = written.includes("\u00a0") && !written.trim();
+        out.push(spacer ? "&nbsp;" : escapeLineStarts(written, !(before && node.attrs?.sameLine)));
         break;
       }
       case "heading": {
         const level = Math.min(Math.max(Number(node.attrs?.level ?? 2), 1), 6);
-        // A `#` closing the text would be read as the heading's optional closing run, and dropped: `C#` came back `C`.
-        const text = inline(node.content, options).replace(/#+$/, (run) => run.replace(/#/g, "\\#"));
+        // A run of `#` closing the text after a space would be read as the heading's optional closing run, and dropped.
+        const text = inline(node.content, options).replace(/(^|[ \t])(#+)$/, (_, space: string, run: string) => space + run.replace(/#/g, "\\#"));
         out.push(
           level < 3 && text.includes("\n")
             ? `${text}\n${level === 1 ? "===" : "---"}`

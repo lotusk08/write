@@ -65,9 +65,13 @@ describe("text that looks like Markdown", () => {
 
 describe("what the text ends with", () => {
   it("keeps a heading's closing #, and a backslash before a mark or a line end", () => {
-    const heading = { type: "doc", content: [{ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text: "Learning C#" }] }] };
-    expect(docToMarkdown(heading)).toBe("## Learning C\\#");
-    expect(markdownToDoc(docToMarkdown(heading))).toEqual(heading);
+    const heading = (text: string) => ({ type: "doc", content: [{ type: "heading", attrs: { level: 2 }, content: [{ type: "text", text }] }] });
+    expect(docToMarkdown(heading("Learning C#"))).toBe("## Learning C#");
+    expect(docToMarkdown(heading("Issue #"))).toBe("## Issue \\#");
+    for (const text of ["Learning C#", "Issue #", "Title ##"]) {
+      expect(markdownToDoc(docToMarkdown(heading(text)))).toEqual(heading(text));
+    }
+    expect(markdownToDoc("## Title ##")).toEqual(heading("Title"));
     const slash = {
       type: "doc",
       content: [
@@ -85,6 +89,51 @@ describe("what the text ends with", () => {
     };
     expect(docToMarkdown(slash)).toBe("C:\\\\**Users** D:\\\\\nend \\");
     expect(markdownToDoc(docToMarkdown(slash))).toEqual(slash);
+  });
+});
+
+describe("what CommonMark reads, as the blog renders it", () => {
+  const types = (markdown: string) => markdownToDoc(markdown).content?.map((node) => node.type);
+  const link = (markdown: string) => JSON.stringify(markdownToDoc(markdown).content?.[0]);
+
+  it("follows reference links to their definitions, kept as written", () => {
+    const post = "[t][R], [r][] and [r]\n\n![p][i]\n\n[r]: https://x.com \"T\"\n[i]: /a.jpg";
+    expect(link(post).match(/"href":"https:\/\/x.com","title":"T"/g)).toHaveLength(3);
+    expect(markdownToDoc(post).content?.[1]).toMatchObject({ type: "image", attrs: { src: "/a.jpg", alt: "p" } });
+    expect(docToMarkdown(markdownToDoc(post))).toBe(
+      '[t](https://x.com "T"), [r](https://x.com "T") and [r](https://x.com "T")\n\n![p](/a.jpg)\n\n[r]: https://x.com "T"\n[i]: /a.jpg',
+    );
+    expect(link("[x][r]\n\n[r]: javascript:alert(1)")).not.toContain('"link"');
+  });
+
+  it("lets only a list counting from 1 break into a paragraph", () => {
+    expect(types("in\n2019. It was")).toEqual(["paragraph"]);
+    expect(docToMarkdown(markdownToDoc("in\n2019. It was"))).toBe("in\n2019\\. It was");
+    expect(types("in\n1. It was")).toEqual(["paragraph", "orderedList"]);
+  });
+
+  it("ends a quote at a rule or block HTML, not a heading, as the blog's quotes do", () => {
+    expect(types("> q\n---")).toEqual(["blockquote", "horizontalRule"]);
+    expect(markdownToDoc("> q\n## H").content?.[0].content?.map((node) => node.type)).toEqual(["paragraph", "heading"]);
+  });
+
+  it("reads an empty item as an item, not the underline of a heading", () => {
+    expect(docToMarkdown(markdownToDoc("- Milk\n-\n- Eggs"))).not.toContain("#");
+  });
+
+  it("reads a table without outer pipes, and code indented four spaces", () => {
+    expect(markdownToDoc("a | b\n--|--\n1 | 2").content?.[0].content?.[0].content?.[0].type).toBe("tableHeader");
+    expect(docToMarkdown(markdownToDoc("para\n\n    code\n      more"))).toBe("para\n\n```\ncode\n  more\n```");
+    expect(types("para\n    still para")).toEqual(["paragraph"]);
+  });
+
+  it("keeps a spacer paragraph of a no-break space", () => {
+    expect(docToMarkdown(markdownToDoc("a\n\n&nbsp;\n\nb"))).toBe("a\n\n&nbsp;\n\nb");
+  });
+
+  it("reads brackets or quotes nested thousands deep as text, without overflowing", () => {
+    expect(() => markdownToDoc("[".repeat(3000))).not.toThrow();
+    expect(() => markdownToDoc(`${">".repeat(3000)} a`)).not.toThrow();
   });
 });
 
