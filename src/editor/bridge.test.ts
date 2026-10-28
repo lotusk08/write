@@ -136,6 +136,11 @@ describe("bridge", () => {
     ["a file path in a heading, a link, a table and a footnote", "## Head `src/a.js`{.path}\n\n[`l/p`{.path}](https://example.com) and a note[^1].\n\n| file | n |\n| --- | --- |\n| `t/x`{.path} | 1 |\n\n[^1]: Has `f/p`{.path}."],
     ["a code block without line numbers in a list", "- Code:\n\n  ```text\n  plain\n  ```\n  {.nolines}"],
     ["the social row", '[LinkedIn](https://x.com){icon="linkedin"}\n[GitHub](https://y.com){icon="square-github"}\n{.social}'],
+    ["a loose list", "- one\n\n- two"],
+    ["an item's paragraph going on in lines not indented", "- item\n\n  second para\nlazy line"],
+    ["a list an attribute list splits", "- a\n- b\n{.cols}\n- c"],
+    ["HTML written straight under a section", "<details>\n<summary>S</summary>\n\nBody\n\n</details>\n<p>after</p>"],
+    ["spaces ending a paragraph", "Text   \n\nNext"],
   ])("keeps %s as written", (_name, markdown) => {
     expect(docToMarkdown(markdownToDoc(markdown))).toBe(markdown);
     expect(roundTrip(markdown)).toBe(markdown);

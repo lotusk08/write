@@ -32,10 +32,22 @@ describe("text that looks like Markdown", () => {
     [["Title", "---"], "Title\n\\---"],
     [["a", "2. two"], "a\n2\\. two"],
     [["a", "- b"], "a\n\\- b"],
+    [["[^1]: not a note"], "\\[^1]: not a note"],
   ])("%j is written %j and read back as the same text", (lines, written) => {
     const doc = paragraph(...lines);
     expect(docToMarkdown(doc)).toBe(written);
     expect(markdownToDoc(written)).toEqual(doc);
+  });
+
+  it("keeps text after code or a link that reads as an attribute list text, escaped", () => {
+    for (const mark of [{ type: "code" }, { type: "link", attrs: { href: "/x" } }]) {
+      const doc: JSONContent = {
+        type: "doc",
+        content: [{ type: "paragraph", content: [{ type: "text", text: "a", marks: [mark] }, { type: "text", text: '{.path} and {icon="x"}' }] }],
+      };
+      expect(docToMarkdown(doc)).toMatch(/\\\{\.path\} and \\\{icon="x"\}$/);
+      expect(markdownToDoc(docToMarkdown(doc))).toEqual(doc);
+    }
   });
 
   it("decodes an entity the site would draw as its character", () => {

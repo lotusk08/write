@@ -66,7 +66,11 @@ browser.
   the blog does) and Chart.js charts are drawn live above their source; embedded videos play in
   place. The libraries load only when a post actually uses them.
 - **Markdown when you want it.** The **MD** button in the dock swaps the page
-  view for the raw Markdown — exactly what gets published — and back.
+  view for the raw Markdown — exactly what gets published — and back. Markdown
+  is read with markdown-it, set up as the blog sets it up — its plugins and its
+  own rules for quotes, callouts, attribute lists and tables (`src/lib/kramdown.ts`
+  follows the blog's `scripts/markdown/content.ts`) — so a post opens as the
+  blog renders it.
 - **Editing published posts.** *Open from the site* in the menu, or a link to
   `?edit=src/posts/…`, opens a post here. Its images are not re-encoded or re-uploaded,
   and re-publishing commits back to the file it came from, refusing if the post

@@ -74,7 +74,8 @@ function escapePlain(text: string, follower = ""): string {
     .join("");
 }
 
-const ANY_LINE = new RegExp(String.raw`^ {0,3}(?:(?:#{1,6}|[-+])(?=[ \t]|$)|>|${ATTRIBUTES}|-+[ \t]*$)`);
+// A note's mark opening a line with a colon after it, `[^1]:`, would start the note's text instead.
+const ANY_LINE = new RegExp(String.raw`^ {0,3}(?:(?:#{1,6}|[-+])(?=[ \t]|$)|>|${ATTRIBUTES}|-+[ \t]*$|\[\^[^\]\s]+\]:)`);
 const FIRST_LINE = /^ {0,3}\d{1,9}[.)](?=[ \t]|$)/;
 const LATER_LINE = /^ {0,3}(?:\d{1,9}[.)](?=[ \t]|$)|=+[ \t]*$)/;
 
@@ -370,8 +371,11 @@ function indentedBody(
   return (children ?? []).reduce((text, child, position) => {
     const rendered = blocks([child], options).join("\n\n");
     const sticks = Boolean(child.attrs?.joinPrevious && child.attrs?.sameLine);
+    // A paragraph that goes on in lines not indented to the item's text is written so, its first line indented.
     const piece = child.attrs?.lazy
-      ? rendered
+      ? position === 0 || sticks
+        ? rendered
+        : indent + rendered
       : indentBlock(rendered, indent, position === 0 || sticks);
     if (position === 0) {
       return piece;
