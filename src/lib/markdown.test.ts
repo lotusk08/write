@@ -62,6 +62,13 @@ describe("front matter the app has no field for", () => {
     expect(file).toContain("redirect_from: /old\nmoments: false\n---");
   });
 
+  it("keeps a key of any shape, and a comment, with the fields kept as written", () => {
+    const post = '---\ntitle: X\n# a note\ndate: 2026-10-11 09:00 +0700\nog:image: /a.jpg\nseo.title: Y\n"quoted key": v\n2fa: yes\n---\nText\n';
+    expect(written(post)).toBe(
+      '---\ntitle: X\ndate: 2026-10-11 09:00 +0700\ntags: []\npin: false\ntoc: true\n# a note\nog:image: /a.jpg\nseo.title: Y\n"quoted key": v\n2fa: yes\n---\nText\n',
+    );
+  });
+
   it("drops what the blog no longer reads", () => {
     const post = "---\ntitle: X\nauthor: steve\ncategories: [Vietnamese]\nmath: true\nrender_with_liquid: false\ndate: 2026-10-11 09:00 +0700\n---\nText\n";
     expect(written(post)).toBe("---\ntitle: X\ndate: 2026-10-11 09:00 +0700\nlang: vi\ntags: []\npin: false\ntoc: true\n---\nText\n");

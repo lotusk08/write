@@ -1,5 +1,6 @@
 import type { JSONContent } from "../editor/doc.ts";
 import { frontMatter } from "../../shared/front.ts";
+import { decoded } from "../../shared/paths.ts";
 import { readPin } from "../../shared/pin.ts";
 import type { PostMeta } from "../../shared/types.ts";
 import { EMBED_LIQUID, EMBED_TAG, NOTE_CLASSES, embedPlatform, noteOfClass } from "../editor/blog.ts";
@@ -59,7 +60,8 @@ function blank(line: string): boolean {
 }
 
 function fields(lines: string[], indent: number): Field[] {
-  const key = new RegExp(`^ {${indent}}([A-Za-z_][\\w-]*):(?=\\s|$)[ \\t]*(.*)$`);
+  // Any key YAML reads: `og:image`, `seo.title`, `2fa`, quoted; a field the app passes over is still kept as written.
+  const key = new RegExp(`^ {${indent}}([^\\s#"'-][^\\n]*?|"(?:[^"\\\\]|\\\\.)*"|'(?:[^']|'')*'):(?=\\s|$)[ \\t]*(.*)$`);
   const item = new RegExp(`^ {${indent}}-(?:\\s|$)`);
   const found: Field[] = [];
   for (let i = 0; i < lines.length; i++) {
@@ -334,8 +336,12 @@ function parseFrontMatter(yaml: string): Partial<PostMeta> {
   let cover: PostMeta["cover"] = null;
   let categories: string[] = [];
   const extra: string[] = [];
+  let read = 0;
 
   for (const { key, value, body, from, to } of fields(lines, 0)) {
+    // A comment, or any other line no field takes, is kept with the fields kept as written, ahead of the next of them.
+    extra.push(...lines.slice(read, from).filter((line) => !blank(line)));
+    read = to;
     switch (key) {
       case "title":
       case "description":
@@ -400,6 +406,7 @@ function parseFrontMatter(yaml: string): Partial<PostMeta> {
         break;
     }
   }
+  extra.push(...lines.slice(read).filter((line) => !blank(line)));
 
   meta.lang = meta.lang ?? languageOf(categories);
   meta.toc = meta.toc ?? true;
@@ -801,7 +808,7 @@ function interrupts(line: string): boolean {
 }
 /** A heading line; a closing run of `#` is dropped, as kramdown drops it even with no space before, unless escaped. */
 const HEADING = /^(#{1,6})\s+(.*?)\s*(?:(?<!\\)#+\s*)?$/;
-const RULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
+const RULE = /^\s*(?:(?:-[ \t]*){3,}|(?:\*[ \t]*){3,}|(?:_[ \t]*){3,})$/;
 const BULLET = /^(\s*)([-*+])\s+(.*)$/;
 const ORDERED = /^(\s*)(\d+)[.)]\s+(.*)$/;
 const LIST_START = /^ {0,3}(?:[-*+]|\d+[.)])\s+/;
@@ -1377,7 +1384,7 @@ export function postPathFromLink(value: string): string | null {
   );
   const raw = /^https?:\/\/raw\.githubusercontent\.com\/[^/]+\/[^/]+\/[^/]+\/(.+)$/.exec(trimmed);
   const path = (github?.[1] ?? raw?.[1] ?? trimmed).split(/[?#]/)[0].replace(/^\/+/, "");
-  return /\.(md|markdown)$/i.test(path) ? decodeURIComponent(path) : null;
+  return /\.(md|markdown)$/i.test(path) ? decoded(path) : null;
 }
 
 export function slugFromPath(path: string): string {

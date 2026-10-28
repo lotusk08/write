@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { JSONContent } from "../editor/doc.ts";
-import { markdownToDoc } from "./import.ts";
+import { markdownToDoc, postPathFromLink } from "./import.ts";
 import { docToMarkdown } from "./markdown.ts";
 
 function paragraph(...lines: string[]): JSONContent {
@@ -85,6 +85,21 @@ describe("what the text ends with", () => {
     };
     expect(docToMarkdown(slash)).toBe("C:\\\\**Users** D:\\\\\nend \\");
     expect(markdownToDoc(docToMarkdown(slash))).toEqual(slash);
+  });
+});
+
+describe("rules", () => {
+  it("are read with spaces between their marks, not as a list of lists", () => {
+    for (const rule of ["* * *", "- - -", "_ _ _", "***"]) {
+      expect(markdownToDoc(`a\n\n${rule}\n\nb`).content?.map((node) => node.type)).toEqual(["paragraph", "horizontalRule", "paragraph"]);
+    }
+  });
+});
+
+describe("links to a post", () => {
+  it("read a stray percent sign as written", () => {
+    expect(postPathFromLink("src/posts/100%-sure.md")).toBe("src/posts/100%-sure.md");
+    expect(postPathFromLink("src/posts/a%20b.md")).toBe("src/posts/a b.md");
   });
 });
 
