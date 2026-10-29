@@ -54,7 +54,6 @@ function blank(line: string): boolean {
 }
 
 function fields(lines: string[], indent: number): Field[] {
-  // Any key YAML reads: `og:image`, `seo.title`, `2fa`, quoted; a field the app passes over is still kept as written.
   const key = new RegExp(`^ {${indent}}([^\\s#"'-][^\\n]*?|"(?:[^"\\\\]|\\\\.)*"|'(?:[^']|'')*'):(?=\\s|$)[ \\t]*(.*)$`);
   const item = new RegExp(`^ {${indent}}-(?:\\s|$)`);
   const found: Field[] = [];
@@ -333,7 +332,6 @@ function parseFrontMatter(yaml: string): Partial<PostMeta> {
   let read = 0;
 
   for (const { key, value, body, from, to } of fields(lines, 0)) {
-    // A comment, or any other line no field takes, is kept with the fields kept as written, ahead of the next of them.
     extra.push(...lines.slice(read, from).filter((line) => !blank(line)));
     read = to;
     switch (key) {

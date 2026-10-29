@@ -142,6 +142,11 @@ describe("paste", () => {
     expect(paste("https://youtu.be/dQw4w9WgXcQ")).toBe(true);
     expect(root.querySelector("[data-embed]")?.getAttribute("data-id")).toBe("dQw4w9WgXcQ");
     root.innerHTML = "<p><br></p>";
+    expect(paste('<EmbedVideo src="https://media.stevehoang.com/video/clip-0123456789ab.mp4" poster="https://media.stevehoang.com/video/clip-0123456789ab.webp" width="1920" height="1080" />')).toBe(true);
+    const block = root.querySelector("[data-embed]");
+    expect([block?.getAttribute("data-platform"), block?.getAttribute("data-id")]).toEqual(["video", "https://media.stevehoang.com/video/clip-0123456789ab.mp4"]);
+    expect(block?.getAttribute("data-extra")).toContain('width="1920" height="1080"');
+    root.innerHTML = "<p><br></p>";
     document.execCommand = () => true;
     paste("dQw4w9WgXcQ");
     expect(root.querySelector("[data-embed]")).toBeNull();

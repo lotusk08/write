@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, shallowRef, watch } from "vue";
 import type { AppConfig, PostMeta, PublishResult } from "../shared/types.ts";
+import { videoKeysIn } from "../shared/media.ts";
 import { fileDate } from "../shared/paths.ts";
 import DraftRail from "./components/DraftRail.vue";
 import EditorPopover from "./components/EditorPopover.vue";
@@ -9,6 +10,7 @@ import PostEditor from "./components/PostEditor.vue";
 import PublishDialog from "./components/PublishDialog.vue";
 import TocAside from "./components/TocAside.vue";
 import TocBar from "./components/TocBar.vue";
+import VideoUploads from "./components/VideoUploads.vue";
 import type { DoneAction, ExportFormat, ShareState } from "./components/types.ts";
 import { useOutline } from "./components/useOutline.ts";
 import { docToHtml } from "./editor/bridge.ts";
@@ -67,7 +69,6 @@ const DONE_MS = 1800;
 
 let booting: Promise<{ drafts: Draft[]; settings: Settings; config: AppConfig | null }> | null = null;
 
-/** One startup, however many times it is asked for: two runs against an empty store made two drafts. */
 function boot() {
   booting ??= (async () => {
     const [kept, config] = await Promise.all([draftStore.all(), fetchAppConfig()]);
@@ -122,7 +123,6 @@ const focusButton = ref<HTMLButtonElement | null>(null);
 const mainRegion = ref<HTMLDivElement | null>(null);
 const scrollRegion = ref<HTMLDivElement | null>(null);
 
-/** A change waiting to be written, and the draft it belongs to, which by then need not be the open one. */
 let pending: Partial<Draft> = {};
 let pendingId: string | null = null;
 let writing: Partial<Draft> = {};
@@ -151,7 +151,6 @@ const shareState = computed<ShareState>(() => ({
   peers: peers.value,
 }));
 
-/** Stores a draft and puts it in the list in place of the one with its id. */
 async function storeDraft(next: Draft) {
   await draftStore.put(next);
   drafts.value = drafts.value.map((item) => (item.id === next.id ? next : item));
@@ -165,7 +164,6 @@ function showToast(message: string, kind: "info" | "error" = "info", href?: stri
   toast.value = { message, kind, href };
 }
 
-/** A menu action that worked ticks its button for a moment; with the menu shut (⌘⇧C), a toast says so instead. */
 function finished(action: DoneAction, message: string) {
   window.clearTimeout(doneTimer);
   justDone.value = action;
@@ -200,7 +198,6 @@ async function flush() {
   try {
     await draftStore.put(next);
   } catch (cause) {
-    // A full disk, say: the change stays in the app, waiting for the next save, and kept in case the page is left.
     drafts.value = sortDrafts(drafts.value.map((draft) => (draft.id === id ? next : draft)));
     if (pendingId === null || pendingId === id) {
       pending = { ...patch, ...pending };
@@ -220,12 +217,10 @@ async function flush() {
   saveState.value = "saved";
 }
 
-/** The change still waiting for a draft, if any. */
 function pendingFor(id: string | null): Partial<Draft> {
   return id !== null && id === pendingId ? pending : {};
 }
 
-/** Queues a change to a draft, the open one unless another is named; one still waiting for another draft is written first. */
 function queueSave(patch: Partial<Draft>, id = currentId.value) {
   if (pendingId !== null && pendingId !== id) {
     void flush();
@@ -242,7 +237,6 @@ function updateSettings(patch: Partial<Settings>) {
   saveSettings(settings.value);
 }
 
-/** Everything typed so far, written to the store: the editor's waiting change, or the Markdown source's. */
 async function settle() {
   gather();
   await flush();
@@ -257,7 +251,6 @@ function gather() {
   }
 }
 
-/** An edit, sent by the editor of the draft it was made in — after a switch, the one going away. */
 function onEditorChange(doc: JSONContent, id: string) {
   contentVersion.value += 1;
   queueSave({ doc }, id);
@@ -266,7 +259,18 @@ function onEditorChange(doc: JSONContent, id: string) {
   }
 }
 
-/** Puts a draft in front of the editor without it counting as an edit. */
+function recordVideo(url: string, id: string) {
+  const [key] = videoKeysIn(url);
+  const draft = findDraft(id);
+  if (!key || !draft) {
+    return;
+  }
+  const known = pendingFor(id).videos ?? (writingId === id ? writing.videos : undefined) ?? draft.videos ?? [];
+  if (!known.includes(key)) {
+    queueSave({ videos: [...known, key] }, id);
+  }
+}
+
 function replaceDoc(doc: JSONContent) {
   postEditor.value?.setDoc(doc);
   contentVersion.value += 1;
@@ -282,7 +286,6 @@ function endedShare() {
   showToast("Sharing ended.");
 }
 
-// Two sources, each compared on its own: one getter returning a fresh pair fired on every save, and left and rejoined the room.
 watch(
   [() => current.value?.shareToken ?? null, currentId],
   ([token], _previous, onCleanup) => {
@@ -312,7 +315,6 @@ watch(
         }
       });
 
-      // A peer on an older version of the app may still send kramdown's forms.
       const stopRemote = onRemoteChange(joined, () => postEditor.value?.takeUnsent() ?? null, (doc) => replaceDoc(currentDoc(doc)));
       const onSync = (synced: boolean) => {
         const local = findDraft(currentId.value)?.doc;
@@ -391,7 +393,6 @@ async function importPost(path: string) {
       throw cause;
     });
     const mine = existing ? await draftPrint(existing) : "";
-    // The same as the site's file, read and written by this app: a print stored by an older writer cannot tell.
     const same =
       Boolean(existing && fetched) &&
       (mine === (await printOf(fetched!.markdown)) || mine === (await draftPrint(await sitePost(path, fetched!.markdown))));
@@ -439,10 +440,6 @@ async function importPost(path: string) {
   }
 }
 
-/**
- * A pin written from the site's list follows into a local draft of that post that was in step with the site, so its
- * next publish is not refused as stale; a draft with no unpublished edits stays one.
- */
 async function onPinned(written: PinWritten[]) {
   await settle();
   for (const { path, pin, was, sha } of written) {
@@ -459,7 +456,6 @@ async function onPinned(written: PinWritten[]) {
   }
 }
 
-/** A post on the site as the app opens it: its body, and its fields with the date its file is named by. */
 async function sitePost(path: string, markdown: string): Promise<{ title?: string; meta: PostMeta; doc: JSONContent }> {
   const { parsePost } = await loadReader();
   const parsed = parsePost(markdown);
@@ -518,7 +514,6 @@ async function joinRequested(token: string) {
   showToast(`Joined as “${participantName()}” — tap your name below to change it.`);
 }
 
-/** The post as one Markdown file, front matter included, shown as it was last typed or opened while it reads the same. */
 async function editSource() {
   try {
     await loadReader();
@@ -540,7 +535,6 @@ async function editRich() {
   source.value = null;
 }
 
-/** The source view's text read back into the draft: its body, the fields in its front matter, and the text as typed. */
 function applySource(text: string) {
   const draft = findDraft(currentId.value);
   if (!draft) {
@@ -560,7 +554,6 @@ function changeSource(text: string) {
   parseTimer = window.setTimeout(() => applySource(text), PARSE_DEBOUNCE_MS);
 }
 
-/** A field changed in the menu while the source view is open is written into its front matter; the body stays as typed. */
 watch(
   () => current.value?.meta,
   (meta) => {
@@ -569,7 +562,6 @@ watch(
     if (source.value === null || !meta || !draft || keptFront(kept, meta)) {
       return;
     }
-    // The text shows the field at once; reading it back, with any body edit still waiting, waits on the same debounce.
     changeSource(withFront(source.value, meta));
   },
 );
@@ -625,7 +617,6 @@ function updateMeta(patch: Partial<PostMeta>) {
   patchCurrent(next);
 }
 
-/** The slug keeps a separator typed at its end until the next letter arrives, so `my-post` can be typed. */
 function setSlug(typed: string) {
   const clean = slugify(typed);
   const slug = clean && /[^\p{L}\p{N}]$/u.test(typed) ? `${clean}-` : clean;
@@ -726,7 +717,6 @@ async function disableShare() {
   }
 }
 
-/** On a copy joined through the link, the switch only leaves: the room stays live for the others. */
 async function leaveSharedDraft() {
   shareTarget.value = false;
   shareError.value = null;
@@ -746,11 +736,6 @@ function renameShare(name: string) {
   }
 }
 
-/**
- * The menu's Share button: turns shared editing on when it is off, and puts the link on the clipboard. The write
- * starts while the tap still counts, with the link to come, since Safari refuses a clipboard write made after the
- * room has been created.
- */
 async function shareAndCopy() {
   if (findDraft(currentId.value)?.shareToken) {
     await copyShareLink("share");
@@ -816,7 +801,6 @@ function fixPhoto(src: string) {
   figure?.click();
 }
 
-/** Opens the menu with one of its sections in view, once the menu has drawn it. */
 function openMenuAt(id: string) {
   menuOpen.value = true;
   window.requestAnimationFrame(() =>
@@ -829,7 +813,6 @@ function editPost() {
   openMenuAt("menu-file");
 }
 
-/** The title and the description are in the menu: the dialog closes onto the field there. */
 function fixField(field: "title" | "description") {
   publishOpen.value = false;
   openMenuAt("menu-file");
@@ -853,12 +836,6 @@ async function openPublish() {
   publishOpen.value = true;
 }
 
-/**
- * A publish repoints the draft: every `local:` photo it uploaded is renamed to
- * the address it was published at, so the next publish uploads nothing but
- * the Markdown. The tab that published keeps showing its own copy of each
- * photo until it is reloaded, since the site has not built them yet.
- */
 async function onPublished(id: string, result: PublishResult, plan: PublishPlan) {
   const urls = plan.imageUrls;
   await Promise.all(
@@ -875,15 +852,17 @@ async function onPublished(id: string, result: PublishResult, plan: PublishPlan)
     publishedSha: result.shas[plan.markdownPath],
     publishedPrint: await printOf(plan.markdown),
   };
+  const released = new Set(plan.retire ?? []);
+  const stillOurs = (videos: string[] | undefined) => (released.size ? { videos: (videos ?? []).filter((key) => !released.has(key)) } : {});
 
   if (id !== currentId.value) {
-    // A change to it still waiting is written first, so it cannot later put back the photos' local addresses.
     await flush();
     const draft = findDraft(id);
     if (draft) {
       const next: Draft = {
         ...draft,
         ...published,
+        ...stillOurs(draft.videos),
         doc: repointDoc(draft.doc, urls),
         meta: repointCover(draft.meta, urls),
         updatedAt: Date.now(),
@@ -917,21 +896,14 @@ async function onPublished(id: string, result: PublishResult, plan: PublishPlan)
       updateMeta({ cover: repointed.cover });
     }
   }
-  queueSave(published);
+  queueSave({ ...published, ...stillOurs(pendingFor(id).videos ?? findDraft(id)?.videos) });
   await flush();
 }
 
-/** The dock fades while the writer types, and comes back when the mouse moves, a tap or click lands or the text loses focus. */
 const dockIdle = ref(false);
-/** Where the mouse was when typing began; a hand resting on it should not wake the dock. */
 let restingAt: [number, number] | null = null;
 const WAKE_PX = 6;
 
-/**
- * Writing fades the dock: typed text, a deletion, a phone keyboard's word, dictation. A tool does not — the blog's
- * blocks are edited by hand and announced with an untrusted `input`, and the browser's own commands send no
- * `beforeinput` at all.
- */
 function typing(event: InputEvent) {
   if (event.isTrusted && /^(?:insert|delete)/.test(event.inputType)) {
     dockIdle.value = true;
@@ -1100,6 +1072,7 @@ onBeforeUnmount(() => {
                 :lang="current.meta.lang || 'en'"
                 :dark="dark"
                 :toolbar="!settings.focusMode"
+                :on-uploaded="recordVideo"
                 @change="onEditorChange"
               />
             </div>
@@ -1195,6 +1168,8 @@ onBeforeUnmount(() => {
       @fix-field="fixField"
       @reopen="() => void reopenFromSite(current!)"
     />
+
+    <VideoUploads />
 
     <div v-if="toast" :class="['toast', { error: toast.kind === 'error' }]" role="status">
       {{ toast.message }}

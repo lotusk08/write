@@ -7,10 +7,6 @@ const EDGE = 8;
 const ITEMS = '[role="menuitem"]';
 const FIRST = `${ITEMS}, input, button`;
 
-/**
- * Places a pop-up menu beside its button inside the visible band, again whenever its contents change its size, and
- * closes it on Escape or a tap outside. Opened from the keyboard it takes the focus, and the arrow keys walk its items.
- */
 export function useFloatingMenu(
   open: Ref<boolean>,
   button: Ref<HTMLElement | null>,

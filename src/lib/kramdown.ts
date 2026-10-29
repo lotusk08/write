@@ -1,29 +1,16 @@
-import type { Env, StateCore, Token } from "markdown-it";
+import type { Env, StateBlock, StateCore, Token } from "markdown-it";
 import { ALERT, ATTRIBUTES, noteOfAlert } from "../editor/blog.ts";
 
-/*
- * The rules of the blog's `scripts/markdown/content.ts` that shape a post, written as it writes them, for the app's
- * reader: kramdown's quotes that take the lines under them, attribute lists and tables without a header, callouts named
- * on a quote's first line, links with spaces. Where the blog would draw something (a class, an icon), these leave a
- * note on the token for the reader instead. A change to the blog's rules belongs here too. The last few rules are the
- * app's own: they keep what the blog draws or drops (a task's box, a link's definition) as it was written.
- */
-
 export interface ReadEnv extends Env {
-  /** The post's lines as written, one for each line markdown-it reads, which the lazy quotes rule rewrote. */
   source?: string[];
-  /** The lines the lazy quotes rule put in, which were not written. */
   inserted?: Set<number>;
   tableAttrs?: Set<number>;
-  /** Link reference definitions, out of the tokens while the blog's rules run, as the blog has them. */
   definitions?: Token[];
 }
 
 export type Meta = {
-  /** The attribute lists a block takes, as written: one above it, and those under it with the line each is on. */
   above?: string;
   below?: { ial: string; line: number }[];
-  /** A paragraph that was an attribute list alone, and the list when no block took it. */
   attributes?: boolean;
   unclaimed?: string;
   note?: string;
@@ -102,7 +89,6 @@ function unspaced(line: string): string {
   return out + spaced(line.slice(at));
 }
 
-/** kramdown's quotes, which take each line under them until a blank one, marked or not. */
 export function lazyQuotes(state: StateCore): void {
   if (state.inlineMode) {
     return;
@@ -240,7 +226,6 @@ export function lazyQuotes(state: StateCore): void {
   env.tableAttrs = tableAttrs;
 }
 
-/** `> [!info]` on a quote's first line names its callout, and is not shown. */
 export function alerts(state: StateCore): void {
   const tokens = state.tokens;
   for (let i = 0; i < tokens.length; i++) {
@@ -371,7 +356,6 @@ function nextBlock(tokens: Token[], from: number, level: number): Token | null {
   return null;
 }
 
-/** An attribute list given to a block, the first it takes kept: the editor holds one list for each block. */
 function give(token: Token, ial: string, above: boolean, line: number): void {
   const taken = meta(token);
   if (above && !taken.above) {
@@ -381,7 +365,6 @@ function give(token: Token, ial: string, above: boolean, line: number): void {
   }
 }
 
-/** An attribute list on a line of its own goes to the block it is written against, as kramdown gives it. */
 export function blockAttrs(state: StateCore): void {
   const tokens = state.tokens;
   const env = state.env as ReadEnv;
@@ -450,7 +433,6 @@ function cells(line: string): string[] {
   return parts;
 }
 
-/** kramdown's tables, rows of cells with no header or rule under it. */
 export function simpleTables(state: StateCore): void {
   const tokens = state.tokens;
   for (let i = 0; i < tokens.length; i++) {
@@ -484,7 +466,6 @@ export function simpleTables(state: StateCore): void {
 
 const TASK = /^\[([ xX])\]\s+/;
 
-/** `- [x] ` opening an item marks it a task, done or not; the box is not text of the item. */
 export function taskItems(state: StateCore): void {
   const tokens = state.tokens;
   for (let i = 2; i < tokens.length; i++) {
@@ -500,14 +481,12 @@ export function taskItems(state: StateCore): void {
   }
 }
 
-/** Link reference definitions draw nothing, and the blog's rules never see them; the editor keeps them as written. */
 export function setDefinitionsAside(state: StateCore): void {
   const env = state.env as ReadEnv;
   env.definitions = state.tokens.filter((token) => token.type === "reference_definition");
   state.tokens = state.tokens.filter((token) => token.type !== "reference_definition");
 }
 
-/** Each definition back where it was written: before the first block after it, or the end of the block it was in. */
 export function withDefinitions(tokens: Token[], definitions: Token[]): Token[] {
   const out = [...tokens];
   for (const definition of definitions) {
@@ -523,4 +502,26 @@ export function withDefinitions(tokens: Token[], definitions: Token[]): Token[] 
     out.splice(at, 0, definition);
   }
   return out;
+}
+
+const PLAYER_LINE = /^<Embed[A-Z][A-Za-z]*(?:\s+[A-Za-z_:][\w:.-]*(?:\s*=\s*(?:"[^"]*"|'[^']*'|[^\s"'=<>`]+))?)*\s*\/>\s*$/;
+
+export const isPlayerLine = (text: string) => PLAYER_LINE.test(text.trim());
+
+export function playerLine(state: StateBlock, startLine: number, _endLine: number, silent: boolean): boolean {
+  if (state.sCount[startLine] - state.blkIndent >= 4) {
+    return false;
+  }
+  const line = state.src.slice(state.bMarks[startLine] + state.tShift[startLine], state.eMarks[startLine]);
+  if (!PLAYER_LINE.test(line)) {
+    return false;
+  }
+  if (silent) {
+    return true;
+  }
+  state.line = startLine + 1;
+  const token = state.push("html_block", "", 0);
+  token.map = [startLine, state.line];
+  token.content = `${line.trim()}\n`;
+  return true;
 }

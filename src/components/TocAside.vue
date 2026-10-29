@@ -9,7 +9,6 @@ const emit = defineEmits<{ pick: [entry: OutlineEntry] }>();
 const ASIDE_GAP_PX = 12;
 const aside = ref<HTMLElement | null>(null);
 
-/** Keeps the lit entry in view as the column scrolls on its own. */
 watch(
   () => props.active,
   async () => {

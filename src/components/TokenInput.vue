@@ -70,7 +70,6 @@ watch([open, draft], async () => {
   }
 });
 
-/** The panel scrolling the field shrinks when a phone keyboard rises; keep the chips in view once it has. */
 let observer: ResizeObserver | null = null;
 let frame = 0;
 watch(focused, (value) => {

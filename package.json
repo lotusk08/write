@@ -27,6 +27,7 @@
     "markdown-it": "^15.0.3",
     "markdown-it-deflist": "^4.0.0",
     "markdown-it-footnote": "^4.0.0",
+    "mediabunny": "^1.61.5",
     "pele": "1.10.0",
     "vue": "^3.5.44",
     "y-protocols": "^1.0.7",

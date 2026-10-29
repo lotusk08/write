@@ -1,5 +1,5 @@
 import type { JSONContent } from "./doc.ts";
-import { embedFromUrl } from "./blog.ts";
+import { embedFromTag, embedFromUrl, isPlayerLink } from "./blog.ts";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
 import { copiedHere } from "./clipboard.ts";
 import { insertEmbed, notify } from "./commands.ts";
@@ -18,8 +18,7 @@ const STYLES: [RegExp, string][] = [
   [/vertical-align:\s*sub/i, "sub"],
 ];
 const SAFE_HREF = /^(?:https?:|mailto:|tel:|[/#?.]|[^:]*$)/i;
-/** The editor's own markup for what a post writes but the page does not show: raw HTML, attribute lists, locked blocks. */
-const HIDDEN = ["data-raw", "data-raw-inline", "data-ial", "data-block-ial", "data-ial-above", "contenteditable"];
+const HIDDEN = ["data-raw", "data-raw-inline", "data-ial", "data-block-ial", "data-ial-above", "data-extra", "contenteditable"];
 const MARKDOWN_LINE = /^ {0,3}(?:#{1,6}[ \t]|[-*+][ \t]+\S|\d{1,9}[.)][ \t]+\S|>|```|~~~|\|.*\|[ \t]*$|-{3,}[ \t]*$)/m;
 const MARKDOWN_INLINE = /\*\*[^*\n]+\*\*|__[^_\n]+__|~~[^~\n]+~~|`[^`\n]+`|!?\[[^\]\n]+\]\([^)\s]+\)/;
 
@@ -50,11 +49,6 @@ function wordLists(body: HTMLElement): void {
   }
 }
 
-/**
- * White space in a page's HTML as the page shows it: a run of it is one space, and none starts or ends a line. The
- * editor reads a line end in text as a line break, and a page's source is broken into lines wherever its author or Word
- * pleased. Text the page keeps as written — code, or styled `pre` as Google Docs styles its runs — is left alone.
- */
 function collapseSpace(body: HTMLElement): void {
   const walker = body.ownerDocument.createTreeWalker(body, NodeFilter.SHOW_TEXT);
   const texts: Text[] = [];
@@ -82,7 +76,6 @@ function collapseSpace(body: HTMLElement): void {
   }
 }
 
-/** A list written straight inside another, as some editors copy a nested one, goes into the item above it; it was dropped. */
 function nestLists(body: HTMLElement): void {
   for (const list of [...body.querySelectorAll(":is(ul, ol) > :is(ul, ol)")]) {
     const item = list.previousElementSibling?.tagName === "LI" ? list.previousElementSibling : null;
@@ -96,7 +89,6 @@ function nestLists(body: HTMLElement): void {
   }
 }
 
-/** A clipboard's HTML, cleaned; the editor's hidden markup is kept only in a copy made here (`own`). */
 function clipboardBody(html: string, own: boolean): HTMLElement {
   const body = new DOMParser().parseFromString(html, "text/html").body;
   if (!own) {
@@ -181,7 +173,6 @@ function plainDoc(text: string): JSONContent {
 interface Clipboard {
   plain: string;
   body: HTMLElement | null;
-  /** Whether the HTML holds any of what the blog can show; when not, its text is what is pasted. */
   rich: boolean;
 }
 
@@ -193,12 +184,10 @@ function readClipboard(html: string, text: string): Clipboard {
 
 const isMarkdown = ({ plain, rich }: Clipboard) => !rich && (MARKDOWN_LINE.test(plain) || MARKDOWN_INLINE.test(plain));
 
-/** Clipboard contents as the editor's own HTML, built from the doc model, so a paste carries only what the blog can show. */
 export function pastedHtml(html: string, text: string): string | null {
   return htmlOf(readClipboard(html, text));
 }
 
-/** The editor's HTML for what was copied; Markdown is read as Markdown once the reader has loaded, as text before. */
 function htmlOf(clipboard: Clipboard): string | null {
   const { plain, body, rich } = clipboard;
   const reader = loadedReader();
@@ -216,7 +205,6 @@ function htmlOf(clipboard: Clipboard): string | null {
 }
 
 const TEXTBLOCK = "p, h1, h2, h3, h4, h5, h6, li, td, th, pre, div";
-/** A block that holds one run of text: what is pasted in joins it, broken onto lines but in a section's one-line title. */
 const ONE_RUN = "li, td, th, [data-collapsible-summary]";
 
 function isBlock(node: Node | null): node is Element {
@@ -257,7 +245,6 @@ function placeCaret(parent: Node, offset: number): void {
   window.getSelection()?.addRange(range);
 }
 
-/** Puts pasted blocks where the caret is: the first paragraph joins the line, the rest follow it, and what came after the caret closes the last. */
 function insertBlocks(root: HTMLElement, range: Range, fragment: DocumentFragment): void {
   if (range.startContainer === root) {
     const paragraph = document.createElement("p");
@@ -313,16 +300,6 @@ function insertBlocks(root: HTMLElement, range: Range, fragment: DocumentFragmen
   placeCaret(last, Math.min(offset, last.childNodes.length));
 }
 
-/**
- * Pastes as the editor's own HTML, built from the doc model. A link to a
- * player the blog embeds, pasted alone with nothing selected, becomes that
- * embed; with text selected it stays a paste, which may be meant as a link.
- * Text, anything pasted into code (as escaped HTML: WebKit's `insertText` splits a code block
- * at each newline), and inline HTML go in through the browser's own commands,
- * so undo takes them back. Blocks go in by hand and are not undoable: Chrome's
- * `insertHTML` wraps blocks it merges into a line in inline styles and turns a
- * line break in the first of them into a paragraph.
- */
 export function pasteClipboard(event: ClipboardEvent): boolean {
   const data = event.clipboardData;
   const root = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
@@ -333,11 +310,16 @@ export function pasteClipboard(event: ClipboardEvent): boolean {
   const text = data.getData("text/plain").replace(/\r\n?/g, "\n");
   const start = range.startContainer;
   const inCode = Boolean((start instanceof Element ? start : start.parentElement)?.closest("pre, code"));
+  const tagged = inCode || !range.collapsed ? null : embedFromTag(text);
+  if (tagged) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    return insertEmbed(root, tagged);
+  }
   const clipboard = inCode ? null : readClipboard(data.getData("text/html"), text);
   if (clipboard && isMarkdown(clipboard) && !loadedReader()) {
     event.preventDefault();
     event.stopImmediatePropagation();
-    // Markdown pasted before the reader has loaded goes in once it has, or as text if it cannot load, at the caret.
     void loadReader()
       .catch(() => null)
       .then(() => insertPaste(root, text, htmlOf(clipboard), false));
@@ -358,7 +340,7 @@ function insertPaste(root: HTMLElement, text: string, html: string | null, inCod
   if (!range || !root.contains(range.startContainer) || (!inCode && html === null)) {
     return false;
   }
-  const embed = !inCode && /^https?:\/\/\S+$/.test(text.trim()) && range.collapsed ? embedFromUrl(text) : null;
+  const embed = !inCode && isPlayerLink(text) && range.collapsed ? embedFromUrl(text) : null;
   if (embed) {
     return insertEmbed(root, embed);
   }

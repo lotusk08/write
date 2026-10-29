@@ -23,7 +23,6 @@ export function pinOf(choice: PinChoice): Pin {
 
 const PIN_WORDS: Record<PinChoice, string> = { off: "unpinned", on: "pinned", "2": "pinned 2nd", "3": "pinned 3rd" };
 
-/** What a pin does, in words: `pinned 2nd`, or `unpinned`. */
 export function pinWords(pin: Pin | undefined): string {
   return PIN_WORDS[choiceOf(pin)];
 }
@@ -33,11 +32,6 @@ export interface HomePost {
   pin: Pin;
 }
 
-/**
- * Who stands at the home page's second and third places by a pin, as the blog's `homeOrder` decides, for posts the
- * site shows, newest first: the newest one is first whatever its pin, a place goes to the newest post that names it,
- * then `true` pins, newest first, take the places left. A place missing from the map goes to the next post by date.
- */
 export function homePlaces<T extends HomePost>(posts: T[]): Map<Place, T> {
   const rest = posts.slice(1);
   const placed = new Map<Place, T>();
@@ -58,7 +52,6 @@ export function homePlaces<T extends HomePost>(posts: T[]): Map<Place, T> {
   return placed;
 }
 
-/** The home page's first three posts: the newest, then each place, by pin or else by date. */
 export function homeTop<T extends HomePost>(posts: T[]): T[] {
   const placed = homePlaces(posts);
   const queue = posts.slice(1).filter((post) => ![...placed.values()].includes(post));
@@ -67,10 +60,6 @@ export function homeTop<T extends HomePost>(posts: T[]): T[] {
 
 const other = (place: Place): Place => PLACES.find((each) => each !== place)!;
 
-/**
- * `changes`, with every other post that names one of `places` unpinned: the newer of two posts naming a place takes
- * it, so one left naming it could take it from the post put there, now or once a newer post is published.
- */
 function claimed<T extends HomePost>(posts: T[], changes: Map<string, Pin>, places: Place[]): Map<string, Pin> {
   for (const post of posts.slice(1)) {
     if (!changes.has(post.path) && typeof post.pin === "number" && places.includes(post.pin)) {
@@ -80,12 +69,6 @@ function claimed<T extends HomePost>(posts: T[], changes: Map<string, Pin>, plac
   return changes;
 }
 
-/**
- * The pins to write when `post` is set to `pin`. A post put in a place someone stands at by a pin moves that one to
- * the other place when it is free or being left, and unpins it otherwise, so the two places never hold three pins;
- * any other post naming a place written gives it up. A post that names a place another holds is put there too. The
- * newest post, first whatever its pin, and one the site does not show move nobody.
- */
 export function pinChanges<T extends HomePost>(posts: T[], post: T, pin: Pin): Map<string, Pin> {
   const placed = homePlaces(posts);
   const place = typeof pin === "number" && posts.indexOf(post) > 0 ? pin : null;
@@ -104,7 +87,6 @@ export function pinChanges<T extends HomePost>(posts: T[], post: T, pin: Pin): M
   return claimed(posts, changes, [place, ...(changes.get(holder?.path ?? "") === other(place) ? [other(place)] : [])]);
 }
 
-/** The pins that trade the two places: each post standing at one by a pin is written the other, and nobody else names either. */
 export function swapChanges<T extends HomePost>(posts: T[]): Map<string, Pin> {
   const placed = homePlaces(posts);
   return claimed(posts, new Map([...placed].map(([place, post]) => [post.path, other(place)])), placed.size ? [...PLACES] : []);
@@ -116,11 +98,6 @@ export function withPins<T extends HomePost>(posts: T[], changes: Map<string, Pi
 
 const PIN_LINE = /^pin:[ \t]*(?:"(?:[^"\\]|\\.)*"|'(?:[^']|'')*'|[^#\r\n]*?)([ \t]+#[^\r\n]*)?[ \t]*(\r?\n)?$/;
 
-/**
- * A post's file with its pin changed and every other byte as it was: the `pin:` line is rewritten in place, a comment
- * after it kept, or, with none, written before `toc:` or at the end of the front matter, where the app writes it.
- * Null where the editor reads no front matter.
- */
 export function setPin(markdown: string, pin: Pin): string | null {
   const front = frontMatter(markdown) && splitFront(markdown);
   if (!front) {
@@ -150,11 +127,6 @@ export interface PinWritten {
 
 const pinsOf = (posts: SiteFile[]) => JSON.stringify(posts.map(({ path, pin, hidden }) => [path, pin, hidden]));
 
-/**
- * Writes `changes` to the site in one commit guarded by the shas it read, only each file's `pin:` line changed. They
- * were worked out from `posts`, the list as it was read, newest first, so the site's list is read again first: a post
- * published or a pin changed since stops it, as does a file whose pin is no longer the list's.
- */
 export async function publishPins(
   changes: Map<string, Pin>,
   posts: SiteFile[],

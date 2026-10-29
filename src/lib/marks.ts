@@ -3,12 +3,6 @@ import type { JSONContent } from "../editor/doc.ts";
 import { ATTRIBUTES } from "../editor/blog.ts";
 import { meta } from "./kramdown.ts";
 
-/*
- * markdown-it's inline tokens as the editor's text and marks. What the editor has no mark for, or cannot hold as one
- * (a link with no text, a mark split across another), is kept as written, as raw text the writer puts back untouched.
- */
-
-/** A link's address without the angle brackets that let it hold spaces or parentheses. */
 export const unbracketed = (href: string) => href.replace(/^<([^<>\n]*)>$/, "$1");
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
@@ -86,7 +80,6 @@ function conflicts(a: string, b: string): boolean {
   return a === b || (a === "superscript" && b === "subscript") || (a === "subscript" && b === "superscript");
 }
 
-/** A link's address and title, as the editor keeps them. */
 function linkAttrs(token: Token): Record<string, string> {
   const title = token.attrGet("title");
   return { href: unbracketed(String(token.attrGet("href") ?? "")), ...(title ? { title: String(title) } : {}) };
@@ -197,7 +190,6 @@ function beside(tokens: Token[], from: number, step: number): number {
   return i;
 }
 
-/** `***both***` as bold around italic, as the editor marks it. */
 function boldItalic(tokens: Token[]): void {
   for (const [i, open] of tokens.entries()) {
     if (open.type !== "em_open") {
@@ -221,7 +213,6 @@ function boldItalic(tokens: Token[]): void {
   }
 }
 
-/** The editor's text and marks for one run of inline Markdown; a photo where `images` is false is kept as written. */
 export function inlineContent(source: string, children: Token[], images: boolean): JSONContent[] {
   const tokens = children;
   boldItalic(tokens);
@@ -231,7 +222,6 @@ export function inlineContent(source: string, children: Token[], images: boolean
   const open: { pair: Pair; mark: Mark }[] = [];
   const marks = () => open.map((entry) => entry.mark);
   const written = (token: Token) => source.slice(meta(token).start ?? 0, meta(token).end ?? 0);
-  /** The text written right after a token: an escaped `\{.path}` reads as the same text as `{.path}`, but is not one. */
   const after = (token: Token) => source.slice(meta(token).end ?? source.length);
   const emit = (value: string, extra: Mark[] = []) => {
     if (!value) {
@@ -276,7 +266,6 @@ export function inlineContent(source: string, children: Token[], images: boolean
       case "text": {
         const content = token.content.slice(filepath.length);
         filepath = "";
-        // An attribute list right after a link, a mark or code is the blog's, kept as written: `[In](…){icon="linkedin"}`.
         const before = tokens[index - 1];
         const list =
           content === token.content &&

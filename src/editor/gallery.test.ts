@@ -7,9 +7,11 @@ import { fullSrc, previewSrc, setSiteUrl } from "../lib/site.ts";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
 import { clipboardOf, copiedBlocks } from "./clipboard.ts";
 import {
+  captionOf,
   insertDoc,
   insertImages,
   leaveGallery,
+  embedLater,
   moveBlock,
   moveGalleryPhoto,
   removeGalleryPhoto,
@@ -34,12 +36,10 @@ function load(markdown: string): void {
   root.innerHTML = docToHtml(markdownToDoc(markdown), { display: (src) => src });
 }
 
-/** The markdown the editor's content stands for now, after the editor's own sanitizing. */
 function markdown(): string {
   return docToMarkdown(htmlToDoc(sanitizeHtml(root.innerHTML, sanitizerOptions)));
 }
 
-/** Saving and opening again changes nothing. */
 function stable(): string {
   const text = markdown();
   expect(docToMarkdown(markdownToDoc(text))).toBe(text);
@@ -222,5 +222,36 @@ describe("dragging photos about", () => {
     const before = stable();
     expect(moveBlock(root, figure("c"), { kind: "block", ref: block("End"), side: "after" })).toBe(true);
     expect(stable()).toBe(`Top\n\nEnd\n\n${before.slice("Top\n\n".length, before.lastIndexOf("\n\nEnd"))}`);
+  });
+});
+
+describe("a video dropped on a photo with its caption line under it", () => {
+  const VIDEO = { platform: "video", id: "https://m.x/video/a-0123456789ab.mp4", extra: ' width="1920" height="1080"' };
+  beforeEach(() => load("Intro\n\n![a](/assets/img/post/a.jpg)\n*The caption*\n\nNext"));
+
+  it("goes after the caption, which stays with its photo", () => {
+    embedLater(root, { kind: "photo", ref: root.querySelector<HTMLElement>("figure[data-image]")!, side: "after" })(VIDEO);
+    const text = stable();
+    expect(text).toContain("![a](/assets/img/post/a.jpg)\n*The caption*");
+    expect(markdownToDoc(text).content?.map((node) => node.type)).toContain("embed");
+  });
+
+  it("goes after the caption when dropped above the caption line", () => {
+    embedLater(root, { kind: "block", ref: root.querySelector<HTMLElement>("p[data-join]")!, side: "before" })(VIDEO);
+    expect(stable()).toContain("![a](/assets/img/post/a.jpg)\n*The caption*");
+  });
+});
+
+describe("a photo above text whose player was taken out", () => {
+  beforeEach(() => {
+    load('![a](/assets/img/post/a.jpg)\n\n<EmbedVideo src="/v.mp4" />\nText');
+    root.querySelector("[data-embed]")?.remove();
+  });
+
+  it("has no caption, and a video dropped under it goes right under it", () => {
+    const figure = root.querySelector<HTMLElement>("figure[data-image]")!;
+    expect(captionOf(figure)).toBeNull();
+    embedLater(root, { kind: "photo", ref: figure, side: "after" })({ platform: "video", id: "https://m.x/video/b-0123456789ab.mp4", extra: "" });
+    expect(markdown()).toBe('![a](/assets/img/post/a.jpg)\n\n<EmbedVideo src="https://m.x/video/b-0123456789ab.mp4" />\nText');
   });
 });

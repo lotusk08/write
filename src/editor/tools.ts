@@ -13,7 +13,6 @@ import {
   type ListKind,
 } from "./commands.ts";
 
-/** What the toolbar and the bubble light up for where the caret is. */
 export interface ToolState {
   heading: number | null;
   bold: boolean;

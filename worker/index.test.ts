@@ -80,6 +80,14 @@ describe("worker", () => {
       ["/api/passkey/register", "POST"],
       ["/api/passkey/login", "POST"],
       ["/api/topics", "GET"],
+      ["/api/media", "GET"],
+      ["/api/media/delete", "POST"],
+      ["/api/media/fetch", "GET"],
+      ["/api/media/start", "POST"],
+      ["/api/media/part", "PUT"],
+      ["/api/media/complete", "POST"],
+      ["/api/media/abort", "POST"],
+      ["/api/media/poster", "PUT"],
     ]) {
       const response = await call(path, { method: method === "GET" ? "PUT" : "GET" });
       expect([path, response.status, await response.json()]).toEqual([path, 405, { error: `Use ${method}.` }]);
@@ -96,9 +104,17 @@ describe("worker", () => {
       ["/api/publish/photo", "POST"],
       ["/api/site", "GET"],
       ["/api/source?path=src/drafts/x.md", "GET"],
+      ["/api/media", "GET"],
+      ["/api/media/delete", "POST"],
+      ["/api/media/start", "POST"],
+      ["/api/media/part", "PUT"],
+      ["/api/media/complete", "POST"],
+      ["/api/media/abort", "POST"],
+      ["/api/media/poster", "PUT"],
     ]) {
-      expect((await call(path, { method, body: method === "POST" ? "{}" : undefined })).status).toBe(401);
-      expect((await call(path, { method, password: "wrong", body: method === "POST" ? "{}" : undefined })).status).toBe(401);
+      expect((await call(path, { method, body: method === "GET" ? undefined : "{}" })).status).toBe(401);
+      failures.clear();
+      expect((await call(path, { method, password: "wrong", body: method === "GET" ? undefined : "{}" })).status).toBe(401);
     }
   });
 
@@ -348,3 +364,274 @@ describe("worker hardening", () => {
   });
 });
 
+describe("video uploads", () => {
+  const fingerprint = "ab".repeat(32);
+  const objects = new Map<string, { bytes: Uint8Array; type?: string; cache?: string; meta?: Record<string, string> }>();
+  const pending = new Map<string, { key: string; parts: Map<number, Uint8Array>; type?: string; meta?: Record<string, string> }>();
+  const bucket = {
+    head: async (key: string) => (objects.has(key) ? { size: objects.get(key)!.bytes.byteLength, customMetadata: objects.get(key)!.meta } : null),
+    list: async () => ({
+      truncated: false,
+      objects: [...objects].map(([key, { bytes }], index) => ({ key, size: bytes.byteLength, uploaded: new Date(Date.UTC(2026, 9, 1 + index)) })),
+    }),
+    delete: async (keys: string[]) => keys.forEach((key) => objects.delete(key)),
+    put: async (key: string, bytes: Uint8Array, options?: { httpMetadata?: { contentType?: string; cacheControl?: string } }) => {
+      objects.set(key, { bytes, type: options?.httpMetadata?.contentType, cache: options?.httpMetadata?.cacheControl });
+    },
+    createMultipartUpload: async (key: string, options?: { httpMetadata?: { contentType?: string }; customMetadata?: Record<string, string> }) => {
+      const uploadId = `up-${pending.size + 1}`;
+      pending.set(uploadId, { key, parts: new Map(), type: options?.httpMetadata?.contentType, meta: options?.customMetadata });
+      return { uploadId };
+    },
+    resumeMultipartUpload: (key: string, uploadId: string) => {
+      const upload = pending.get(uploadId);
+      if (upload?.key !== key) {
+        throw new Error("No such upload.");
+      }
+      return {
+        uploadPart: async (partNumber: number, bytes: Uint8Array) => {
+          upload.parts.set(partNumber, bytes);
+          return { partNumber, etag: `e${partNumber}` };
+        },
+        complete: async (parts: { partNumber: number; etag: string }[]) => {
+          const chunks = parts.map(({ partNumber }) => upload.parts.get(partNumber)!);
+          const bytes = new Uint8Array(chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0));
+          chunks.reduce((offset, chunk) => (bytes.set(chunk, offset), offset + chunk.byteLength), 0);
+          objects.set(key, { bytes, type: upload.type, meta: upload.meta });
+          pending.delete(uploadId);
+          return { size: bytes.byteLength };
+        },
+        abort: async () => void pending.delete(uploadId),
+      };
+    },
+  };
+  const mediaEnv = { ...(env as object), MEDIA: bucket, MEDIA_URL: "https://media.test/" } as never;
+  const send = (path: string, init: RequestInit = {}) =>
+    worker.fetch(new Request(`https://write.test${path}`, { ...init, headers: { "x-write-password": "pw", ...(init.headers as object) } }), mediaEnv);
+  const start = (body: object) => send("/api/media/start", { method: "POST", body: JSON.stringify(body) });
+
+  afterEach(() => {
+    objects.clear();
+    pending.clear();
+  });
+
+  it("says where videos are served only where the bucket and its address are both set", async () => {
+    const config = async (settings: object) => ((await (await worker.fetch(new Request("https://write.test/api/config"), settings as never)).json()) as { media?: string }).media;
+    expect(await config(mediaEnv as object)).toBe("https://media.test");
+    expect(await config({ ...(env as object), MEDIA: bucket })).toBeUndefined();
+    expect(await config({ ...(env as object), MEDIA_URL: "https://media.test" })).toBeUndefined();
+    const refused = await worker.fetch(new Request("https://write.test/api/media/start", { method: "POST", headers: { "x-write-password": "pw" }, body: "{}" }), env);
+    expect(refused.status).toBe(501);
+  });
+
+  it("sends a video in parts under a name of words and its hash, then keeps one copy of it", async () => {
+    const started = await start({ name: "Ngày tuyển hôn!", fingerprint, size: 7, type: "video/mp4" });
+    const { key, url, upload } = (await started.json()) as { key: string; url: string; upload: string };
+    expect(key).toBe(`video/ng-y-tuy-n-h-n-${fingerprint.slice(0, 12)}.mp4`);
+    expect(url).toBe(`https://media.test/${key}`);
+    const part = async (n: number, body: string) =>
+      (await (await send(`/api/media/part?key=${key}&upload=${upload}&part=${n}`, { method: "PUT", body })).json()) as { partNumber: number; etag: string };
+    const parts = [await part(1, "abcd"), await part(2, "efg")];
+    const done = await send("/api/media/complete", { method: "POST", body: JSON.stringify({ key, upload, parts }) });
+    expect(await done.json()).toEqual({ key, url, size: 7 });
+    expect(new TextDecoder().decode(objects.get(key)!.bytes)).toBe("abcdefg");
+    expect(objects.get(key)!.type).toBe("video/mp4");
+    const again = (await (await start({ name: "Ngày tuyển hôn!", fingerprint, size: 9, type: "video/mp4" })).json()) as { upload?: string };
+    expect(again.upload).toBeUndefined();
+  });
+
+  it("keeps the still beside its video and stops an upload when asked", async () => {
+    const { key, upload } = (await (await start({ name: "clip", fingerprint, size: 3, type: "video/webm" })).json()) as { key: string; upload: string };
+    const still = await send(`/api/media/poster?key=${key}`, { method: "PUT", headers: { "content-type": "image/webp" }, body: "img" });
+    expect(await still.json()).toEqual({ key: key.replace(".webm", ".webp"), url: `https://media.test/${key.replace(".webm", ".webp")}` });
+    expect((await send("/api/media/abort", { method: "POST", body: JSON.stringify({ key, upload }) })).status).toBe(200);
+    expect(pending.size).toBe(0);
+  });
+
+  it("refuses what is not a video upload of the app's", async () => {
+    for (const body of [
+      { name: "x", fingerprint: "nothex", size: 1, type: "video/mp4" },
+      { name: "x", fingerprint, size: 1, type: "video/quicktime" },
+      { name: "x", fingerprint, size: 0, type: "video/mp4" },
+      { name: "x", fingerprint, size: 5 * 1024 ** 3, type: "video/mp4" },
+    ]) {
+      expect((await start(body)).status, JSON.stringify(body)).toBe(400);
+    }
+    for (const query of ["key=../x.mp4&upload=u&part=1", "key=video/x-abababababab.mp4&upload=u&part=0", "key=video/x.mp4&upload=u&part=1"]) {
+      expect((await send(`/api/media/part?${query}`, { method: "PUT", body: "a" })).status, query).toBe(400);
+    }
+    const key = `video/x-${fingerprint.slice(0, 12)}.mp4`;
+    expect((await send(`/api/media/part?key=${key}&upload=u&part=1`, { method: "PUT", body: "" })).status).toBe(400);
+    expect((await send(`/api/media/poster?key=${key}`, { method: "PUT", headers: { "content-type": "image/svg+xml" }, body: "<svg/>" })).status).toBe(400);
+    expect((await send("/api/media/complete", { method: "POST", body: JSON.stringify({ key, upload: "u", parts: [] }) })).status).toBe(400);
+  });
+
+  const TRUNCATED = "\u0000truncated";
+  function fakeSite(files: Record<string, string>) {
+    const reply = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status });
+    const blobs = new Map<string, string>();
+    let tree: { path: string; sha: string | null }[] = [];
+    vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
+      const url = new URL(input);
+      const body = init?.body ? JSON.parse(String(init.body)) : undefined;
+      if (url.pathname === "/graphql") {
+        const variables = body.variables as Record<string, string>;
+        const entriesIn = (dir: string) => {
+          const names = new Set(Object.keys(files).filter((path) => path.startsWith(`${dir}/`)).map((path) => path.slice(dir.length + 1).split("/")[0]));
+          return [...names].map((name): unknown =>
+            `${dir}/${name}` in files
+              ? { name, object: files[`${dir}/${name}`] === TRUNCATED ? { text: "", isTruncated: true } : { text: files[`${dir}/${name}`] } }
+              : { name, object: { entries: entriesIn(`${dir}/${name}`) } },
+          );
+        };
+        return reply({
+          data: {
+            repository: Object.fromEntries(
+              Object.entries(variables)
+                .filter(([name]) => name !== "owner" && name !== "name")
+                .map(([name, expression]) => {
+                  const entries = entriesIn(expression.replace(/^[^:]*:/, ""));
+                  return [name, entries.length ? { entries } : null];
+                }),
+            ),
+          },
+        });
+      }
+      const contents = /\/contents\/(.+)$/.exec(url.pathname)?.[1];
+      if (contents) {
+        const path = decodeURIComponent(contents);
+        return path in files ? reply({ content: btoa(files[path]), encoding: "base64", sha: `sha:${path}` }) : reply({ message: "Not Found" }, 404);
+      }
+      if (url.pathname.endsWith("/git/ref/heads/blog")) {
+        return reply({ object: { sha: "head" } });
+      }
+      if (url.pathname.endsWith("/git/commits/head")) {
+        return reply({ tree: { sha: "base" } });
+      }
+      if (url.pathname.endsWith("/git/blobs")) {
+        blobs.set(`blob${blobs.size}`, atob(body.content));
+        return reply({ sha: `blob${blobs.size - 1}` });
+      }
+      if (url.pathname.endsWith("/git/trees")) {
+        tree = body.tree;
+        return reply({ sha: "tree" });
+      }
+      if (url.pathname.endsWith("/git/commits")) {
+        return reply({ sha: "commit", html_url: "https://github.com/commit" });
+      }
+      if (url.pathname.endsWith("/git/refs/heads/blog")) {
+        for (const { path, sha } of tree) {
+          if (sha === null) {
+            delete files[path];
+          } else if (blobs.has(sha)) {
+            files[path] = blobs.get(sha)!;
+          }
+        }
+        return reply({});
+      }
+      return reply({ message: `unexpected ${url.pathname}` }, 500);
+    });
+  }
+  const stored = (...keys: string[]) => keys.forEach((key) => objects.set(key, { bytes: new Uint8Array(4) }));
+  const keyOf = (name: string, hex: string) => `video/${name}-${hex.repeat(12)}.mp4`;
+  const [old, shared, fresh, dropped] = [keyOf("old", "a"), keyOf("shared", "b"), keyOf("new", "c"), keyOf("draft", "d")];
+  const player = (key: string) => `<EmbedVideo src="https://media.test/${key}" />`;
+
+  it("lists every video with its still and the files that use it, newest first", async () => {
+    stored(old, old.replace(".mp4", ".webp"), shared);
+    fakeSite({ "src/posts/2026-10-01-a.md": player(shared), "src/drafts/b.md": `${player(shared)}\n${player(old)}` });
+    const { videos } = (await (await send("/api/media")).json()) as { videos: { key: string; poster: string | null; used: string[] }[] };
+    expect(videos.map(({ key, poster, used }) => [key, poster, used])).toEqual([
+      [shared, null, ["src/posts/2026-10-01-a.md", "src/drafts/b.md"]],
+      [old, `https://media.test/${old.replace(".mp4", ".webp")}`, ["src/drafts/b.md"]],
+    ]);
+  });
+
+  it("deletes only the videos no file uses, with their stills", async () => {
+    stored(old, old.replace(".mp4", ".webp"), shared);
+    fakeSite({ "src/posts/2026-10-01-a.md": "Words", "src/pages/about.md": player(shared) });
+    const response = await send("/api/media/delete", { method: "POST", body: JSON.stringify({ keys: [old, shared] }) });
+    expect(await response.json()).toEqual({ deleted: [old], kept: [{ key: shared, used: ["src/pages/about.md"] }] });
+    expect([...objects.keys()]).toEqual([shared]);
+    expect((await send("/api/media/delete", { method: "POST", body: JSON.stringify({ keys: ["video/../x.mp4"] }) })).status).toBe(400);
+  });
+
+  it("deletes nothing when a file on the site is too large for GitHub to give whole", async () => {
+    stored(old);
+    fakeSite({ "src/posts/2026-10-01-a.md": "Words", "src/posts/2026-10-02-long.md": TRUNCATED });
+    expect((await send("/api/media/delete", { method: "POST", body: JSON.stringify({ keys: [old] }) })).ok).toBe(false);
+    expect([...objects.keys()]).toEqual([old]);
+  });
+
+  it("deletes nothing when the site's posts cannot be found, as on a mistyped branch", async () => {
+    stored(old, shared);
+    fakeSite({ "src/pages/about.md": player(shared) });
+    expect((await send("/api/media/delete", { method: "POST", body: JSON.stringify({ keys: [old] }) })).ok).toBe(false);
+    expect((await send("/api/media")).ok).toBe(false);
+    expect([...objects.keys()]).toEqual([old, shared]);
+  });
+
+  it("removes after a publish the videos the post dropped that nothing else uses", async () => {
+    const local = keyOf("local", "e");
+    const nested = keyOf("nested", "f");
+    stored(old, old.replace(".mp4", ".webp"), shared, fresh, dropped, local, nested);
+    const path = "src/posts/2026-10-11-trip.md";
+    fakeSite({
+      [path]: `${player(old)}\n${player(shared)}\n${player(local)}\n${player(nested)}`,
+      "src/posts/2026-10-01-other.md": player(shared),
+      "src/pages/talks/2024/index.md": player(nested),
+    });
+    const text = `${player(fresh)}\n${player(shared)}`;
+    const response = await send("/api/publish", {
+      method: "POST",
+      body: JSON.stringify({ message: "m", files: [{ path, contentBase64: btoa(text) }], retire: [dropped, shared, fresh], keep: [local] }),
+    });
+    expect(((await response.json()) as { retired?: string[] }).retired?.sort()).toEqual([dropped, old].sort());
+    expect([...objects.keys()].sort()).toEqual([fresh, shared, local, nested].sort());
+    for (const extra of [{ retire: ["video/x.mp4"] }, { keep: ["../x"] }]) {
+      const refused = await send("/api/publish", { method: "POST", body: JSON.stringify({ message: "m", files: [{ path, contentBase64: btoa(text) }], ...extra }) });
+      expect(refused.status).toBe(400);
+    }
+  });
+
+  it("removes only what the app retires when it cannot vouch for this device's drafts", async () => {
+    stored(old, dropped);
+    const path = "src/posts/2026-10-11-trip.md";
+    fakeSite({ [path]: player(old) });
+    const response = await send("/api/publish", {
+      method: "POST",
+      body: JSON.stringify({ message: "m", files: [{ path, contentBase64: btoa("Words") }], retire: [dropped], sweep: false }),
+    });
+    expect(((await response.json()) as { retired?: string[] }).retired).toEqual([dropped]);
+    expect([...objects.keys()]).toEqual([old]);
+    const refused = await send("/api/publish", { method: "POST", body: JSON.stringify({ message: "m", files: [{ path, contentBase64: btoa("Words") }], sweep: "no" }) });
+    expect(refused.status).toBe(400);
+  });
+
+  it("reads no more of the site for a publish that leaves no video", async () => {
+    const path = "src/posts/2026-10-11-plain.md";
+    fakeSite({ [path]: "Words" });
+    const asked: string[] = [];
+    const real = globalThis.fetch;
+    vi.stubGlobal("fetch", (input: string, init?: RequestInit) => (asked.push(new URL(input).pathname), real(input, init)));
+    expect((await send("/api/publish", { method: "POST", body: JSON.stringify({ message: "m", files: [{ path, contentBase64: btoa("More words") }] }) })).status).toBe(200);
+    expect(asked.filter((pathname) => pathname === "/graphql")).toEqual([]);
+  });
+
+  it("fetches a video shared from Dropbox from Dropbox's file host, and nothing else", async () => {
+    const asked: string[] = [];
+    vi.stubGlobal("fetch", async (input: string) => {
+      asked.push(input);
+      return new Response(input.includes("doc.pdf") ? "%PDF" : "movie", { headers: { "content-type": input.includes("doc.pdf") ? "application/pdf" : "video/quicktime", "content-length": "5" } });
+    });
+    const fetched = (url: string) => send(`/api/media/fetch?${new URLSearchParams({ url })}`);
+    const video = await fetched("https://www.dropbox.com/scl/fi/abc/clip.mov?rlkey=k&st=s&dl=0");
+    expect([video.status, video.headers.get("content-type"), await video.text()]).toEqual([200, "video/quicktime", "movie"]);
+    expect(asked).toEqual(["https://dl.dropboxusercontent.com/scl/fi/abc/clip.mov?rlkey=k&st=s"]);
+    expect((await fetched("https://www.dropbox.com/scl/fi/abc/doc.pdf?rlkey=k&dl=0")).status).toBe(400);
+    for (const url of ["https://evil.example/scl/fi/a/b.mp4", "http://www.dropbox.com/scl/fi/a/b.mp4", "https://dropbox.com.evil.example/scl/fi/a.mp4"]) {
+      expect((await fetched(url)).status, url).toBe(400);
+    }
+    expect(asked).toHaveLength(2);
+  });
+});

@@ -57,7 +57,6 @@ const onCancel = (event: KeyboardEvent) => {
   editing.value = null;
 };
 
-/** On a phone a deck of more than one sheet is one target, opening a list of every draft by title. */
 const listed = (sheets: Draft[]) => touch.value && sheets.length > 1;
 
 const pickSheet = (event: MouseEvent, sheets: Draft[], draft: Draft) => {

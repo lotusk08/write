@@ -166,12 +166,10 @@ textarea {
   border-bottom: 1px solid var(--border);
 }
 
-/* Only a phone's sheet has a head: its close button, since the sheet covers the ⌘ button that opened it. */
 .popover-head {
   justify-content: flex-end;
 }
 
-/* Focus mode, the site's files and the theme, on one row under the main buttons. */
 .foot-tools {
   display: flex;
   align-items: center;
@@ -194,12 +192,10 @@ textarea {
   overflow-y: auto;
 }
 
-/* Sections are set apart by space alone. */
 .section + .section {
   margin-top: 18px;
 }
 
-/* The menu's fields are a line under the text, not a box. */
 .popover-body .input,
 .popover-body .tokens {
   border: none;
@@ -254,7 +250,6 @@ textarea {
   margin-bottom: 0;
 }
 
-/* The post's two switches, drawn as the export formats are: on, the accent on a soft ground. */
 .post-options {
   display: grid;
   gap: 6px;
@@ -278,7 +273,6 @@ textarea {
   transition: background 120ms ease, color 120ms ease;
 }
 
-/* The menu's toggle tiles — Contents and Moments, the export formats — share one look: on, the accent on a soft ground. */
 .post-option:not(.is-on, :disabled):hover,
 .export-format:not(.is-on, :disabled):hover {
   background: var(--hover);
@@ -327,7 +321,6 @@ textarea {
   font-size: var(--text-sm);
 }
 
-/* The menu's main buttons, and the share row and its error drawn like them. */
 .foot-actions .btn,
 .share-row .btn,
 .share-panel .peer,
@@ -356,7 +349,6 @@ textarea {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
 
-/* A format is its icon alone: ticked, it takes the accent and a soft ground; the name is the tooltip. */
 .export-format {
   display: grid;
   height: var(--control-h);
@@ -774,8 +766,6 @@ textarea {
   transition: opacity 240ms ease;
 }
 
-/* Faded while the writer types; the mouse moving, a tap, or Tab reaching a tool brings it back. It still takes a
-   click or a tap, so one meant for a tool is not lost to the text under it. */
 .card-dock.is-idle:not(:focus-within) {
   opacity: 0;
 }
@@ -973,10 +963,6 @@ textarea {
   padding: 32px 20px 64px;
 }
 
-/*
- * Below 1200px the contents are a bar over the page, shown whenever the post has a heading. Shown only once the page
- * had scrolled, it never appeared in a post too short to scroll, which is every post while it is being written.
- */
 .toc-bar {
   position: absolute;
   top: 0;
@@ -993,7 +979,6 @@ textarea {
   transition: background 200ms ease;
 }
 
-/* Over text scrolled under it, the bar takes the page's ground. */
 .toc-bar.is-scrolled {
   background: linear-gradient(var(--bg) 70%, transparent);
 }
@@ -1478,11 +1463,26 @@ textarea {
   gap: 6px;
 }
 
-.embed-block iframe {
+.embed-block iframe,
+.embed-block .embed-video {
   width: 100%;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   aspect-ratio: 16 / 9;
+}
+
+.embed-block .embed-video {
+  width: min(100%, 70vh * var(--r, 1.7778));
+  aspect-ratio: var(--r, 1.7778);
+  background: var(--sunken);
+  object-fit: contain;
+}
+
+.embed-note {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .embed-card {
@@ -1513,7 +1513,6 @@ textarea {
   --pele-surface-alt: var(--border);
   --pele-border: var(--border-strong);
   --pele-accent: var(--accent);
-  /* the blog's branch colours, from its info, warn, tip, key and risk notes */
   --pele-series-1: #1f6feb;
   --pele-series-2: #ef9c03;
   --pele-series-3: #238636;
@@ -1693,14 +1692,14 @@ textarea {
   display: none;
 }
 
-.editor-host .post-body p[data-join] {
+.editor-host .post-body p[data-join]:not([data-join="player"]) {
   margin-top: -0.9em;
   color: var(--muted);
   font-size: 0.86em;
   text-align: center;
 }
 
-.editor-host .post-body p[data-join] em {
+.editor-host .post-body p[data-join]:not([data-join="player"]) em {
   font-style: normal;
 }
 
@@ -1755,7 +1754,6 @@ textarea {
   cursor: grab;
 }
 
-/* Where a dragged photo or gallery, or a photo from the desktop, would land. */
 .drop-mark {
   position: fixed;
   z-index: 40;
@@ -2651,8 +2649,6 @@ textarea {
   }
 }
 
-/* The editor's own shell, made invisible: the card is the frame, the body is the page. */
-
 .editor-host > div,
 .editor-host > div:focus-within,
 .editor-host > div > div,
@@ -2821,7 +2817,7 @@ textarea {
   display: none;
 }
 
-.editor-host .post-body .editor-image:has(+ p[data-join]) .editor-image-caption,
+.editor-host .post-body .editor-image:has(+ p[data-join]:not([data-join="player"])) .editor-image-caption,
 .editor-host .post-body .editor-image[data-join] .editor-image-caption,
 .editor-host .post-body .editor-image:has(+ .editor-image[data-join]) .editor-image-caption {
   display: none;
@@ -2854,4 +2850,239 @@ textarea {
   .toolbar::-webkit-scrollbar {
     display: none;
   }
+}
+
+.video-uploads {
+  position: fixed;
+  z-index: 41;
+  top: calc(16px + var(--app-top, 0px));
+  right: 16px;
+  display: flex;
+  width: min(360px, calc(100vw - 32px));
+  max-height: calc(100dvh - var(--app-top, 0px) - var(--app-bottom, 0px) - 32px);
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+  box-shadow: var(--shadow-pop);
+  font-size: var(--text-sm);
+  overflow-y: auto;
+}
+
+.video-uploads .sign-in {
+  margin: 0;
+}
+
+.video-uploads .notice {
+  margin: 0;
+}
+
+.video-job {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.video-job + .video-job {
+  padding-top: 10px;
+  border-top: 1px solid var(--border);
+}
+
+.video-job-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.video-job-name {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-job progress {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.video-job-note {
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.video-job-stage {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.video-job.is-failed .video-job-note {
+  color: var(--danger);
+}
+
+.video-job-tag {
+  display: block;
+  padding: 6px 8px;
+  border-radius: var(--radius-sm);
+  background: var(--sunken);
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.video-list {
+  width: min(400px, calc(100vw - 16px));
+  max-height: min(560px, calc(100dvh - 32px));
+}
+
+.video-list-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 6px 8px;
+  color: var(--muted);
+  font-size: var(--text-sm);
+}
+
+.video-list .notice {
+  margin: 0 0 8px;
+}
+
+.video-row {
+  display: grid;
+  align-items: center;
+  gap: 10px;
+  grid-template-columns: 64px minmax(0, 1fr) auto;
+  padding: 6px;
+  border-radius: var(--radius-sm);
+}
+
+.video-row + .video-row {
+  border-top: 1px solid var(--border);
+}
+
+.video-row-still {
+  display: flex;
+  width: 64px;
+  height: 36px;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-xs);
+  background: var(--sunken);
+  color: var(--faint);
+  object-fit: contain;
+}
+
+.video-row-text {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.video-row-text a {
+  color: var(--text);
+  font-size: var(--text-md);
+  text-decoration: none;
+}
+
+.video-row-text a:hover {
+  color: var(--accent);
+}
+
+.video-row-meta,
+.video-row-uses {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.video-row.is-unused .video-row-uses {
+  color: var(--faint);
+  font-style: italic;
+}
+
+.video-row-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.editor-embed-tools {
+  display: flex;
+  justify-content: center;
+  gap: 2px;
+}
+
+.editor-embed-replace {
+  padding: 3px 7px;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--faint);
+  cursor: pointer;
+  font-family: var(--font-ui);
+  font-size: var(--text-sm);
+}
+
+.editor-embed-replace:hover {
+  background: var(--hover);
+  color: var(--text);
+}
+
+.embed-warning {
+  max-width: 100%;
+  color: var(--danger);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+
+.embed-warning[hidden] {
+  display: none;
+}
+
+.video-menu {
+  display: flex;
+  width: min(360px, calc(100vw - 16px));
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+}
+
+.video-menu-link {
+  display: flex;
+  gap: 6px;
+}
+
+.video-menu-link .input {
+  min-width: 0;
+  flex: 1;
+}
+
+.video-menu .video-menu-upload {
+  display: inline-flex;
+  width: auto;
+  align-self: flex-start;
+  align-items: center;
+  gap: 6px;
+}
+
+.video-menu-hint,
+.video-menu-problem {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--text-sm);
+  line-height: 1.45;
+}
+
+.video-menu-problem {
+  color: var(--danger);
 }

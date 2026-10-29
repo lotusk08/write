@@ -1,5 +1,3 @@
-/** What a shared draft's people are called and coloured, and its link: the parts the app needs before, or without, the room itself. */
-
 export const CARET_COLORS = ["#8b5cf6", "#0ea5e9", "#10b981", "#f59e0b", "#ef4444", "#ec4899"];
 
 const NAME_KEY = "write:share-name";

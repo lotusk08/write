@@ -71,7 +71,6 @@ const setAlt = (alt: string) => {
   emit("change", { cover: { ...props.meta.cover, path: props.meta.cover?.path ?? "", alt } });
 };
 
-/** The description grows with its text, as it did on the page. */
 const description = ref<HTMLTextAreaElement | null>(null);
 const fitDescription = () => {
   const field = description.value;
@@ -83,7 +82,6 @@ const fitDescription = () => {
 watch(() => props.meta.description, () => void nextTick(fitDescription));
 onMounted(fitDescription);
 
-/** A field is tidied on blur only if it was edited while focused, so one read from a post keeps its spaces. */
 const onTitleBlur = (event: FocusEvent) => {
   const title = tidyEdited(event.target as HTMLInputElement);
   if (title !== null) {

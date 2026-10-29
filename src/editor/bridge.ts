@@ -3,24 +3,8 @@ import { previewSrc } from "../lib/site.ts";
 import { isNoteType, noteOfIal } from "./blog.ts";
 import type { DocMark, JSONContent } from "./doc.ts";
 
-/**
- * The editor holds HTML; a draft holds the JSON tree `import.ts` reads a post
- * into and `markdown.ts` writes it back from. This file is the one place the
- * two meet. Every attribute the writer consults rides on the element as a
- * `data-*` attribute (the names the Tiptap schema already rendered them under,
- * so the stylesheet's selectors still hold), and the parser reads them back
- * from there — `docToHtml` then `htmlToDoc` must hand the writer back what it
- * was given, which `bridge.test.ts` checks against the blog's own posts.
- *
- * Two conventions of `contenteditable` are followed both ways: a block's last
- * `<br>` is the browser's placeholder rather than a line break, so a break that
- * really ends a line is written as two; and an empty block holds a lone `<br>`.
- */
-
-/** Marks what the editor shows but a draft does not keep: players, toggles, previews, photo tools. */
 export const TRANSIENT = "data-transient";
 
-/** What an `<img>` points at while its real address waits to be resolved. */
 export const BLANK_SRC = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
 
 const BLOCK_ATTRS = {
@@ -67,15 +51,11 @@ const BLOCK_TAGS = new Set([
   "pre", "section", "table", "ul",
 ]);
 
-/** The URLs the editor's sanitizer lets through on an `<img src>`. */
 const SHOWABLE = /^(?:https?:|blob:|data:image\/(?:png|jpeg|gif|webp);base64,|[^:]*$)/i;
 
 export interface RenderOptions {
-  /** Where an image published under `src` is shown from; the site's own address by default. */
   display?: (src: string) => string;
 }
-
-// ---------------------------------------------------------------- doc → HTML
 
 function escapeText(value: string): string {
   return value.replace(/[&<>]/g, (char) => (char === "&" ? "&amp;" : char === "<" ? "&lt;" : "&gt;"));
@@ -98,7 +78,6 @@ function blockAttrs(node: JSONContent): string {
     .join("");
 }
 
-/** A draft saved before its class was a callout holds `{.poem}` as the quote's attribute list; it opens as the callout. */
 function liftNote(quote: JSONContent): JSONContent {
   const ial = quote.attrs?.blockIal;
   const note = !quote.attrs?.note && !quote.attrs?.ialAbove && ial ? noteOfIal(String(ial)) : null;
@@ -172,7 +151,6 @@ function preText(node: JSONContent): string {
   return escapeText(text) + (text.endsWith("\n") ? "\n" : "");
 }
 
-/** A list item's or a cell's body: its leading plain paragraph is written bare, as typing makes it. */
 function itemBody(content: JSONContent[] | undefined, options: RenderOptions): string {
   const [first, ...rest] = content ?? [];
   if (!first) {
@@ -253,7 +231,7 @@ function blockHtml(node: JSONContent, options: RenderOptions): string {
         `<div class="editor-gallery-strip">${blocksHtml(children, options)}</div></figure>`
       );
     case "embed":
-      return `<div class="embed-block" data-embed${attr("data-platform", node.attrs?.platform ?? "youtube")}${attr("data-id", node.attrs?.id ?? "")} contenteditable="false"${extra}></div>`;
+      return `<div class="embed-block" data-embed${attr("data-platform", node.attrs?.platform ?? "youtube")}${attr("data-id", node.attrs?.id ?? "")}${attr("data-extra", node.attrs?.extra)} contenteditable="false"${extra}></div>`;
     case "collapsible": {
       const summary = children.find((child) => child.type === "collapsibleSummary") ?? {};
       const body = children.find((child) => child.type === "collapsibleContent")?.content ?? [];
@@ -279,8 +257,6 @@ export function docToHtml(doc: JSONContent, options: RenderOptions = {}): string
   return blocksHtml(doc.content ?? [], options) || "<p><br></p>";
 }
 
-// ---------------------------------------------------------------- HTML → doc
-
 function isElement(node: Node): node is Element {
   return node.nodeType === 1;
 }
@@ -304,7 +280,7 @@ function readBlockAttrs(element: Element): Record<string, unknown> {
     if (!element.hasAttribute(name)) {
       continue;
     }
-    out[key] = key === "blockIal" ? element.getAttribute(name) : true;
+    out[key] = key === "blockIal" ? element.getAttribute(name) : element.getAttribute(name) || true;
   }
   return out;
 }
@@ -440,7 +416,6 @@ function mergeText(nodes: JSONContent[]): JSONContent[] {
   return out;
 }
 
-/** A textblock read from its inline content: the placeholder `<br>` dropped, photos lifted out as blocks. */
 function textblocks(type: string, attrs: Record<string, unknown>, nodes: Iterable<Node>): JSONContent[] {
   const inline = inlineFrom(nodes);
   if (inline[inline.length - 1]?.type === "hardBreak") {
@@ -586,7 +561,6 @@ function blockFrom(element: Element): JSONContent[] {
     return textblocks("heading", { level: Number(heading[1]), ...attrs }, element.childNodes);
   }
   if (tag === "blockquote") {
-    // Only a callout the blog has: the name is written into the post.
     const note = element.getAttribute("data-note");
     return [withAttrs({ type: "blockquote", content: blocksOrParagraph(element.childNodes) }, { ...(isNoteType(note) ? { note } : {}), ...attrs })];
   }
@@ -606,7 +580,6 @@ function blockFrom(element: Element): JSONContent[] {
     const items = tag === "li" ? [element] : children(element, "li");
     const content = items.map(listItem);
     if (tag === "ol") {
-      // A list may count from 0; `|| 1` read `0.` as 1.
       const written = Number.parseInt(element.getAttribute("start") ?? "", 10);
       const start = Number.isNaN(written) ? 1 : Math.max(0, written);
       return content.length ? [withAttrs({ type: "orderedList", attrs: { start }, content }, attrs)] : [];
@@ -652,6 +625,7 @@ function blockFrom(element: Element): JSONContent[] {
           attrs: {
             platform: element.getAttribute("data-platform") || "youtube",
             id: element.getAttribute("data-id") ?? "",
+            ...(element.getAttribute("data-extra") ? { extra: element.getAttribute("data-extra")! } : {}),
           },
         },
         attrs,

@@ -1,11 +1,5 @@
 import type { EditorInit } from "@erag/text-editor-vue";
 
-/**
- * The editor sanitizes every value it is handed and every paste, keeping only
- * the tags and attributes listed here. Everything `bridge.ts` writes has to be
- * on this list, or the first pass through the editor strips it — the way an
- * undeclared Tiptap attribute used to vanish.
- */
 const BLOCK_DATA = ["data-block-ial", "data-ial-above", "data-join", "data-same-line", "data-lazy"];
 
 const allowedTags = [
@@ -31,6 +25,7 @@ const allowedAttributes: Record<string, string[]> = {
     "data-embed",
     "data-platform",
     "data-id",
+    "data-extra",
     "data-collapsible",
     "data-open",
     "data-collapsible-summary",
@@ -48,7 +43,6 @@ export const sanitizerOptions = {
   allowRelativeUrls: true,
 };
 
-/** The editor is the writing surface alone: the app draws its own toolbar, bubble and menus. */
 export const editorInit: EditorInit = {
   height: "auto",
   minHeight: 0,

@@ -1,16 +1,9 @@
 import { isLocalSrc, localId, releaseDisplays, resolveDisplaySrc } from "../lib/db.ts";
 import { convertedSrc, fullSrc } from "../lib/site.ts";
-import { embedTag, embedUrl } from "./blog.ts";
+import { isDropbox } from "../../shared/media.ts";
+import { embedField, embedTag, embedUrl, playableUrl, youtubeOf } from "./blog.ts";
 import { BLANK_SRC, TRANSIENT } from "./bridge.ts";
 import { renderChart, renderDiagram, type Teardown } from "./render.ts";
-
-/**
- * What the editor shows but does not keep. Elements marked `data-transient`
- * are skipped when the HTML is read back (`htmlToDoc`), so the players,
- * section toggles, gallery labels, photo tools and diagram previews drawn
- * here never reach a draft. Everything here is idempotent: it runs after every
- * load and every edit, and only touches what changed.
- */
 
 const RENDERED = new Set(["diagram", "chart"]);
 const REDRAW_MS = 400;
@@ -27,17 +20,12 @@ function firstTransient(parent: Element, className: string): HTMLElement | null 
   return parent.querySelector<HTMLElement>(`:scope > .${className}[${TRANSIENT}]`);
 }
 
-/** Shows a photo for one theme only, as the blog's `.light` and `.dark` do; the layout classes it no longer draws are kept in the markdown but not previewed. */
 function applyTheme(figure: HTMLElement): void {
   const ial = figure.getAttribute("data-ial") ?? "";
   figure.classList.toggle("is-light", /\.light(?![\w-])/.test(ial));
   figure.classList.toggle("is-dark", /\.dark(?![\w-])/.test(ial));
 }
 
-/**
- * A photo is shown from the site's 960px copy; when that is missing it falls back to the original, and a JPEG the
- * blog's build converted is served as WebP, tried when the name as written is gone.
- */
 function fallBackToWebp(this: HTMLImageElement): void {
   const full = fullSrc(this.src);
   if (full !== this.src) {
@@ -51,10 +39,6 @@ function fallBackToWebp(this: HTMLImageElement): void {
   }
 }
 
-/**
- * Sets what differs and nothing else: this runs on every frame the writer types in, and a write of the same text or
- * attribute still replaces nodes, records a mutation and invalidates style, for every photo in the post.
- */
 function setText(element: HTMLElement, text: string): void {
   if (element.textContent !== text) {
     element.textContent = text;
@@ -85,12 +69,6 @@ function editButton(step: -1 | 0 | 1, text: string, label: string): HTMLButtonEl
   return button;
 }
 
-/**
- * The buttons under a photo: alt text and caption, apart. A photo's caption is its title, written
- * `![alt](src "caption")`, which the blog draws under it, in a gallery or not; the selected gallery photo also gets
- * move and remove. A photo whose caption is still the italic line under it has that line edited in place, and the
- * stylesheet hides the button.
- */
 function imageTools(figure: HTMLElement, img: HTMLImageElement): void {
   let tools = firstTransient(figure, "editor-image-tools");
   if (!tools) {
@@ -162,16 +140,60 @@ function galleries(root: HTMLElement): void {
   }
 }
 
-function player(platform: string, id: string): HTMLElement {
+const STREAM = /\.m3u8(?:[?#]|$)/i;
+
+function frameOf(src: string, title: string): HTMLIFrameElement {
+  const iframe = document.createElement("iframe");
+  iframe.src = src;
+  iframe.title = title;
+  iframe.loading = "lazy";
+  iframe.allow = "accelerometer; encrypted-media; picture-in-picture";
+  iframe.allowFullscreen = true;
+  return iframe;
+}
+
+function videoOf(src: string, extra: string | undefined, warning: HTMLElement): HTMLVideoElement {
+  const video = document.createElement("video");
+  video.className = "embed-video";
+  video.controls = true;
+  video.preload = "metadata";
+  video.playsInline = true;
+  video.poster = embedField(extra, "poster") ?? "";
+  const shape = (width: number, height: number) => {
+    if (width > 0 && height > 0) {
+      video.style.setProperty("--r", String(width / height));
+    }
+  };
+  shape(Number(embedField(extra, "width")), Number(embedField(extra, "height")));
+  video.addEventListener("loadedmetadata", () => {
+    warning.hidden = video.videoWidth > 0;
+    shape(video.videoWidth, video.videoHeight);
+  });
+  video.addEventListener("error", () => (warning.hidden = false));
+  video.src = src;
+  return video;
+}
+
+function player(platform: string, id: string, extra?: string): HTMLElement {
   const frame = transient("div", "embed-frame");
-  if (platform === "youtube") {
-    const iframe = document.createElement("iframe");
-    iframe.src = `https://www.youtube-nocookie.com/embed/${encodeURIComponent(id)}`;
-    iframe.title = "YouTube video player";
-    iframe.loading = "lazy";
-    iframe.allow = "accelerometer; encrypted-media; picture-in-picture";
-    iframe.allowFullscreen = true;
+  const tube = platform === "video" ? youtubeOf(id) : null;
+  const file = platform === "video" && !tube ? embedUrl(platform, id) : null;
+  if (platform === "youtube" || tube) {
+    const iframe = frameOf(`https://www.youtube-nocookie.com/embed/${encodeURIComponent(tube?.id ?? id)}${tube?.start ? `?start=${tube.start}` : ""}`, "YouTube video player");
+    if (tube?.short) {
+      iframe.className = "embed-video";
+      iframe.style.setProperty("--r", String(9 / 16));
+    }
     frame.append(iframe);
+  } else if (file) {
+    const warning = document.createElement("span");
+    warning.className = "embed-warning";
+    warning.textContent = STREAM.test(file) && !document.createElement("video").canPlayType("application/vnd.apple.mpegurl")
+      ? "This browser plays a stream only on the blog, which loads a player for it."
+      : "This browser cannot show this video's picture, and some readers' cannot either."
+        + (isDropbox(file) ? " Convert it to an MP4 every browser plays." : " Replace it with an upload, which is made one every browser plays.");
+    warning.hidden = true;
+    frame.append(videoOf(playableUrl(file), extra, warning), warning);
   } else {
     const card = document.createElement("a");
     card.className = "embed-card";
@@ -186,8 +208,17 @@ function player(platform: string, id: string): HTMLElement {
   }
   const note = document.createElement("span");
   note.className = "embed-note";
-  note.textContent = embedTag(platform, id);
+  note.textContent = embedTag(platform, id, extra);
   frame.append(note);
+  if (file) {
+    const tools = document.createElement("div");
+    tools.className = "editor-embed-tools";
+    if (isDropbox(id)) {
+      tools.append(toolButton("editor-embed-replace editor-embed-convert", "Convert to MP4", "Fetch it from Dropbox, make it an MP4 every browser plays, and keep it in the media bucket"));
+    }
+    tools.append(toolButton("editor-embed-replace", "Replace video", "Upload another video in this one's place"));
+    frame.append(tools);
+  }
   return frame;
 }
 
@@ -195,13 +226,14 @@ function embeds(root: HTMLElement): void {
   for (const embed of root.querySelectorAll<HTMLElement>("[data-embed]")) {
     const platform = embed.getAttribute("data-platform") ?? "youtube";
     const id = embed.getAttribute("data-id") ?? "";
-    const key = `${platform}:${id}`;
+    const extra = embed.getAttribute("data-extra") ?? undefined;
+    const key = `${platform}:${id}:${extra ?? ""}`;
     const current = firstTransient(embed, "embed-frame");
     if (current?.dataset.key === key) {
       continue;
     }
     current?.remove();
-    const frame = player(platform, id);
+    const frame = player(platform, id, extra);
     frame.dataset.key = key;
     embed.append(frame);
   }
@@ -231,7 +263,6 @@ interface Preview {
   teardown?: Teardown;
 }
 
-/** Diagram and chart fences drawn above their source, redrawn a moment after the source stops changing. */
 export class Previews {
   private readonly live = new Map<HTMLElement, Preview>();
 
@@ -312,7 +343,6 @@ export function decorate(root: HTMLElement, previews: Previews, dark: boolean): 
   previews.sync(root, dark);
 }
 
-/** Frees the shown copies of stored photos once no editor on the page shows them. */
 export function releasePhotos(): void {
   const shown = document.querySelectorAll("img[data-local-src]");
   releaseDisplays(new Set([...shown].map((img) => localId(img.getAttribute("data-local-src") ?? ""))));

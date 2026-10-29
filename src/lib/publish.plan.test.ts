@@ -23,6 +23,11 @@ const draft = (extra: Partial<Draft>, photos: [string, string][] = []) =>
   }) as unknown as Draft;
 
 describe("buildPublishPlan", () => {
+  it("asks for no sweep of the post's old videos when this device's drafts cannot be read", async () => {
+    const plan = await buildPublishPlan(draft({ videos: ["video/clip-0123456789ab.mp4"] }), settings);
+    expect([plan.retire, plan.keep, plan.sweep]).toEqual([[], [], false]);
+  });
+
   it("guards a new post against landing on an existing one", async () => {
     const plan = await buildPublishPlan(draft({}), settings);
     expect(plan.expect).toEqual([{ path: "src/posts/2026-10-11-trip.md", sha: "" }]);

@@ -1,4 +1,3 @@
-/** Stroke icons, drawn on a 24×24 grid with `currentColor`. */
 export const ICONS = {
   superscript: '<path d="m4 8 8 11M12 8l-8 11"/><path d="M15.5 6.5c0-1.6 4-1.7 4 .2 0 1.9-4 2.6-4 4.8h4.2"/>',
   subscript: '<path d="m4 5 8 11M12 5l-8 11"/><path d="M15.5 14.5c0-1.6 4-1.7 4 .2 0 1.9-4 2.6-4 4.8h4.2"/>',
@@ -30,6 +29,7 @@ export const ICONS = {
   trash: '<path d="M4 7h16M10 4h4M6 7l1 12.5a1.5 1.5 0 0 0 1.5 1.5h7a1.5 1.5 0 0 0 1.5-1.5L18 7"/><path d="M10 11v6M14 11v6"/>',
   command: '<path d="M9 9V6a3 3 0 1 0-3 3h12a3 3 0 1 0-3-3v12a3 3 0 1 0 3-3H6a3 3 0 1 0 3 3z"/>',
   video: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M10 9.5v5l4.5-2.5z"/>',
+  videoUpload: '<rect x="3" y="5" width="13" height="14" rx="2"/><path d="m16 10 5-3v10l-5-3"/><path d="M9.5 15.5v-7M7 11l2.5-2.5L12 11"/>',
   mindmap: '<circle cx="5.5" cy="12" r="2.3"/><circle cx="18.5" cy="5.5" r="1.8"/><circle cx="18.5" cy="12" r="1.8"/><circle cx="18.5" cy="18.5" r="1.8"/><path d="M7.6 10.9c3.6-1.3 5.5-3.7 9.1-4.9M7.8 12h8.9M7.6 13.1c3.6 1.3 5.5 3.7 9.1 4.9"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',
   check: '<path d="m5 12.5 4.5 4.5L19 7"/>',

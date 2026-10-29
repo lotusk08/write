@@ -1,10 +1,8 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref } from "vue";
-import { embedFromUrl } from "../editor/blog.ts";
 import {
   askLink,
   format,
-  insertEmbed,
   insertFootnote,
   insertRule,
   insertTable,
@@ -23,17 +21,17 @@ import {
 } from "../editor/commands.ts";
 import type { ToolState } from "../editor/tools.ts";
 import NoteMenu from "./NoteMenu.vue";
+import VideoMenu from "./VideoMenu.vue";
 import ToolButton from "./ToolButton.vue";
 
-const props = defineProps<{ tools: ToolState; run: (command: (root: HTMLElement) => unknown) => void }>();
-const emit = defineEmits<{ images: [files: File[]] }>();
+defineProps<{ tools: ToolState; run: (command: (root: HTMLElement) => unknown) => void }>();
+const emit = defineEmits<{ images: [files: File[]]; videos: [files: File[]] }>();
 
 const EDGE_SLACK = 2;
 
 const row = ref<HTMLDivElement | null>(null);
 const fileInput = ref<HTMLInputElement | null>(null);
 
-/** Fades whichever end of the row has tools scrolled out of sight. */
 const sync = () => {
   const element = row.value;
   if (!element) {
@@ -44,10 +42,6 @@ const sync = () => {
   const end = element.scrollLeft < hidden - EDGE_SLACK;
   element.dataset.more = start && end ? "both" : start ? "start" : end ? "end" : "none";
 };
-/**
- * A mouse wheel turns the row sideways, where the tools that do not fit are; at either end it is handed back to the
- * page. A trackpad's sideways swipe, or Shift with the wheel, already scrolls it.
- */
 const onWheel = (event: WheelEvent) => {
   const element = row.value;
   if (!element || event.ctrlKey || Math.abs(event.deltaX) >= Math.abs(event.deltaY)) {
@@ -77,24 +71,12 @@ onBeforeUnmount(() => {
   observer?.disconnect();
 });
 
-const embed = () => {
-  const url = window.prompt("Link to embed: a YouTube video, an X post, or an audio or video file", "");
-  if (!url?.trim()) {
-    return;
-  }
-  const found = embedFromUrl(url);
-  if (!found) {
-    window.alert(`The blog can't embed this link:\n${url}\n\nIt embeds YouTube videos, X posts, and audio or video files (.mp3, .mp4 …).`);
-    return;
-  }
-  props.run((root) => insertEmbed(root, found));
-};
-
 const pickFiles = (event: Event) => {
   const input = event.target as HTMLInputElement;
   emit("images", Array.from(input.files ?? []));
   input.value = "";
 };
+
 </script>
 
 <template>
@@ -137,7 +119,7 @@ const pickFiles = (event: Event) => {
         :disabled="!tools.canGallery"
         @press="run(tools.gallery ? unsetGallery : setGallery)"
       />
-      <ToolButton icon="video" title="Embed a video — YouTube, X, a video or audio file" @press="embed" />
+      <VideoMenu :run="run" @videos="(files) => emit('videos', files)" />
     </div>
 
     <span class="tool-sep" />

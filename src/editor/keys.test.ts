@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { markdownToDoc } from "../lib/import.ts";
 import { docToMarkdown } from "../lib/markdown.ts";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
-import { embedFromUrl } from "./blog.ts";
+import { embedExtra, embedField, embedFromUrl, embedTag, isPlayerLink, mergeExtra, playableUrl } from "./blog.ts";
 import { insertFootnote, toggleCodeBlock, toggleFilepath, toggleInline, toggleList, togglePlainQuote } from "./commands.ts";
 import { sanitizerOptions } from "./config.ts";
 import { handleInput, handleKeydown } from "./keys.ts";
@@ -17,13 +17,11 @@ function load(text: string): void {
   root.innerHTML = docToHtml(markdownToDoc(text), { display: (src) => src });
 }
 
-/** A paragraph holding `text` as typed, before any shortcut has read it. */
 function raw(text: string): void {
   root.innerHTML = "<p></p>";
   root.firstElementChild?.append(text);
 }
 
-/** Puts the caret at the end of the first text that holds `text`. */
 function caretAfter(text: string): void {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
@@ -41,7 +39,6 @@ function caretAfter(text: string): void {
 
 const typed = (data: string) => handleInput(root, new InputEvent("input", { inputType: "insertText", data }));
 
-/** Selects the first run of `text`. */
 function selectText(text: string): void {
   caretAfter(text);
   const range = window.getSelection()!.getRangeAt(0);
@@ -50,7 +47,6 @@ function selectText(text: string): void {
 
 const WRAPS: Record<string, string> = { bold: "b", italic: "i", strikeThrough: "strike", createLink: "a" };
 
-/** happy-dom has no `execCommand`: the few the shortcuts use, as Chrome does them (bold is `<b>`, a bare caret sets nothing, a list leaves the caret at the start of its line). */
 function execCommand(command: string, _ui?: boolean, value?: string): boolean {
   const range = window.getSelection()?.getRangeAt(0);
   if (!range) {
@@ -424,6 +420,26 @@ describe("embeds from a link", () => {
     expect(embedFromUrl("abcdefg")).toBeNull();
   });
 
+  it("knows HLS streams and Dropbox videos, and plays a Dropbox one from the file itself", () => {
+    expect(embedFromUrl("https://cdn.example/live/index.m3u8")).toEqual({ platform: "video", id: "https://cdn.example/live/index.m3u8" });
+    const shared = "https://www.dropbox.com/scl/fi/x1/clip.MOV?rlkey=k&st=s&dl=0";
+    expect(embedFromUrl(shared)).toEqual({ platform: "video", id: shared });
+    expect(playableUrl(shared)).toBe("https://dl.dropboxusercontent.com/scl/fi/x1/clip.MOV?rlkey=k&st=s");
+    expect(playableUrl("https://media.example/video/a.mp4")).toBe("https://media.example/video/a.mp4");
+    expect(embedFromUrl("https://vimeo.com/76979871")).toBeNull();
+  });
+
+  it("takes a video site's link without its https://, and no bare word as a player", () => {
+    expect(embedFromUrl("youtu.be/dQw4w9WgXcQ?si=abc")).toEqual({ platform: "youtube", id: "dQw4w9WgXcQ" });
+    expect(embedFromUrl("www.youtube.com/watch?v=dQw4w9WgXcQ&t=10s")).toEqual({ platform: "video", id: "https://youtu.be/dQw4w9WgXcQ?t=10" });
+    expect(embedFromUrl("https://www.youtube.com/shorts/dQw4w9WgXcQ")).toEqual({ platform: "video", id: "https://www.youtube.com/shorts/dQw4w9WgXcQ" });
+    expect(embedFromUrl("youtube-nocookie.com/embed/dQw4w9WgXcQ?start=90")).toEqual({ platform: "video", id: "https://youtu.be/dQw4w9WgXcQ?t=90" });
+    expect(embedFromUrl("www.dropbox.com/scl/fi/x1/clip.mp4?rlkey=k&dl=0")).toEqual({ platform: "video", id: "https://www.dropbox.com/scl/fi/x1/clip.mp4?rlkey=k&dl=0" });
+    expect(isPlayerLink("youtu.be/dQw4w9WgXcQ")).toBe(true);
+    expect(isPlayerLink("hello-world")).toBe(false);
+    expect(isPlayerLink("see youtu.be/dQw4w9WgXcQ")).toBe(false);
+  });
+
   it("makes no Spotify player, which the blog no longer draws", () => {
     expect(embedFromUrl("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC")).toBeNull();
   });
@@ -437,5 +453,28 @@ describe("a heading merged into a paragraph", () => {
     expect(root.innerHTML).toBe("<p>Some textHead</p>");
     expect(window.getSelection()?.getRangeAt(0).startOffset).toBe("Some text".length);
     expect(markdown()).toBe("Some textHead");
+  });
+});
+
+describe("a player's attributes after its address", () => {
+  it("writes the ones given, quoted, and reads them back", () => {
+    const extra = embedExtra({ poster: 'https://m.example/a "b".webp', width: 1920, height: null, title: "" });
+    expect(extra).toBe(' poster="https://m.example/a &quot;b&quot;.webp" width="1920"');
+    expect(embedField(extra, "poster")).toBe('https://m.example/a "b".webp');
+    expect(embedField(extra, "width")).toBe("1920");
+    expect(embedField(extra, "height")).toBeNull();
+  });
+
+  it("writes only attributes after a player's address, never markup a paste or a peer brought in", () => {
+    expect(embedTag("video", "https://x/a.mp4", ' poster="p.webp" loop')).toBe('<EmbedVideo src="https://x/a.mp4" poster="p.webp" loop />');
+    expect(embedTag("video", "https://x/a.mp4", ' /><script>alert(1)</script><i ')).toBe('<EmbedVideo src="https://x/a.mp4" />');
+    expect(embedTag("video", "https://x/a.mp4", ' title="a/><script>x</script>"')).toBe('<EmbedVideo src="https://x/a.mp4" />');
+    expect(embedExtra({ title: "<b>A</b> & B" })).toBe(' title="&lt;b&gt;A&lt;/b&gt; &amp; B"');
+  });
+
+  it("puts a replaced video's still and shape in, keeping its caption and switches as written", () => {
+    const extra = ` title='A "clip"' poster="old.webp" loop width="640"`;
+    expect(mergeExtra(extra, { poster: "new.webp", width: 1920, height: 1080 })).toBe(` title='A "clip"' loop poster="new.webp" width="1920" height="1080"`);
+    expect(mergeExtra(extra, { poster: null, width: null, height: null })).toBe(` title='A "clip"' loop`);
   });
 });

@@ -7,6 +7,7 @@ import type {
   Topic,
   Topics,
 } from "../../shared/types.ts";
+import { MAX_VIDEO_BYTES, type MediaPart, type MediaStart, type MediaVideo } from "../../shared/media.ts";
 import { sessionToken } from "./password.ts";
 
 export class PasswordRejected extends Error {
@@ -32,17 +33,15 @@ async function readJson<T>(response: Response, whenItFails: string): Promise<T> 
     throw new PasswordRejected(payload.error || "Wrong password.");
   }
   if (!response.ok) {
-    throw new Error(payload.error || `${whenItFails} (${response.status}).`);
+    throw new HttpError(payload.error || `${whenItFails} (${response.status}).`, response.status);
   }
   return payload as T;
 }
 
-/** Whether the Worker answered: under `npm run dev` there is no `/api`, and Vite hands back the page instead. */
 function answeredJson(response: Response): boolean {
   return response.ok && (response.headers.get("content-type") ?? "").includes("application/json");
 }
 
-/** How long the drafts wait on the Worker at startup; past it, they open without its settings. */
 const CONFIG_WAIT_MS = 6000;
 
 export async function fetchAppConfig(): Promise<AppConfig | null> {
@@ -122,7 +121,6 @@ export async function fetchSiteFiles(password: string): Promise<SiteFiles> {
 
 type SitePhotos = { files: SitePhoto[]; redirected: string[] };
 
-/** How long a read of the site's photos serves the plans built after it: reading them reads every post on the site. */
 const PHOTOS_TTL_MS = 60_000;
 const photosRead = new Map<string, { at: number; read: Promise<SitePhotos> }>();
 
@@ -170,6 +168,147 @@ export async function uploadPhoto(contentBase64: string, password: string, signa
   });
 }
 
+export class HttpError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+  ) {
+    super(message);
+    this.name = "HttpError";
+  }
+}
+
+async function mediaJson<T>(path: string, body: unknown, password: string, whenItFails: string, signal?: AbortSignal): Promise<T> {
+  const response = await fetch(path, {
+    method: "POST",
+    headers: headers(password, { "content-type": "application/json" }),
+    body: JSON.stringify(body),
+    signal,
+  });
+  if (response.status >= 500) {
+    const payload = (await response.json().catch(() => ({}))) as { error?: string };
+    throw new HttpError(payload.error || `${whenItFails} (${response.status}).`, response.status);
+  }
+  return readJson<T>(response, whenItFails);
+}
+
+export async function fetchMediaVideos(password: string): Promise<MediaVideo[]> {
+  const response = await fetch("/api/media", { headers: headers(password) });
+  const result = await readJson<{ videos?: MediaVideo[] }>(response, "Could not read the videos");
+  return Array.isArray(result.videos) ? result.videos : [];
+}
+
+export function deleteMediaVideos(keys: string[], password: string): Promise<{ deleted: string[]; kept: { key: string; used: string[] }[] }> {
+  return mediaJson("/api/media/delete", { keys }, password, "Could not delete the videos");
+}
+
+export async function fetchDropboxVideo(
+  url: string,
+  password: string,
+  signal: AbortSignal,
+  onProgress: (fraction: number) => void,
+  onAuthorized: () => void = () => {},
+): Promise<File> {
+  const response = await fetch(`/api/media/fetch?${new URLSearchParams({ url })}`, { headers: headers(password), signal });
+  if (!response.ok || !response.body) {
+    await readJson(response, "Could not fetch the video from Dropbox");
+    throw new Error("Could not fetch the video from Dropbox.");
+  }
+  onAuthorized();
+  const total = Number(response.headers.get("content-length") ?? "0");
+  const reader = response.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let loaded = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) {
+      break;
+    }
+    chunks.push(value);
+    loaded += value.byteLength;
+    if (loaded > MAX_VIDEO_BYTES) {
+      await reader.cancel();
+      throw new Error(`This video is too large (max ${MAX_VIDEO_BYTES / 1024 ** 3} GB).`);
+    }
+    if (total) {
+      onProgress(loaded / total);
+    }
+  }
+  const name = decodeURIComponent(new URL(url).pathname.split("/").pop() || "video");
+  return new File(chunks as BlobPart[], name, { type: response.headers.get("content-type") ?? "" });
+}
+
+export function startMedia(
+  video: { name: string; fingerprint: string; size: number; type: string },
+  password: string,
+  signal?: AbortSignal,
+): Promise<MediaStart> {
+  return mediaJson<MediaStart>("/api/media/start", video, password, "Could not start the upload", signal);
+}
+
+export function completeMedia(key: string, upload: string, parts: MediaPart[], password: string, signal?: AbortSignal): Promise<{ url: string }> {
+  return mediaJson("/api/media/complete", { key, upload, parts }, password, "Could not finish the upload", signal);
+}
+
+export async function abortMedia(key: string, upload: string, password: string): Promise<void> {
+  await mediaJson("/api/media/abort", { key, upload }, password, "Could not stop the upload");
+}
+
+function put<T>(path: string, body: Blob, password: string, type: string, signal: AbortSignal, onSent: (bytes: number) => void): Promise<T> {
+  return new Promise((resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason);
+      return;
+    }
+    const xhr = new XMLHttpRequest();
+    const stop = () => xhr.abort();
+    xhr.open("PUT", path);
+    for (const [name, value] of Object.entries(headers(password, { "content-type": type }))) {
+      xhr.setRequestHeader(name, value);
+    }
+    xhr.upload.onprogress = (event) => onSent(event.loaded);
+    xhr.onload = () => {
+      signal.removeEventListener("abort", stop);
+      let payload: { error?: string } = {};
+      try {
+        payload = JSON.parse(xhr.responseText) as { error?: string };
+      } catch {
+      }
+      if (xhr.status === 401) {
+        reject(new PasswordRejected(payload.error || "Wrong password."));
+      } else if (xhr.status < 200 || xhr.status >= 300) {
+        reject(new HttpError(payload.error || `The upload was refused (${xhr.status}).`, xhr.status));
+      } else {
+        resolve(payload as T);
+      }
+    };
+    xhr.onerror = () => {
+      signal.removeEventListener("abort", stop);
+      reject(new Error("The connection dropped while sending the video."));
+    };
+    xhr.onabort = () => reject(signal.reason ?? new DOMException("The upload was stopped.", "AbortError"));
+    signal.addEventListener("abort", stop, { once: true });
+    xhr.send(body);
+  });
+}
+
+export function sendMediaPart(
+  key: string,
+  upload: string,
+  part: number,
+  body: Blob,
+  password: string,
+  signal: AbortSignal,
+  onSent: (bytes: number) => void,
+): Promise<MediaPart> {
+  const query = new URLSearchParams({ key, upload, part: String(part) });
+  return put<MediaPart>(`/api/media/part?${query}`, body, password, "application/octet-stream", signal, onSent);
+}
+
+export function uploadPoster(key: string, poster: Blob, password: string, signal: AbortSignal): Promise<{ url: string }> {
+  return put(`/api/media/poster?${new URLSearchParams({ key })}`, poster, password, poster.type, signal, () => undefined);
+}
+
 export async function createShareRoom(seed: Uint8Array): Promise<{ token: string; owner: string }> {
   const response = await fetch("/api/share", {
     method: "POST",
@@ -213,7 +352,6 @@ export async function publish(
   request: PublishRequest,
   password: string,
 ): Promise<PublishResult> {
-  // A publish, done or refused, changes or questions the site's photos: the next plan reads them afresh.
   photosRead.clear();
   const response = await fetch("/api/publish", {
     method: "POST",
@@ -230,7 +368,6 @@ export interface PasskeyChallenge {
   algorithms: number[];
 }
 
-/** A challenge to sign in with a passkey, or to save one, which takes the password. */
 export async function passkeyChallenge(purpose: "login" | "register", password = ""): Promise<PasskeyChallenge> {
   const response = await fetch(`/api/passkey/challenge${purpose === "register" ? "?for=register" : ""}`, {
     method: "POST",

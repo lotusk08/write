@@ -15,6 +15,7 @@ import SignIn from "./SignIn.vue";
 import Toggle from "./Toggle.vue";
 import type { ToggleOption } from "./types.ts";
 import { useSignIn } from "./useSignIn.ts";
+import { useVideoUploads } from "./useVideoUploads.ts";
 
 const props = defineProps<{ draft: Draft; settings: Settings; config: AppConfig | null }>();
 const emit = defineEmits<{
@@ -58,7 +59,6 @@ onMounted(() => {
   void nextTick(() => (asking.value ? signIn.value?.focus() : primary.value?.focus()));
 });
 
-/** A draft that keeps changing while the dialog is open — someone typing in a shared one — is planned once it pauses. */
 const REPLAN_MS = 300;
 let generation = 0;
 let replan: number | undefined;
@@ -171,7 +171,16 @@ const failure = computed<PublishWarning | null>(() => {
   return text && refused.value ? { kind: "missing", text } : text ? { kind: text.includes("changed on the site") ? "stale" : text.includes("already has a post") ? "existing" : "retry", text } : null;
 });
 
-const warnings = computed(() => plan.value?.warnings ?? []);
+const { jobs } = useVideoUploads();
+const UNDER_WAY = new Set(["fetching", "preparing", "signing-in", "uploading"]);
+const uploading: PublishWarning = {
+  kind: "uploading",
+  text: "A video for this post is still uploading: published now, the post goes out as it is, and the video lands in the draft once it is done.",
+};
+const warnings = computed(() => [
+  ...(jobs.value.some((job) => job.draft === props.draft.id && UNDER_WAY.has(job.stage)) ? [uploading] : []),
+  ...(plan.value?.warnings ?? []),
+]);
 const stops = computed(() => warnings.value.find((warning) => warning.blocks)?.text ?? null);
 const reason = computed(() =>
   blocked.value ?? stops.value ?? (!plan.value ? "Preparing…" : asking.value && !password.value ? "Type the password or use a passkey." : null),
@@ -261,7 +270,8 @@ const committing = computed(() => Boolean(plan.value && sent.value >= plan.value
     <div v-if="state === 'done' && result" class="publish-done" aria-live="polite">
       <p class="publish-done-title">✓ {{ isPost ? "Published" : "Saved" }} <span class="mono">{{ plan?.slug }}</span> to {{ result.branch }}</p>
       <p class="hint">
-        {{ plan?.photos.length ?? 0 }} photo(s) uploaded<template v-if="plan?.moved.length">, {{ plan.moved.length }} renamed</template>.
+        {{ plan?.photos.length ?? 0 }} photo(s) uploaded<template v-if="plan?.moved.length">, {{ plan.moved.length }} renamed</template><template
+          v-if="result.retired?.length">, {{ result.retired.length }} video(s) no post uses any more removed from the media bucket</template>.
         <template v-if="isPost && hidden">Hidden, so the site's build leaves it out.</template>
         <template v-else-if="isPost">Live in a few minutes, after the site builds.</template>
       </p>

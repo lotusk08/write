@@ -9,6 +9,7 @@ export interface AppConfig {
   imagesDir: string;
   ready: boolean;
   problem?: string;
+  media?: string;
 }
 
 export interface PostMeta {
@@ -19,7 +20,6 @@ export interface PostMeta {
   tags: string[];
   pin: Pin;
   toc: boolean;
-  /** `false` keeps the post's photos off the blog's Moments wall; unset, a post shares them. */
   moments?: boolean;
   cover: { path: string; alt: string; lqip?: string } | null;
   extra?: string[];
@@ -43,6 +43,9 @@ export interface PublishRequest {
   expect?: { path: string; sha: string }[];
   remove?: string[];
   redirects?: [string, string][];
+  retire?: string[];
+  keep?: string[];
+  sweep?: boolean;
 }
 
 export interface SiteFile {
@@ -72,4 +75,5 @@ export interface PublishResult {
   commitUrl: string;
   paths: string[];
   shas: Record<string, string>;
+  retired?: string[];
 }

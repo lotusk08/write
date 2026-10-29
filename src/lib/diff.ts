@@ -6,15 +6,9 @@ export interface LineDiff {
   hunks: DiffLine[][];
 }
 
-/**
- * The fewest lines taken out and put in that turn `before` into `after`, by Myers' bisection as diff-match-patch does
- * it: memory in proportion to the lines, not to one side's lines times the other's, so a post of any length is diffed
- * whole.
- */
 export function diffLines(before: string, after: string, context = 2): LineDiff {
   const all = before ? before.split("\n") : [];
   const next = after ? after.split("\n") : [];
-  // Each distinct line as a number, so the search compares integers.
   const ids = new Map<string, number>();
   const id = (text: string) => {
     let found = ids.get(text);
@@ -26,8 +20,6 @@ export function diffLines(before: string, after: string, context = 2): LineDiff 
   };
   const ofAll = Int32Array.from(all, id);
   const ofNext = Int32Array.from(next, id);
-  // A line found on one side only is taken out or put in whatever the rest does: it is left out of the search, which
-  // then has only the lines that can match to go through, and a post rewritten whole is diffed at once.
   const inAll = new Set(ofAll);
   const inNext = new Set(ofNext);
   const aAt = [...ofAll.keys()].filter((at) => inNext.has(ofAll[at]));
@@ -36,7 +28,6 @@ export function diffLines(before: string, after: string, context = 2): LineDiff 
   const b = Int32Array.from(bAt, (at) => ofNext[at]);
   const forward = new Int32Array(a.length + b.length + 2);
   const backward = new Int32Array(a.length + b.length + 2);
-  /** The lines left alone, as pairs of their places in `all` and `next`, in order. */
   const kept: number[] = [];
   const keep = (aFrom: number, bFrom: number, count: number) => {
     for (let at = 0; at < count; at += 1) {
@@ -44,7 +35,6 @@ export function diffLines(before: string, after: string, context = 2): LineDiff 
     }
   };
 
-  /** A point on a shortest path through `a[aLo, aHi)` and `b[bLo, bHi)`, found from both ends at once; null if they share nothing. */
   const bisect = (aLo: number, aHi: number, bLo: number, bHi: number): [number, number] | null => {
     const n = aHi - aLo;
     const m = bHi - bLo;
@@ -126,7 +116,6 @@ export function diffLines(before: string, after: string, context = 2): LineDiff 
   };
   walk(0, a.length, 0, b.length);
 
-  // Between two lines left alone, the lines taken out before the lines put in, as a review reads it.
   const lines: DiffLine[] = [];
   const put = (kind: DiffLine["kind"], texts: string[], from: number, to: number) => {
     for (let at = from; at < to; at += 1) {

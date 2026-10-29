@@ -18,18 +18,6 @@ import {
   unsetCollapsible,
 } from "./commands.ts";
 
-/**
- * Typing, as the blog writes. Enter is a line break and Enter on the line it
- * just made starts a paragraph, because a phone keyboard has no Shift+Enter
- * and every line of a poem became a paragraph of its own; only where a
- * paragraph flows — in the document, a quote or a section, not a list item or
- * a cell — and a cell moves to the one below instead, since a cell is one line
- * of pipes in the Markdown. A line that is only a fence opener becomes a code
- * block, and the Markdown shortcuts at the start of a line (`#`, `>`, `>>>`,
- * `-`, `1.`, `[ ]`, `---`) turn it into what they write, as do `**bold**`,
- * `*italic*`, `~~strike~~` and `` `code` `` once closed.
- */
-
 const FLOWING = "blockquote, [data-collapsible-content], [data-footnote]";
 
 const FENCE_OPENER = /^(?:`{3,}|~{3,})([^`]*)$/;
@@ -56,7 +44,6 @@ function nodeBefore(range: Range): Node | null {
   return startContainer.childNodes[startOffset - 1] ?? null;
 }
 
-/** The nodes of the block's last line: everything after its last top-level `<br>`. */
 function lastLine(block: HTMLElement): { breakNode: Element | null; nodes: Node[] } {
   const children = [...block.childNodes];
   while (children.length && children[children.length - 1].nodeName === "BR") {
@@ -97,12 +84,6 @@ function fenceToCode(block: HTMLElement): boolean {
   return true;
 }
 
-/**
- * A `<br>` placed by hand: WebKit's `insertLineBreak` writes a bare newline
- * into a `white-space: pre-wrap` block rather than an element. One that ends
- * the block gets the placeholder after it, or the browser would not show the
- * empty line it opens.
- */
 function insertBreak(root: HTMLElement, block: HTMLElement, range: Range): void {
   const br = document.createElement("br");
   range.insertNode(br);
@@ -208,7 +189,6 @@ const paragraph: Command = (root) => {
   notify(root);
 };
 
-/** The ⌘ shortcuts the Tiptap editor had, beyond the editor's own ⌘B, ⌘I, ⌘⇧X, ⌘K and undo (⌘B and ⌘I are taken here in a table cell, where the editor's table handling swallows them). */
 const KEYS: Record<string, Command> = {
   e: (root) => toggleInline(root, "code"),
   ".": (root) => format(root, "superscript"),
@@ -226,7 +206,6 @@ const KEYS: Record<string, Command> = {
   "alt+4": (root) => toggleHeading(root, 4),
 };
 
-/** Keeps the caret where it was across a move of the nodes around it; a moved node collapses any Range inside it. */
 function keepingCaret(move: () => void): void {
   const range = window.getSelection()?.rangeCount ? window.getSelection()!.getRangeAt(0) : null;
   const caret = range ? { node: range.startContainer, offset: range.startOffset } : null;
@@ -239,7 +218,6 @@ function keepingCaret(move: () => void): void {
   }
 }
 
-/** Tab nests a list item under the one above it and Shift+Tab lifts it out, as the posts nest lists; in code it indents. */
 function tab(root: HTMLElement, out: boolean): boolean {
   const block = currentTextblock(root);
   if (!block) {
@@ -262,7 +240,6 @@ function tab(root: HTMLElement, out: boolean): boolean {
       return last;
     }
     const sub = list.cloneNode(false) as HTMLElement;
-    // The new level is a list of its own: the outer list's start and attribute list stay with it.
     ["start", "data-block-ial", "data-ial-above"].forEach((name) => sub.removeAttribute(name));
     holder.append(sub);
     return sub;
@@ -291,7 +268,6 @@ function tab(root: HTMLElement, out: boolean): boolean {
   return true;
 }
 
-/** Backspace at the start of the line under a photo takes the photo, not the line: the browser, even deleting the photo alone, joined the paragraphs either side. */
 function removePhotoBefore(root: HTMLElement): boolean {
   const range = selectionIn(root);
   const block = currentTextblock(root);
@@ -312,10 +288,8 @@ function removePhotoBefore(root: HTMLElement): boolean {
   return true;
 }
 
-/** By the key's place, not its character: ⌥ and ⇧ change the character on a Mac. */
 const keyName = (code: string) => code.replace(/^(?:Key|Digit)/, "").toLowerCase().replace("period", ".").replace("comma", ",");
 
-/** Returns true when the key was taken, so the caller can stop the editor from acting on it too. */
 export function handleKeydown(root: HTMLElement, event: KeyboardEvent): boolean {
   if (event.isComposing || event.keyCode === 229) {
     return false;
@@ -383,14 +357,8 @@ const LINK = /(?<!!)\[([^\]\n]+)\]\(([^()\s]+)\)$/;
 
 const FILEPATH = /^\{\s*\.path\s*\}$/;
 
-/** The marks the browser has a command for, so the change is in its undo history and it stops the mark for what is typed next. */
 const COMMANDS: Record<string, string> = { strong: "bold", em: "italic", s: "strikeThrough" };
 
-/**
- * A mark just made, and the text it was made with. The browser carries the formatting at a mark's end into
- * what is typed next, so `` `x` y `` went on in code, and WebKit kept typing into a bold the commands made;
- * whatever lands inside it after the shortcut is moved out.
- */
 const made = new WeakMap<HTMLElement, { mark: Element; text: string }>();
 
 function moveTypingOut(root: HTMLElement): void {
@@ -417,7 +385,6 @@ function moveTypingOut(root: HTMLElement): void {
   notify(root);
 }
 
-/** The Markdown typed just before the caret, if it closes a mark or a link: the tag, its text, its address, and how much it covers. */
 function typedMark(text: string): { tag: string; inner: string; href?: string; length: number } | null {
   const link = LINK.exec(text);
   if (link) {
@@ -437,10 +404,6 @@ function select(range: Range): void {
   window.getSelection()?.addRange(range);
 }
 
-/**
- * A mark typed in Markdown, turned into the mark once its closing character is typed: the delimiters go through
- * `insertText` and bold, italic, strike and links through the browser's own commands, so ⌘Z takes them back.
- */
 function markShortcut(root: HTMLElement): boolean {
   const range = selectionIn(root);
   const node = range?.startContainer;
@@ -498,11 +461,6 @@ function markShortcut(root: HTMLElement): boolean {
   return true;
 }
 
-/**
- * Backspace or Delete merging a heading and a paragraph leaves, in Chrome, the text that moved in a span styled with
- * the block it came from — a paragraph line drawn at a heading's size, though the blog draws it plain. The span goes,
- * and the caret stays where it was.
- */
 function unstyleMerge(root: HTMLElement): boolean {
   const block = currentTextblock(root);
   const spans = block
@@ -529,7 +487,6 @@ function unstyleMerge(root: HTMLElement): boolean {
   return true;
 }
 
-/** After the editor has applied a keystroke: Markdown shortcuts, and a new block not inheriting the old one's layout. */
 export function handleInput(root: HTMLElement, event: InputEvent): void {
   if (!event.isComposing) {
     moveTypingOut(root);
@@ -579,7 +536,6 @@ export function handleInput(root: HTMLElement, event: InputEvent): void {
   placeCaret(block, false);
   shortcut[1](root);
   liftLists(root);
-  // Only a list shortcut looks for its new item: after `## `, the caret was sent to any empty item in the post.
   if (shortcut[0] === BULLET || shortcut[0] === NUMBERED || shortcut[0] === TASK) {
     keepCaretInNewItem(root);
   }

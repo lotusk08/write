@@ -32,7 +32,6 @@ describe("kramdown's older forms", () => {
       content: [
         { type: "blockquote", attrs: { blockIal: "{: .poem }" }, content: [] },
         { type: "image", attrs: { src: "/a.webp", ial: "{: .light}" } },
-        // As the app before kept them: the list after a link or a mark as text, as raw text once it held it so.
         {
           type: "paragraph",
           content: [

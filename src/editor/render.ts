@@ -8,7 +8,6 @@ function fail(target: HTMLElement, error: unknown): Teardown {
   return noop;
 }
 
-/** Loads a module once, but forgets a failed load so the next preview tries again. */
 export function retrying<T>(load: () => Promise<T>): () => Promise<T> {
   let loading: Promise<T> | null = null;
   return () =>

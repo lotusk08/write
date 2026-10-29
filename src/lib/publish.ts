@@ -2,9 +2,10 @@ import type { JSONContent } from "../editor/doc.ts";
 import type { PostMeta, PublishResult, SitePhoto } from "../../shared/types.ts";
 import { fetchSitePhotos, publish, uploadPhoto } from "./api.ts";
 import type { Draft, StoredImage } from "./db.ts";
-import { imageStore, isLocalSrc, localId } from "./db.ts";
+import { draftStore, imageStore, isLocalSrc, localId } from "./db.ts";
 import { blobToBase64, extensionFor, keepsLocation, MAX_UPLOAD_BYTES, shrinkImage, tooBig, withoutLocation } from "./images.ts";
 import { buildPostFile } from "./markdown.ts";
+import { videoKeysIn } from "../../shared/media.ts";
 import { decoded, servedName, stem, trimSlashes } from "../../shared/paths.ts";
 import type { Settings } from "./settings.ts";
 import { datePrefix, slugify } from "./text.ts";
@@ -17,7 +18,7 @@ interface PlannedPhoto {
 }
 
 export interface PublishWarning {
-  kind: "title" | "date" | "hidden" | "alt" | "description" | "missing" | "unguarded" | "size" | "stale" | "existing" | "retry";
+  kind: "title" | "date" | "hidden" | "alt" | "description" | "missing" | "unguarded" | "size" | "stale" | "existing" | "retry" | "uploading";
   text: string;
   src?: string;
   blocks?: boolean;
@@ -36,21 +37,21 @@ export interface PublishPlan {
   skippedImages: string[];
   warnings: PublishWarning[];
   expect?: { path: string; sha: string }[];
+  retire?: string[];
+  keep?: string[];
+  sweep?: boolean;
 }
 
 const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 const fileName = (path: string) => path.slice(path.lastIndexOf("/") + 1);
 
-/** A date the blog's build reads as a day on the calendar (its `realDate`): one it does not stops the build. */
 function calendarDay(date: string): boolean {
   const day = /^(\d{4})-(\d{2})-(\d{2})/.exec(date);
   return day !== null && new Date(Date.UTC(+day[1], +day[2] - 1, +day[3])).toISOString().startsWith(day[0]);
 }
 
-/** `hidden: true` among the fields the app keeps as written, read as the Worker's list of the site's files reads it. */
 const HIDDEN = /^hidden:[ \t]*(?:true|True|TRUE)(?:[ \t]+#.*)?[ \t]*$/;
 
-/** What the blog's build stops on, or leaves out, in a post's front matter; a draft is never built, so none of it applies. */
 function frontMatterWarnings(meta: PostMeta): PublishWarning[] {
   return [
     ...(meta.title.trim() ? [] : [{ kind: "title" as const, blocks: true, text: "The post has no title, and the site's build stops on one without." }]),
@@ -125,10 +126,6 @@ function altSlug(alt: string): string {
   return (cut.includes("-") ? cut.slice(0, cut.lastIndexOf("-")) : cut.slice(0, NAME_LENGTH)).replace(/-+$/, "");
 }
 
-/**
- * A photo is named from its alt alone, `ho-guom`, then `ho-guom-2` …; one with no alt is `<slug>-1` …, and the cover
- * with none `<slug>-cover`, since a bare number or `cover` would say nothing of the post.
- */
 export function photoName(slug: string, alt: string, taken: Set<string>, unnamed = ""): string {
   const base = altSlug(alt) || (unnamed ? `${slug}-${unnamed}` : "");
   let name = base;
@@ -139,7 +136,6 @@ export function photoName(slug: string, alt: string, taken: Set<string>, unnamed
   return name;
 }
 
-/** A name that already follows its alt: `<alt>` or `<alt>-N`, or as photos were named before, `<slug>-<alt>` or `<slug>-<alt>-N`. */
 function followsAlt(name: string, slug: string, words: string): boolean {
   return [words, `${slug}-${words}`].some(
     (named) => name === named || (name.startsWith(`${named}-`) && /^\d+$/.test(name.slice(named.length + 1))),
@@ -188,7 +184,6 @@ export async function planImages(
       renames.push({ src, baseName: "", site: found });
     }
   }
-  // One file on the site written two ways (`a.jpg` in the post, `a.webp` as its cover) takes one new name.
   const named = new Map<string, string>();
   for (const rename of renames) {
     const name = rename.site!.name;
@@ -244,6 +239,22 @@ export async function markdownForExport(draft: Draft, settings: Settings): Promi
   return buildPostFile(metaWithCover(draft, imageUrls), draft.doc, {
     resolveImage: (src) => imageUrls.get(src) ?? src,
   });
+}
+
+const MAX_KEEP = 500;
+
+async function videoPlan(draft: Draft, markdown: string): Promise<{ retire: string[]; keep: string[]; sweep: boolean }> {
+  const others = await draftStore.all().catch(() => null);
+  if (!others) {
+    return { retire: [], keep: [], sweep: false };
+  }
+  const elsewhere = new Set(others.filter((other) => other.id !== draft.id).flatMap((other) => videoKeysIn(JSON.stringify(other.doc))));
+  const used = new Set(videoKeysIn(markdown));
+  return {
+    retire: (draft.videos ?? []).filter((key) => !used.has(key) && !elsewhere.has(key)).slice(0, 50),
+    keep: [...elsewhere].slice(0, MAX_KEEP),
+    sweep: elsewhere.size <= MAX_KEEP,
+  };
 }
 
 export async function buildPublishPlan(draft: Draft, settings: Settings): Promise<PublishPlan> {
@@ -312,6 +323,7 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
     skippedImages,
     warnings,
     expect: expect.length ? expect : undefined,
+    ...(await videoPlan(draft, markdown)),
   };
 }
 
@@ -349,6 +361,9 @@ export async function sendPlan(
       expect: plan.expect,
       remove: plan.remove,
       redirects: plan.redirects,
+      ...(plan.retire?.length ? { retire: plan.retire } : {}),
+      ...(plan.keep?.length ? { keep: plan.keep } : {}),
+      ...(plan.sweep === false ? { sweep: false } : {}),
     },
     password,
   );

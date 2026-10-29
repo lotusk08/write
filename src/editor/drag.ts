@@ -1,10 +1,8 @@
 import type { DropSpot } from "./commands.ts";
 import { TRANSIENT } from "./bridge.ts";
 
-/** The share of a lone photo's height, at its top and its bottom, that drops above or below it rather than beside it. */
 const EDGE = 0.25;
 
-/** The block directly in the post that holds `node`; a preview drawn above its source stands for the source. */
 function topBlock(root: HTMLElement, node: Element): HTMLElement | null {
   let block: Element | null = node;
   while (block && block.parentElement !== root) {
@@ -16,23 +14,15 @@ function topBlock(root: HTMLElement, node: Element): HTMLElement | null {
   return block as HTMLElement | null;
 }
 
-/** Between blocks the pointer is over the post itself: the block it is beside is the first to end below it. */
 function blockAt(root: HTMLElement, y: number): HTMLElement | null {
   const blocks = [...root.children].filter((child) => !child.hasAttribute(TRANSIENT)) as HTMLElement[];
   return blocks.find((block) => block.getBoundingClientRect().bottom > y) ?? blocks[blocks.length - 1] ?? null;
 }
 
-/** Which side of a box the pointer is on: across it for a photo in a row, down it for a block. */
 function side(box: DOMRect, x: number, y: number, across: boolean): "before" | "after" {
   return (across ? x < box.left + box.width / 2 : y < box.top + box.height / 2) ? "before" : "after";
 }
 
-/**
- * Where something dropped at (x, y) lands. A photo — dragged, or a file from the desktop — dropped on a gallery's
- * photo goes beside it, on the side the pointer is; on the gallery's frame, after its last photo; on the middle of a
- * photo alone, beside it, the two becoming a gallery. Anything else lands above or below the block under the pointer,
- * whichever half it is in.
- */
 export function dropSpot(root: HTMLElement, x: number, y: number, dragged: HTMLElement | null): DropSpot | null {
   const hit = document.elementFromPoint(x, y);
   if (!hit || !root.contains(hit)) {
@@ -63,7 +53,6 @@ export function dropSpot(root: HTMLElement, x: number, y: number, dragged: HTMLE
   return { kind: "block", ref: block, side: side(block.getBoundingClientRect(), x, y, false) };
 }
 
-/** Draws where a drop would land: an upright bar beside a photo, a line above or below a block. */
 export function markSpot(mark: HTMLElement, spot: DropSpot | null): void {
   mark.hidden = !spot;
   if (!spot) {

@@ -9,7 +9,6 @@ const OPENS_BLOCK = /^\s*(?:<[a-zA-Z!/]|\{:|([-*_=])(\s*\1){2,}\s*$|[-*+] |\d+[.
 
 let parser: MarkdownIt | null = null;
 
-/** The lines of code blocks, fenced or indented, and of HTML blocks: they show what was written, as it was written. */
 function verbatimLines(markdown: string): Set<number> {
   const lines = new Set<number>();
   for (const token of (parser ??= markdownit({ html: true })).parse(markdown, {})) {
@@ -22,7 +21,6 @@ function verbatimLines(markdown: string): Set<number> {
   return lines;
 }
 
-/** A line with the text outside its code spans changed by `change`, the spans as written. */
 function outsideCode(line: string, change: (text: string) => string): string {
   let out = "";
   let at = 0;
@@ -39,10 +37,6 @@ function outsideCode(line: string, change: (text: string) => string): string {
   return out + change(line.slice(at));
 }
 
-/**
- * The quote a list under it names: the last quote in the lines run together above, when every line after it is the
- * quote's own or one it takes lazily, as a quote takes a line (not a rule, block HTML or a fence).
- */
 function quoteAbove(lines: string[], code: Set<number>, at: number, indent: number): { start: number; indent: string } | null {
   let start = -1;
   let lead = "";
@@ -66,15 +60,6 @@ function quoteAbove(lines: string[], code: Set<number>, at: number, indent: numb
   return { start, indent: lead };
 }
 
-/**
- * Markdown written for the blog's older reader, kramdown's, in the forms it reads now; code, in blocks or spans, and
- * HTML blocks as written.
- *
- *   > text            > [!info]
- *   {: .info}    →    > text
- *
- *   `a.ts`{: .path}   →   `a.ts`{.path}
- */
 export function upgradeSyntax(markdown: string): string {
   if (!markdown.includes("{:")) {
     return markdown;
@@ -92,7 +77,6 @@ export function upgradeSyntax(markdown: string): string {
     const quote = note && KINDS.has(note[2]) ? quoteAbove(lines, code, at, note[1].length) : null;
     if (quote) {
       marks.set(quote.start, `${quote.indent}> [!${note![2]}]`);
-      // The list's line kept the quote from taking the line under it as its own; a blank line does that now.
       out[at] = lines[at + 1]?.trim() ? "" : null;
       continue;
     }

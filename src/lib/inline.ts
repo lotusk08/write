@@ -1,8 +1,3 @@
-/**
- * What the reader, markdown-it as the blog sets it up, reads as a link or an entity in plain text: the writer escapes
- * these so text typed in the editor stays text.
- */
-
 const SCHEME = /(?:^|[^a-z0-9.+-])([a-z][a-z0-9.+-]*)$/i;
 // eslint-disable-next-line no-control-regex -- control characters are what this matches
 const AUTOLINK = /^([a-z][a-z0-9+.-]{1,31}):([^<>\x00-\x20]*)$/i;
@@ -12,8 +7,6 @@ const ZCC = "[\\p{Z}\\p{Cc}]";
 const ZPCC = "[\\p{Z}\\p{P}\\p{Cc}]";
 const SEPARATORS = "[><\\uff5c]";
 const LETTER = `(?:(?!${SEPARATORS}|${ZPCC})[\\s\\S])`;
-// linkify-it also lists `xn--…` labels on their own; the last form already takes them, and the overlap backtracked
-// exponentially, seconds on a line of two dozen `xn--a.` labels.
 const DOMAIN = `(?:${LETTER}|${LETTER}(?:-|${LETTER}){0,61}${LETTER})`;
 const PATH =
   "(?:[/?#](?:" +
@@ -85,5 +78,4 @@ export function escapeChars(text: string, chars: string): string {
   return text.replace(new RegExp(`\\\\(?=[${ASCII_PUNCTUATION}]|$)|[${chars.replace(/[\\\]^-]/g, "\\$&")}]`, "g"), "\\$&");
 }
 
-/** An entity, named or numbered, as markdown-it reads one: written as text, its `&` is escaped. */
 export const ENTITY = /^&(?:#[xX]([0-9a-fA-F]{1,6})|#(\d{1,7})|([a-zA-Z][a-zA-Z0-9]{1,31}));/;

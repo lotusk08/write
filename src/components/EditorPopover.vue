@@ -11,6 +11,7 @@ import PostPanel from "./panels/PostPanel.vue";
 import Section from "./panels/Section.vue";
 import SharePanel from "./panels/SharePanel.vue";
 import SiteFiles from "./SiteFiles.vue";
+import SiteVideos from "./SiteVideos.vue";
 import type { DoneAction, ExportFormat, ShareState } from "./types.ts";
 
 const props = withDefaults(
@@ -60,7 +61,6 @@ const DONE_TEXT: Record<DoneAction, string> = {
   copy: "Markdown copied",
 };
 
-/** A button's icon and label, a tick and what happened while `done` names its action. */
 const icon = (action: DoneAction, name: IconName): IconName => (props.done === action ? "check" : name);
 const label = (action: DoneAction, text: string, result: string) => (props.done === action ? result : text);
 
@@ -84,7 +84,6 @@ const position = computed(() => {
       };
 });
 
-/** Closing from inside the sheet hands focus back to the ⌘ button it covered. */
 const dismiss = () => {
   const inside = Boolean(panel.value?.contains(document.activeElement));
   emit("close");
@@ -101,7 +100,6 @@ const onKey = (event: KeyboardEvent) => {
     dismiss();
   }
 };
-/** A tap outside closes the menu, but not one in a list of files floating beside it, such as the site's, which opens from it. */
 const onDown = (event: PointerEvent) => {
   const target = event.target as Element;
   if (panel.value?.contains(target) || props.anchor?.contains(target) || target.closest?.(".file-list")) {
@@ -228,6 +226,7 @@ onBeforeUnmount(stop);
             <Icon name="focus" />
           </button>
           <SiteFiles @open="(path) => emit('site', path)" @pinned="(written) => emit('pinned', written)" />
+          <SiteVideos />
           <button
             type="button"
             class="btn icon ghost"

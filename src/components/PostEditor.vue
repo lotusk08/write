@@ -9,6 +9,7 @@ import {
   captionOf,
   continueAfter,
   type DropSpot,
+  embedLater,
   insertDoc,
   insertImages,
   leaveGallery,
@@ -17,6 +18,7 @@ import {
   notify,
   placeCaret,
   removeGalleryPhoto,
+  replaceEmbed,
   selectedFigure,
   selectFigure,
   selectionIn,
@@ -26,6 +28,7 @@ import {
   toggleTask,
 } from "../editor/commands.ts";
 import { dropSpot, markSpot } from "../editor/drag.ts";
+import { embedField, mergeExtra } from "../editor/blog.ts";
 import { editorInit } from "../editor/config.ts";
 import { decorate, Previews, releasePhotos } from "../editor/decorate.ts";
 import type { JSONContent } from "../editor/doc.ts";
@@ -34,13 +37,19 @@ import { pasteClipboard } from "../editor/paste.ts";
 import { emptyTools, readTools, type ToolState } from "../editor/tools.ts";
 import SelectionBubble from "./SelectionBubble.vue";
 import Toolbar from "./Toolbar.vue";
+import { useVideoUploads, type VideoSource } from "./useVideoUploads.ts";
 
-const props = defineProps<{ doc: JSONContent; draftId: string; lang: string; dark: boolean; toolbar: boolean }>();
-/** An edit, with the draft it was made in: the last one is sent as the editor goes, after another draft has opened. */
+const props = defineProps<{
+  doc: JSONContent;
+  draftId: string;
+  lang: string;
+  dark: boolean;
+  toolbar: boolean;
+  onUploaded?: (url: string, draftId: string) => void;
+}>();
 const emit = defineEmits<{ change: [doc: JSONContent, draftId: string] }>();
 
 const EMIT_DEBOUNCE_MS = 150;
-/** The width of the margin a task's box is drawn in, left of its text. */
 const TASK_BOX_PX = 24;
 
 const editor = ref<EditorInstance | null>(null);
@@ -48,13 +57,13 @@ const root = shallowRef<HTMLElement | null>(null);
 const html = ref(docToHtml(props.doc));
 const tools = ref<ToolState>(emptyTools());
 const previews = new Previews();
+const videos = useVideoUploads();
 
 let epoch = 0;
 let timer: number | undefined;
 let frame = 0;
 let pending: string | null = null;
 let toolsFrame = 0;
-/** The photo or gallery being dragged inside the post, and the line showing where it would land. */
 let dragged: HTMLElement | null = null;
 const dropMark = document.createElement("div");
 dropMark.className = "drop-mark";
@@ -82,7 +91,6 @@ function currentDoc(): JSONContent {
   return htmlToDoc(editor.value?.getHtml() ?? html.value);
 }
 
-/** The draft as the editor holds it now; also sends any change still waiting on the debounce. */
 function flush(): JSONContent {
   window.clearTimeout(timer);
   const doc = currentDoc();
@@ -93,7 +101,6 @@ function flush(): JSONContent {
   return doc;
 }
 
-/** The draft, if it holds an edit not yet sent out; the edit then counts as sent. */
 function takeUnsent(): JSONContent | null {
   if (pending === null) {
     return null;
@@ -111,7 +118,6 @@ function onHtml(value: string): void {
   redecorate();
 }
 
-/** Replaces the content without it counting as an edit: a repointed photo, a change from the shared room. */
 function setDoc(doc: JSONContent): void {
   epoch += 1;
   pending = null;
@@ -122,6 +128,7 @@ function setDoc(doc: JSONContent): void {
 
 function onReady(element: HTMLElement): void {
   root.value = element;
+  openEditors.set(props.draftId, element);
   document.execCommand("defaultParagraphSeparator", false, "p");
   element.setAttribute("lang", props.lang);
   element.addEventListener("paste", onPaste, true);
@@ -136,10 +143,6 @@ function onReady(element: HTMLElement): void {
   decorate(element, previews, props.dark);
 }
 
-/**
- * ⌘K is the app's link prompt. ⌘F and ⌘⇧P would open the editor's own find and preview dialogs, which the app does
- * not use: they are kept from it, so ⌘F reaches the browser's find.
- */
 function onShortcut(event: KeyboardEvent): void {
   if (!(event.metaKey || event.ctrlKey) || !root.value) {
     return;
@@ -154,10 +157,6 @@ function onShortcut(event: KeyboardEvent): void {
   }
 }
 
-/**
- * A selected gallery photo holds the focus, so its keys are its own: Delete removes it, ⌥← and ⌥→ move it, and a
- * character or Enter leaves the gallery for the paragraph after it, the character typed there.
- */
 function onKeydown(event: KeyboardEvent): void {
   const element = root.value;
   if (!element) {
@@ -191,12 +190,10 @@ function onKeydown(event: KeyboardEvent): void {
   handleKeydown(element, event);
 }
 
-/** The photo with its caption line, the blocks a selected photo stands for. */
 function withCaption(figure: HTMLElement): Element {
   return captionOf(figure) ?? figure;
 }
 
-/** Typing on a selected photo writes in the paragraph after it, or after its gallery. */
 function leavePhoto(element: HTMLElement, figure: HTMLElement): void {
   if (figure.closest("[data-gallery]")) {
     run(leaveGallery);
@@ -208,7 +205,6 @@ function leavePhoto(element: HTMLElement, figure: HTMLElement): void {
   notify(element);
 }
 
-/** Delete on a selected photo outside a gallery takes it and its caption line, leaving the caret where it stood. */
 function removePhoto(element: HTMLElement, figure: HTMLElement): void {
   const paragraph = document.createElement("p");
   paragraph.append(document.createElement("br"));
@@ -223,7 +219,6 @@ function removePhoto(element: HTMLElement, figure: HTMLElement): void {
   notify(element);
 }
 
-/** An input method starting on a selected photo writes in the paragraph after it. */
 function onCompositionStart(event: CompositionEvent): void {
   const target = event.target as HTMLElement;
   if (target.matches(".is-selected[data-image]") && root.value) {
@@ -231,7 +226,6 @@ function onCompositionStart(event: CompositionEvent): void {
   }
 }
 
-/** Moves the selected gallery photo back (-1) or on (1), or removes it (0). */
 function editPhoto(step: -1 | 0 | 1): void {
   run((root) => (step ? moveGalleryPhoto(root, step) : removeGalleryPhoto(root)));
 }
@@ -257,7 +251,6 @@ function onClick(event: MouseEvent): void {
   refreshTools();
 }
 
-/** Every photo has alt text and a caption, apart; the caption is its title, which the blog draws under it. */
 function photoTool(element: HTMLElement, button: Element): void {
   const figure = button.closest<HTMLElement>("figure[data-image]");
   const img = figure?.querySelector("img");
@@ -281,7 +274,6 @@ function photoTool(element: HTMLElement, button: Element): void {
   redecorate();
 }
 
-/** The controls drawn inside the text — a section's toggle, a photo's tools, a task's box — must not move the caret. */
 function onMousedown(event: MouseEvent): void {
   const element = root.value;
   const target = event.target as Element;
@@ -302,6 +294,17 @@ function onMousedown(event: MouseEvent): void {
     photoTool(element, photoButton);
     return;
   }
+  const tool = target.closest<HTMLElement>(".editor-embed-replace");
+  const replace = tool?.closest<HTMLElement>("[data-embed]");
+  if (tool && replace) {
+    event.preventDefault();
+    if (tool.classList.contains("editor-embed-convert")) {
+      addVideos([{ dropbox: replace.getAttribute("data-id") ?? "" }], null, replace);
+    } else {
+      pickVideo((file) => addVideos([file], null, replace));
+    }
+    return;
+  }
   const task = target.closest<HTMLElement>("li[data-checked]");
   if (task && task === target && event.clientX - task.getBoundingClientRect().left < TASK_BOX_PX) {
     event.preventDefault();
@@ -309,15 +312,59 @@ function onMousedown(event: MouseEvent): void {
   }
 }
 
-function imageFiles(list: FileList | DataTransferItemList | null | undefined): File[] {
+function filesOf(list: FileList | DataTransferItemList | null | undefined, kind: "image/" | "video/"): File[] {
   const files: File[] = [];
   for (const entry of Array.from((list ?? []) as ArrayLike<File | DataTransferItem>)) {
     const file = "getAsFile" in entry ? entry.getAsFile() : entry;
-    if (file?.type.startsWith("image/")) {
+    if (file?.type.startsWith(kind)) {
       files.push(file);
     }
   }
   return files;
+}
+
+function pickVideo(picked: (file: File) => void): void {
+  const input = document.createElement("input");
+  input.type = "file";
+  input.accept = "video/*";
+  input.onchange = () => {
+    const file = input.files?.[0];
+    if (file) {
+      picked(file);
+    }
+  };
+  input.click();
+}
+
+function addVideos(sources: VideoSource[], spot: DropSpot | null = null, replacing: HTMLElement | null = null): void {
+  const element = root.value;
+  if (!element) {
+    return;
+  }
+  const draft = props.draftId;
+  const replaced = replacing?.getAttribute("data-id") ?? "";
+  for (const source of sources) {
+    const put = embedLater(element, spot);
+    videos.add(source, (embed, sent) => {
+      if (sent) {
+        props.onUploaded?.(embed.id, draft);
+      }
+      const here = element.isConnected && props.draftId === draft ? element : openEditors.get(draft);
+      if (!here) {
+        return false;
+      }
+      const old = here === element ? replacing : here.querySelector<HTMLElement>(`[data-embed][data-id="${CSS.escape(replaced)}"]`);
+      if (!replacing) {
+        (here === element ? put : embedLater(here))(embed);
+        return true;
+      }
+      if (!old) {
+        return false;
+      }
+      const fields = { ...Object.fromEntries(["poster", "width", "height"].map((name) => [name, embedField(embed.extra, name)])), types: null };
+      return replaceEmbed(here, old, { ...embed, extra: mergeExtra(old.getAttribute("data-extra") ?? "", fields) });
+    }, draft);
+  }
 }
 
 function addImages(files: File[], spot: DropSpot | null = null): void {
@@ -341,17 +388,18 @@ function onPaste(event: ClipboardEvent): void {
     run((element) => insertDoc(element, own));
     return;
   }
-  const files = imageFiles(event.clipboardData?.items);
-  if (files.length) {
+  const files = filesOf(event.clipboardData?.items, "image/");
+  const clips = filesOf(event.clipboardData?.items, "video/");
+  if (files.length || clips.length) {
     event.preventDefault();
     event.stopImmediatePropagation();
     addImages(files);
+    addVideos(clips);
   } else {
     pasteClipboard(event);
   }
 }
 
-/** Whether a selection takes the whole of a node; one that only ends at its edge, as a triple click does, does not. */
 function holds(range: Range, node: Node): boolean {
   const parent = node.parentNode;
   if (!parent) {
@@ -361,10 +409,6 @@ function holds(range: Range, node: Node): boolean {
   return range.comparePoint(parent, index) === 0 && range.comparePoint(parent, index + 1) === 0;
 }
 
-/**
- * A copy or a cut that takes a photo, a gallery or a player is written as the editor's own blocks, so pasting it here
- * brings it back whole: the selected photo, or a selection running over one. Anything else is the browser's.
- */
 function onClipboard(event: ClipboardEvent): void {
   const element = root.value;
   if (!element || !event.clipboardData) {
@@ -375,7 +419,6 @@ function onClipboard(event: ClipboardEvent): void {
   const photo = figure && document.activeElement === figure ? figure : null;
   const media = !photo && range && !range.collapsed && [...element.querySelectorAll(MEDIA)].some((node) => holds(range, node));
   if (!photo && !media) {
-    // The selection's text, which the browser writes into the copy, lines and all.
     rememberCopy(document.getSelection()?.toString() ?? "");
     return;
   }
@@ -397,7 +440,6 @@ function onClipboard(event: ClipboardEvent): void {
   }
 }
 
-/** A photo, or a gallery by its label, is dragged to a new place in the post. */
 function onDragStart(event: DragEvent): void {
   const element = root.value;
   const target = event.target instanceof Element ? event.target : null;
@@ -432,7 +474,6 @@ function endDrag(): void {
   dropMark.hidden = true;
 }
 
-/** A drop lands where the line showed it: a dragged photo or gallery is moved, photos from the desktop are added. */
 function onDrop(event: DragEvent): void {
   const element = root.value;
   if (!element) {
@@ -449,14 +490,16 @@ function onDrop(event: DragEvent): void {
     }
     return;
   }
-  const files = imageFiles(event.dataTransfer?.files);
-  if (!files.length) {
+  const files = filesOf(event.dataTransfer?.files, "image/");
+  const clips = filesOf(event.dataTransfer?.files, "video/");
+  if (!files.length && !clips.length) {
     return;
   }
   event.preventDefault();
   event.stopImmediatePropagation();
   selectFigure(element, null);
   addImages(files, spot);
+  addVideos(clips, spot);
 }
 
 function run(command: (element: HTMLElement) => unknown): void {
@@ -484,6 +527,9 @@ onMounted(() => {
   document.body.append(dropMark);
 });
 onBeforeUnmount(() => {
+  if (openEditors.get(props.draftId) === root.value) {
+    openEditors.delete(props.draftId);
+  }
   document.removeEventListener("selectionchange", refreshTools);
   document.removeEventListener("copy", onClipboard);
   document.removeEventListener("cut", onClipboard);
@@ -506,6 +552,10 @@ defineExpose({
 });
 </script>
 
+<script lang="ts">
+const openEditors = new Map<string, HTMLElement>();
+</script>
+
 <template>
   <div class="editor-host">
     <Editor
@@ -522,6 +572,7 @@ defineExpose({
   </div>
   <SelectionBubble :root="root" :tools="tools" :run="run" />
   <Teleport v-if="toolbar" defer to="#dock-tools">
-    <Toolbar :tools="tools" :run="run" @images="addImages" />
+    <Toolbar :tools="tools" :run="run" @images="addImages" @videos="addVideos" />
   </Teleport>
+
 </template>

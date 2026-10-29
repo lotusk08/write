@@ -1,6 +1,5 @@
 import { decoded } from "../../shared/paths.ts";
 
-/** A post's file in the blog's repository, from a path or a link to it on GitHub; null when it names no Markdown file. */
 export function postPathFromLink(value: string): string | null {
   const trimmed = value.trim();
   if (!trimmed) {

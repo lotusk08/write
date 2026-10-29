@@ -3,6 +3,7 @@ import { writtenPin } from "../../shared/pin.ts";
 import type { PostMeta } from "../../shared/types.ts";
 import { ATTRIBUTES, NOTE_CLASSES, OLD_ATTRIBUTES, embedTag, isNoteType, pandocAttributes } from "../editor/blog.ts";
 import { ENTITY, autolinkFor, bareLinks, escapeChars } from "./inline.ts";
+import { isPlayerLine } from "./kramdown.ts";
 import { topicSlug } from "./topics.ts";
 
 export interface SerializeOptions {
@@ -43,16 +44,11 @@ function marksOf(node: JSONContent): Mark[] {
   return [];
 }
 
-/**
- * Whether text opens with what reads as an entity. A name markdown-it does not know is escaped too: the blog shows
- * `\&name;` as written, and the writer needs no table of the names, which load with the reader.
- */
 function entityAt(text: string): boolean {
   return ENTITY.test(text);
 }
 
 const IAL = new RegExp(`^${ATTRIBUTES}$`);
-// kramdown's older form too, which the app reads as the list it holds: written as text, it stays text.
 const ATTRIBUTE_LIST = new RegExp(`${ATTRIBUTES}|${OLD_ATTRIBUTES}`, "g");
 
 function escapePlain(text: string, follower = ""): string {
@@ -63,7 +59,6 @@ function escapePlain(text: string, follower = ""): string {
         ? part
         : part
             .replace(/\\(?=[!-/:-@[-`{-~])/g, "\\\\")
-            // Text that reads as an attribute list would give its attributes to the code, link or photo before it.
             .replace(ATTRIBUTE_LIST, (list) => `\\${list}`)
             .replace(/([`*_[\]|])/g, "\\$1")
             .replace(/&(?=#[xX]?[0-9a-fA-F]+;|[a-zA-Z][a-zA-Z0-9]*;)/g, (amp, at, whole) =>
@@ -77,7 +72,6 @@ function escapePlain(text: string, follower = ""): string {
     .join("");
 }
 
-// A note's mark opening a line with a colon after it, `[^1]:`, would start the note's text instead.
 const ANY_LINE = new RegExp(String.raw`^ {0,3}(?:(?:#{1,6}|[-+])(?=[ \t]|$)|>|${ATTRIBUTES}|-+[ \t]*$|\[\^[^\]\s]+\]:)`);
 const FIRST_LINE = /^ {0,3}\d{1,9}[.)](?=[ \t]|$)/;
 const LATER_LINE = /^ {0,3}(?:\d{1,9}[.)](?=[ \t]|$)|=+[ \t]*$)/;
@@ -181,19 +175,16 @@ function balanced(href: string): boolean {
   return depth === 0 || /[<>\n]/.test(href);
 }
 
-/** An address kept to its line: a line end in it would close the link and leave the rest to be read as Markdown of its own. */
 function oneLine(address: string): string {
   return address.replace(/[\r\n]/g, encodeURIComponent);
 }
 
 
-/** An attribute list as it is read back, `{.x}` (kramdown's `{: .x}` of an older draft as that), or nothing: anything else would be written as text of the post. */
 function ialOf(value: unknown): string {
   const ial = value ? pandocAttributes(String(value)) : "";
   return IAL.test(ial) ? ial : "";
 }
 
-/** A footnote's label as it is read back, with no space or closing bracket in it. */
 function footnoteLabel(value: unknown): string {
   return String(value ?? "").replace(/[\]\s]/g, "");
 }
@@ -333,7 +324,6 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions, lin
   return rendered
     .map((piece, at) => (bangs.has(at) && rendered[at + 1]?.startsWith("[") ? `${piece.slice(0, -1)}\\!` : piece))
     .map((piece, at, pieces) =>
-      // A backslash ending one piece would escape what the next opens with, a mark or a line end: `C:\**Users**`.
       /(?<!\\)(?:\\\\)*\\$/.test(piece) && /^[!-/:-@[-`{-~\n]/.test(pieces[at + 1] ?? "") ? `${piece}\\` : piece,
     )
     .join("");
@@ -361,11 +351,6 @@ function galleryBlock(node: JSONContent, options: SerializeOptions): string {
   return fenced("gallery", photos.map((photo) => image(photo, options)).join("\n"));
 }
 
-/**
- * Whether a callout's first block needs a line of its own under the callout's name: the name is a line of text, which
- * `---` or `===` under it would make a heading, and which HTML, a link's definition or a list counting from other than
- * 1 would only go on.
- */
 function opensOwnLine(first: JSONContent | undefined, inner: string): boolean {
   return (
     /^ {0,3}(?:=+|-+)[ \t]*$/.test(inner.split("\n")[0]) ||
@@ -375,8 +360,14 @@ function opensOwnLine(first: JSONContent | undefined, inner: string): boolean {
   );
 }
 
-/** A numbered list counting from anything but 1 cannot start under a paragraph: markdown reads it as more of the paragraph. */
+function holdsPlayer(node: JSONContent | undefined): boolean {
+  return node?.type === "embed" || (node?.type === "rawBlock" && isPlayerLine((node.content ?? []).map((child) => child.text ?? "").join("")));
+}
+
 function canHug(node: JSONContent, previous: JSONContent | undefined): boolean {
+  if (node.type === "paragraph") {
+    return node.attrs?.joinPrevious === "player" ? holdsPlayer(previous) : previous?.type === "image" || previous?.type === "gallery";
+  }
   return !(node.type === "orderedList" && Number(node.attrs?.start ?? 1) !== 1 && previous?.type === "paragraph");
 }
 
@@ -388,7 +379,6 @@ function indentedBody(
   return (children ?? []).reduce((text, child, position) => {
     const rendered = blocks([child], options).join("\n\n");
     const sticks = Boolean(child.attrs?.joinPrevious && child.attrs?.sameLine);
-    // A paragraph that goes on in lines not indented to the item's text is written so, its first line indented.
     const piece = child.attrs?.lazy
       ? position === 0 || sticks
         ? rendered
@@ -493,14 +483,12 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         const content = withoutEdgeBreaks(node.content, before, after);
         const caption = before && nodes[index - 1]?.type === "image";
         const written = inline(caption ? captionContent(content) : content, options);
-        // A paragraph of no-break spaces alone, a spacer, is written as the entity: the character reads back as a blank line.
         const spacer = written.includes("\u00a0") && !written.trim();
         out.push(spacer ? "&nbsp;" : escapeLineStarts(written, !(before && node.attrs?.sameLine)));
         break;
       }
       case "heading": {
         const level = Math.min(Math.max(Number(node.attrs?.level ?? 2), 1), 6);
-        // A run of `#` closing the text after a space would be read as the heading's optional closing run, and dropped.
         const text = inline(node.content, options).replace(/(^|[ \t])(#+)$/, (_, space: string, run: string) => space + run.replace(/#/g, "\\#"));
         out.push(
           level < 3 && text.includes("\n")
@@ -515,7 +503,6 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
           .split("\n")
           .map((line) => (line ? `> ${line}` : ">"))
           .join("\n");
-        // A callout is named on its quote's first line, as GitHub writes its alerts, by the blog's name for it.
         const name = node.attrs?.note;
         const note = isNoteType(name) ? `> [!${NOTE_CLASSES[name]}]\n${opensOwnLine(node.content?.[0], inner) ? ">\n" : ""}` : "";
         out.push(note + quoted);
@@ -540,7 +527,7 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         out.push(galleryBlock(node, options));
         break;
       case "embed":
-        out.push(embedTag(String(node.attrs?.platform ?? "youtube"), String(node.attrs?.id ?? "")));
+        out.push(embedTag(String(node.attrs?.platform ?? "youtube"), String(node.attrs?.id ?? ""), String(node.attrs?.extra ?? "")));
         break;
       case "rawBlock":
         out.push((node.content ?? []).map((child) => child.text ?? "").join(""));
@@ -678,7 +665,6 @@ function yamlList(key: string, values: string[]): string[] {
   return [`${key}:`, ...values.map((value) => `  - ${yamlString(value)}`)];
 }
 
-/** A field kept raw, with the lines under it, taken out: a `moments` the toggle has since set must not be written twice. */
 function withoutKey(lines: string[], key: string): string[] {
   let skipping = false;
   return lines.filter((line) => {
@@ -689,10 +675,6 @@ function withoutKey(lines: string[], key: string): string[] {
   });
 }
 
-/**
- * A date the blog reads (`2026-10-11`, `2026-10-11 09:00 +0700`), written plain as the posts write it: the blog reads
- * its YAML with the core schema, where none of these is a timestamp, so quoting one only moved its line.
- */
 const POST_DATE = /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?(?:\.\d+)?)?(?: ?(?:Z|[+-]\d{2}:?\d{2}))?$/;
 
 export function buildFrontMatter(meta: PostMeta): string {

@@ -28,6 +28,7 @@
     "src/**/*.test.ts",
     "src/editor/**/*.ts",
     "src/lib/**/*.ts",
+    "src/components/use*.ts",
     "shared"
   ]
 }

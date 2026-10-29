@@ -3,42 +3,36 @@ import type { MarkdownIt, StateBlock, StateInline, Token } from "markdown-it";
 import deflist from "markdown-it-deflist";
 import footnote from "markdown-it-footnote";
 import type { JSONContent } from "../editor/doc.ts";
-import { ATTRIBUTES, EMBED_LIQUID, EMBED_TAG, embedPlatform, noteOfIal } from "../editor/blog.ts";
+import { ATTRIBUTES, EMBED_LIQUID, EMBED_TAG, embedPlatform, noteOfIal, unquoted } from "../editor/blog.ts";
 import {
-  IAL,
-  QUOTE_MARKS,
-  type ReadEnv,
   alerts,
   blockAttrs,
   columns,
+  isPlayerLine,
+  IAL,
   lazyQuotes,
   meta,
+  playerLine,
+  QUOTE_MARKS,
   setDefinitionsAside,
   setMeta,
   simpleTables,
   spacedLinks,
   taskItems,
+  type ReadEnv,
   withDefinitions,
 } from "./kramdown.ts";
 import { inlineContent, INLINE_IAL, unbracketed } from "./marks.ts";
 import { upgradeSyntax } from "./upgrade.ts";
 
-/*
- * Markdown read as the blog reads it: markdown-it with the blog's options and plugins and the rules of its own that
- * shape a post (`kramdown.ts`), then made the editor's document. The rules that only draw a post (icons, photo sizes,
- * smart quotes and dashes) are left out: the document keeps what was written.
- */
-
 type BlockRule = (state: StateBlock, startLine: number, endLine: number, silent: boolean) => boolean;
 type InlineRule = (state: StateInline, silent: boolean) => boolean;
 
-/** A block rule changed by `wrap`, keeping the rules it may end. */
 function wrapBlockRule(md: MarkdownIt, name: string, wrap: (rule: BlockRule) => BlockRule): void {
   const found = md.block.ruler.__rules__.find((rule) => rule.name === name)!;
   md.block.ruler.at(name, wrap(found.fn), { alt: found.alt });
 }
 
-/** The lines a block rule read, as written in the block holding them, kept with the token it made. */
 const keepLines =
   (rule: BlockRule): BlockRule =>
   (state, startLine, endLine, silent) => {
@@ -52,10 +46,8 @@ const keepLines =
     return true;
   };
 
-/** The inline rules whose tokens are kept as written, or tell what was written right after them. */
 const PLACED = new Set(["backticks", "strikethrough", "emphasis", "link", "image", "autolink", "footnote_inline"]);
 
-/** Where in its text each token an inline rule made was written, so a link or photo can be kept as written. */
 const keepPlace =
   (rule: InlineRule): InlineRule =>
   (state, silent) => {
@@ -78,7 +70,6 @@ function blogMarkdown(): MarkdownIt {
   const md = markdownit({ html: true, linkify: true, breaks: true });
   md.use(footnote);
   md.use(deflist);
-  // Definitions stay where they were written; the blog gathers them at the end only to draw them.
   md.core.ruler.disable("footnote_tail");
   md.core.ruler.at("strip_references", setDefinitionsAside);
   md.core.ruler.before("block", "kramdown_lazy_quotes", lazyQuotes);
@@ -87,8 +78,8 @@ function blogMarkdown(): MarkdownIt {
   md.core.ruler.after("kramdown_block_attrs", "kramdown_simple_tables", simpleTables);
   md.core.ruler.after("kramdown_simple_tables", "spaced_links", spacedLinks);
   md.core.ruler.after("spaced_links", "task_items", taskItems);
+  md.block.ruler.before("html_block", "player_line", playerLine, { alt: ["paragraph", "reference", "blockquote"] });
 
-  // A link's address and a photo's as written: the editor writes them back as they were.
   const destination = md.helpers.parseLinkDestination;
   md.helpers.parseLinkDestination = (str, start, max) => {
     const found = destination(str, start, max);
@@ -101,7 +92,6 @@ function blogMarkdown(): MarkdownIt {
 
   wrapBlockRule(md, "reference", keepLines);
   wrapBlockRule(md, "deflist", keepLines);
-  // The spaces opening a paragraph's next line are text of it, as written; the blog draws them as the space they are.
   const newline = md.inline.ruler.__rules__.find((rule) => rule.name === "newline")!.fn;
   md.inline.ruler.at("newline", (state, silent) => {
     const at = state.pos;
@@ -145,7 +135,6 @@ function blockTree(tokens: Token[]): Block[] {
   return root;
 }
 
-/** Blocks that may sit directly under the line before them, as a list under its lead-in does; a paragraph never is one. */
 const HUGGING = new Set(["bulletList", "orderedList", "taskList", "blockquote", "codeBlock", "table", "heading", "gallery"]);
 
 const MATH = /^\s*\$\$\s*$/;
@@ -156,25 +145,22 @@ const SUMMARY = /<summary[^>]*>([\s\S]*?)<\/summary>/i;
 const BREAKS = new Set(["softbreak", "hardbreak"]);
 const GALLERY_IAL = new RegExp(`^${ATTRIBUTES}$`);
 
-/**
- * A block's attribute lists, written above it or under it. The editor holds one for each block: given more, it holds
- * them as one list, under the block, as the blog joins them.
- */
 function withAttributes(node: JSONContent, above?: string, below: { ial: string }[] = []): JSONContent {
   const lists = [...(above ? [above] : []), ...below.map((entry) => entry.ial)];
   const ial = lists.length > 1 ? `{${lists.map((list) => list.slice(1, -1).trim()).join(" ")}}` : lists[0];
   return ial ? { ...node, attrs: { ...node.attrs, blockIal: ial, ...(below.length ? {} : { ialAbove: true }) } } : node;
 }
 
-/** A player's address, read as HTML, the way `embedTag` writes it. */
 function playerId(written: string): string {
-  return written.replace(/&quot;/g, '"').replace(/&amp;/g, "&");
+  return unquoted(written);
+}
+
+function extraOf(tag: RegExpExecArray): { extra?: string } {
+  return tag[4] ? { extra: tag[4] } : {};
 }
 
 interface Container {
-  /** The column a line of an item or footnote starts at; a line starting before it was taken lazily. */
   indent: number | null;
-  /** The line the item or footnote opens on, whose own text starts after its marker. */
   opener: number;
   quoted: boolean;
 }
@@ -194,7 +180,6 @@ class Reader {
     this.inserted = env.inserted ?? new Set();
   }
 
-  /** Whether the line written above `line` holds anything, quote marks aside. */
   touches(line: number): boolean {
     let above = line - 1;
     while (this.inserted.has(above)) {
@@ -209,9 +194,11 @@ class Reader {
 
   blocks(children: Block[], container: Container): JSONContent[] {
     const out: JSONContent[] = [];
+    let before: Token | null = null;
     for (let i = 0; i < children.length; i++) {
       const block = children[i];
       const opened = out.length;
+      const underPlayer = before?.type === "html_block" && isPlayerLine(before.content);
       const { open } = block;
       if (open.type === "html_block" && DETAILS.test(open.content)) {
         i = this.details(children, i, container, out);
@@ -229,17 +216,17 @@ class Reader {
         first &&
         opened > 0 &&
         open.map &&
-        HUGGING.has(first.type ?? "") &&
+        (HUGGING.has(first.type ?? "") || (underPlayer && first.type === "paragraph")) &&
         !first.attrs?.lazy &&
         this.touches(open.map[0])
       ) {
-        first.attrs = { ...first.attrs, joinPrevious: true };
+        first.attrs = { ...first.attrs, joinPrevious: first.type === "paragraph" ? "player" : true };
       }
+      before = children[i].open;
     }
     return rowAttributes(out);
   }
 
-  /** The blocks of a container, a paragraph when it has none. */
   content(children: Block[], container: Container): JSONContent[] {
     const blocks = this.blocks(children, container);
     return blocks.length ? blocks : [{ type: "paragraph" }];
@@ -275,7 +262,6 @@ class Reader {
         ];
       }
       case "blockquote_open": {
-        // A callout's class under its quote, as the posts wrote it before `> [!info]`, names the callout.
         const below = attributes.below ?? [];
         const named = !attributes.note && below.length === 1 ? noteOfIal(below[0].ial) : null;
         const note = attributes.note ?? named;
@@ -318,7 +304,6 @@ class Reader {
     const content = inline?.content ?? "";
     const map = block.open.map;
     const lines = content.split("\n");
-    // A display formula is kept as written; the blog draws it as the text it is.
     if (lines.length > 1 && MATH.test(lines[0]) && MATH.test(lines[lines.length - 1])) {
       return [raw(content)];
     }
@@ -332,12 +317,11 @@ class Reader {
           : { type: "rawBlock", attrs: joins, content: [{ type: "text", text: content.trim() }] },
       ];
     }
-    // A player on the paragraph's last line is a block of its own, written under the text as the editor writes it.
     const children = inline?.children ?? [];
     const last = children.at(-1);
     const player = last?.type === "html_inline" && BREAKS.has(children.at(-2)?.type ?? "") ? EMBED_TAG.exec(last.content) : null;
     const platform = player ? embedPlatform(player[1]) : null;
-    const embed: JSONContent[] = player && platform ? [{ type: "embed", attrs: { platform, id: playerId(player[3]), joinPrevious: true } }] : [];
+    const embed: JSONContent[] = player && platform ? [{ type: "embed", attrs: { platform, id: playerId(player[3]), ...extraOf(player), joinPrevious: true } }] : [];
     const text = embed.length ? inlineContent(content, children.slice(0, -2), true) : this.inline(inline, true);
     if (!embed.length && map) {
       keepTrailingSpaces(text, this.source[map[1] - 1] ?? "");
@@ -346,7 +330,6 @@ class Reader {
     return [...(this.lazy(map, container) ? written.map((node) => ({ ...node, attrs: { ...node.attrs, lazy: true } })) : written), ...embed];
   }
 
-  /** Whether a paragraph in an item or footnote goes on in a line not indented to the item's text. */
   lazy(map: [number, number] | null, container: Container): boolean {
     if (container.indent === null || !map) {
       return false;
@@ -363,16 +346,11 @@ class Reader {
     return false;
   }
 
-  /**
-   * A list as the editor holds it: one list for each run of items written with no blank line between them, written
-   * back the same way, so a loose list stays loose on the blog.
-   */
   lists(block: Block, container: Container): JSONContent[] {
     const runs: { items: Block[]; from: number; hugs: boolean }[] = [];
     for (const item of block.children) {
       const at = item.open.map?.[0] ?? 0;
       const gap = !this.touches(at);
-      // An attribute list written between two items ends the list above it; the next one is written under it.
       const cut = this.inserted.has(at - 1);
       if (!runs.length || gap || cut) {
         runs.push({ items: [], from: at, hugs: runs.length > 0 && !gap });
@@ -380,7 +358,6 @@ class Reader {
       runs[runs.length - 1].items.push(item);
     }
     const { above, below = [] } = meta(block.open);
-    // Each list under the items goes with the run of them written above it.
     const under = (entry: { line: number }) => runs.findLastIndex((run) => run.from <= entry.line);
     return runs.map((run, index) => {
       const lists = below.filter((entry) => under(entry) === index);
@@ -447,19 +424,17 @@ class Reader {
       return { type: "rawBlock", attrs: joins, content: [{ type: "text", text: content.trim() }] };
     }
     if (component && platform) {
-      return { type: "embed", attrs: { platform, id: playerId(component[3]), ...joins } };
+      return { type: "embed", attrs: { platform, id: playerId(component[3]), ...extraOf(component), ...joins } };
     }
     return raw(content);
   }
 
-  /** `<details>` with its `<summary>`, the blocks up to its `</details>` its body; the last block it took is returned. */
   details(children: Block[], at: number, container: Container, out: JSONContent[]): number {
     const opening = children[at].open.content.replace(/\n$/, "");
     const open = !/\bopen\s*=?\s*"?(false)"?/.test(opening) && /\bopen\b/.test(opening);
     const tail = opening.replace(DETAILS, "");
     let summary = SUMMARY.exec(tail)?.[1]?.trim() ?? "";
     const rest = tail.replace(SUMMARY, "");
-    // Written in one block of HTML, its body is read as Markdown, as the editor's own sections are.
     if (DETAILS_END.test(rest)) {
       out.push(collapsible(open, summary, readBlocks(rest.slice(0, rest.search(DETAILS_END)))));
       return at;
@@ -467,7 +442,6 @@ class Reader {
     let depth = 1;
     let last = children.length - 1;
     let inner: Block[] | null = null;
-    // HTML written on the lines straight under `</details>` goes on as HTML, as the blog reads it.
     let after = "";
     for (let index = at + 1; index < children.length && !inner; index++) {
       const { open: token } = children[index];
@@ -479,7 +453,6 @@ class Reader {
         last = index;
         after = token.content.replace(/^\s*<\/details>[^\n]*\n?/i, "").replace(/\n+$/, "");
       } else if (token.type === "paragraph_open" && depth === 1 && closing?.type === "html_inline" && /^<\/details>$/i.test(closing.content)) {
-        // A `</details>` ending the section's last line, as `Text.</details>`, is HTML in that paragraph.
         children[index].children[0].open.children!.pop();
         inner = children.slice(at + 1, index + 1);
         last = index;
@@ -526,10 +499,6 @@ class Reader {
   }
 }
 
-/**
- * The spaces ending a paragraph's last line, which markdown-it drops, kept at the end of its text: a post written again
- * is changed only where it was edited.
- */
 function keepTrailingSpaces(text: JSONContent[], line: string): void {
   const tail = IAL.test(line) ? "" : (/[ \t]+$/.exec(line)?.[0] ?? "");
   const end = text.at(-1);
@@ -568,7 +537,6 @@ function summaryText(html: string): string {
   return markdownIt().utils.unescapeAll(html.replace(/<[^>]*>/g, "").replace(/\\/g, "\\\\"));
 }
 
-/** A `<br>` as the writer puts one in a heading from H3 down, which has no line of its own to break onto. */
 function isBreakTag(node: JSONContent): boolean {
   return node.type === "text" && node.text === "<br>" && node.marks?.length === 1 && node.marks[0].type === "rawInline";
 }
@@ -584,7 +552,6 @@ function trimRun(nodes: JSONContent[]): JSONContent[] {
   return out;
 }
 
-/** A paragraph's text with each photo in it a block of its own, the text around it paragraphs joined to it. */
 function blocksFromInline(nodes: JSONContent[]): JSONContent[] {
   if (!nodes.some((node) => node.type === "image")) {
     const only = trimRun(nodes);
@@ -642,7 +609,6 @@ function blocksFromInline(nodes: JSONContent[]): JSONContent[] {
   );
 }
 
-/** A row of photos takes the attribute list written after its last photo. */
 function rowAttributes(blocks: JSONContent[]): JSONContent[] {
   for (let i = 0; i < blocks.length; i++) {
     if (blocks[i].type !== "image" || !blocks[i].attrs?.blockIal || blocks[i].attrs?.ialAbove) {

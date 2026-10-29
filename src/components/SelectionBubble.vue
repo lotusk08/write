@@ -18,7 +18,6 @@ const EDGE = 8;
 const bubble = ref<HTMLDivElement | null>(null);
 const shown = ref(false);
 
-/** Over selected text only: over a selected photo or gallery there is nothing to format. */
 function selectedText(): Range | null {
   const root = props.root;
   const range = root ? selectionIn(root) : null;

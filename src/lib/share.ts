@@ -4,22 +4,11 @@ import { docToHtml, htmlToDoc } from "../editor/bridge.ts";
 import type { JSONContent } from "../editor/doc.ts";
 import { CARET_COLORS, participantColor, participantName, type SharePeer } from "./participants.ts";
 
-/**
- * A shared draft is one Y.Text holding the body as canonical HTML — the
- * draft's JSON rendered by `docToHtml` with every address as written, so what
- * travels carries no device's blob URLs or site prefix. Local edits go in as
- * the smallest splice between the room's text as last seen and the new one,
- * so two people typing in different places merge; a remote change is read
- * back to a draft and handed to the editor, which keeps the caret where it
- * was.
- */
-
 export interface ShareSession {
   token: string;
   doc: Y.Doc;
   provider: WebsocketProvider;
   text: Y.Text;
-  /** The room's text as this tab last saw it, which local edits are measured against. */
   base: string;
 }
 
@@ -75,7 +64,6 @@ interface Splice {
   insert: string;
 }
 
-/** The smallest splice that turns `from` into `to`, in `from`'s positions. */
 function splice(from: string, to: string): Splice | null {
   if (from === to) {
     return null;
@@ -92,7 +80,6 @@ function splice(from: string, to: string): Splice | null {
   return { start, end: from.length - tail, insert: to.slice(start, to.length - tail) };
 }
 
-/** Where a position in the text before a remote change sits after it. */
 function mapThrough(delta: Y.YTextEvent["delta"], position: number): number {
   let before = 0;
   let after = 0;
@@ -122,11 +109,6 @@ function applySplice(session: ShareSession, change: Splice): void {
   }, LOCAL);
 }
 
-/**
- * Writes the draft into the room as the smallest splice from what this tab
- * last had of the room (`base`), so a change made since by someone else is
- * not undone by an older copy.
- */
 export function pushDoc(session: ShareSession, doc: JSONContent): void {
   const change = splice(session.base, canonicalHtml(doc));
   if (change) {
@@ -135,11 +117,6 @@ export function pushDoc(session: ShareSession, doc: JSONContent): void {
   session.base = session.text.toString();
 }
 
-/**
- * Calls back with the room's draft whenever someone else changes it. A local
- * edit the editor has not sent yet (`unsent`) goes in first, moved through the
- * remote change, so neither side's keystrokes are lost to the other's.
- */
 export function onRemoteChange(
   session: ShareSession,
   unsent: () => JSONContent | null,

@@ -120,13 +120,13 @@ export interface RepoFile {
   sha: string;
 }
 
-async function graphql<T>(token: string, repo: string, query: string, variables: Record<string, string>): Promise<T> {
+async function graphql<T>(token: string, repo: string, query: string, variables: Record<string, string>, strict = false): Promise<T> {
   const [owner, name] = repo.split("/");
   const result = await gh<{ data?: { repository: T }; errors?: { message: string }[] }>(token, "/graphql", {
     method: "POST",
     body: { query: `query($owner: String!, $name: String!, ${Object.keys(variables).map((key) => `$${key}: String!`).join(", ")}) { repository(owner: $owner, name: $name) { ${query} } }`, variables: { owner, name, ...variables } },
   });
-  if (!result.data) {
+  if (!result.data || (strict && result.errors?.length)) {
     throw new GitHubError(result.errors?.[0]?.message ?? "GitHub did not answer.", 502);
   }
   return result.data.repository;
@@ -142,23 +142,48 @@ export async function listFiles(token: string, repo: string, ref: string, dir: s
   return (found.files?.entries ?? []).filter((entry) => entry.type === "blob").map(({ name, oid }) => ({ name, sha: oid }));
 }
 
+interface TextEntry {
+  name: string;
+  object: { text?: string | null; isTruncated?: boolean; entries?: TextEntry[] };
+}
+
+function entryFields(depth: number): string {
+  return `entries { name object { ... on Blob { text isTruncated }${depth > 1 ? ` ... on Tree { ${entryFields(depth - 1)} }` : ""} } }`;
+}
+
+const truncatedIn = (entries: TextEntry[] = []): boolean => entries.some((entry) => entry.object.isTruncated || truncatedIn(entry.object.entries));
+
+function textsIn(dir: string, entries: TextEntry[] = []): { path: string; text: string }[] {
+  return entries.flatMap((entry) =>
+    typeof entry.object.text === "string"
+      ? [{ path: `${dir}/${entry.name}`, text: entry.object.text }]
+      : textsIn(`${dir}/${entry.name}`, entry.object.entries),
+  );
+}
+
 export async function readTexts(
   token: string,
   repo: string,
   branch: string,
   dirs: string[],
+  depth = 1,
+  required: string[] = [],
 ): Promise<{ path: string; text: string }[]> {
-  const found = await graphql<Record<string, { entries: { name: string; object: { text?: string | null } }[] } | null>>(
+  const found = await graphql<Record<string, { entries: TextEntry[] } | null>>(
     token,
     repo,
-    `${dirs.map((_, index) => `d${index}: object(expression: $d${index}) { ... on Tree { entries { name object { ... on Blob { text } } } } }`).join(" ")}`,
+    `${dirs.map((_, index) => `d${index}: object(expression: $d${index}) { ... on Tree { ${entryFields(depth)} } }`).join(" ")}`,
     Object.fromEntries(dirs.map((dir, index) => [`d${index}`, `${branch}:${dir}`])),
+    required.length > 0,
   );
-  return dirs.flatMap((dir, index) =>
-    (found[`d${index}`]?.entries ?? []).flatMap((entry) =>
-      typeof entry.object.text === "string" ? [{ path: `${dir}/${entry.name}`, text: entry.object.text }] : [],
-    ),
-  );
+  const missing = dirs.filter((dir, index) => required.includes(dir) && !found[`d${index}`]);
+  if (missing.length) {
+    throw new Error(`${missing.join(", ")} is not on the ${branch} branch of ${repo}.`);
+  }
+  if (required.length && dirs.some((_, index) => truncatedIn(found[`d${index}`]?.entries))) {
+    throw new Error("A file on the site is too large to read whole, so no video is taken as unused.");
+  }
+  return dirs.flatMap((dir, index) => textsIn(dir, found[`d${index}`]?.entries));
 }
 
 export async function createBlob(token: string, repo: string, contentBase64: string): Promise<string> {

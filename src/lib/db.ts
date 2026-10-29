@@ -17,8 +17,8 @@ export interface Draft {
   shareToken?: string;
   shareOwner?: string | boolean;
   shareSeed?: Uint8Array;
-  /** The Markdown last typed in the source view or opened from the blog, shown again while the post reads the same. */
   sourceText?: SourceText;
+  videos?: string[];
 }
 
 export interface StoredImage {
@@ -69,7 +69,6 @@ async function tx<T>(
   return new Promise<T>((resolve, reject) => {
     const transaction = db.transaction(store, mode);
     const request = run(transaction.objectStore(store));
-    // Done once the transaction commits, not when its request succeeds: a write could still be lost to a page left then.
     transaction.oncomplete = () => resolve(request.result);
     request.onerror = () => reject(request.error);
     transaction.onabort = () => reject(transaction.error ?? request.error);
@@ -117,7 +116,6 @@ const SWEEP_AGE_MS = 24 * 60 * 60 * 1000;
 const DISPLAY_WIDTH = 1600;
 const DISPLAYABLE = /^image\/(jpeg|png|webp)$/;
 
-/** Every stored photo a draft points at, in its body, cover or anywhere else it keeps a `local:` address. */
 export function localIdsIn(drafts: Draft[]): Set<string> {
   return new Set(drafts.flatMap((draft) => [...JSON.stringify([draft.doc, draft.meta]).matchAll(LOCAL_ID)].map((match) => match[1])));
 }
@@ -135,10 +133,6 @@ async function forgetImages(ids: string[]): Promise<void> {
   }
 }
 
-/**
- * Removes stored photos no draft points at any more — a publish repoints its photos to the site, outside the undo
- * history — once a day has passed since they were added, so a photo another open tab can still bring back by undo stays.
- */
 async function sweepImages(now = Date.now()): Promise<void> {
   const kept = localIdsIn(await draftStore.all());
   const stale = (await imageStore.all()).filter((image) => !kept.has(image.id) && now - image.addedAt > SWEEP_AGE_MS);
@@ -196,10 +190,6 @@ async function displayCopy(blob: Blob): Promise<Blob | null> {
   }
 }
 
-/**
- * What the editor shows for a stored photo: a copy 1600px wide, drawn once and kept beside the original, so a
- * gallery of phone originals is not decoded at full size. The original stays untouched for the upload.
- */
 export function resolveDisplaySrc(src: string): Promise<string | null> {
   const id = localId(src);
   let shown = displays.get(id);
@@ -222,7 +212,6 @@ export function resolveDisplaySrc(src: string): Promise<string | null> {
   return shown;
 }
 
-/** Lets go of the shown copies, except those still on the page. */
 export function releaseDisplays(inUse: Set<string>): void {
   for (const [id, shown] of displays) {
     if (!inUse.has(id)) {
@@ -262,10 +251,6 @@ const SNAPSHOT = "write:unsaved:";
 
 type Snapshot = Partial<Pick<Draft, "title" | "slug" | "doc" | "meta">> & { at: number };
 
-/**
- * A draft's last edits, written to localStorage at once when the page is left: WebKit drops an IndexedDB write still
- * running when the page unloads, and lost what was typed in the last moment before a reload.
- */
 export function keepSnapshot(id: string, patch: Partial<Draft>, at = Date.now()): void {
   const { title, slug, doc, meta } = patch;
   if (doc === undefined && meta === undefined && title === undefined && slug === undefined) {
@@ -286,7 +271,6 @@ function forget(key: string): void {
   }
 }
 
-/** Folds every snapshot newer than its stored draft back into the store, then forgets them all. */
 export async function restoreSnapshots(drafts: Draft[], put = draftStore.put): Promise<Draft[]> {
   let keys: string[];
   try {

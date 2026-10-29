@@ -102,7 +102,6 @@ describe("withoutLocation", () => {
   const segment = (marker: number, body: number[]) => [0xff, marker, ...u16(body.length + 2), ...body];
   const latitude = [0, 0, 0, 21, 0, 0, 0, 1, 0, 0, 0, 2, 0, 0, 0, 1, 0, 0, 0, 3, 0, 0, 0, 1];
 
-  /** A big-endian Exif block: orientation 6, and a GPS directory with a latitude of 21° 2′ 3″ N. */
   function exif(): number[] {
     const ifd0 = [...u16(2), ...u16(0x0112), ...u16(3), ...u32(1), ...u16(6), 0, 0, ...u16(0x8825), ...u16(4), ...u32(1), ...u32(38), ...u32(0)];
     const gps = [...u16(2), ...u16(1), ...u16(2), ...u32(2), ...text("N"), 0, 0, 0, ...u16(2), ...u16(5), ...u32(3), ...u32(68), ...u32(0)];

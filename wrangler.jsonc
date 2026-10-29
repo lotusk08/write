@@ -38,6 +38,7 @@
       }
     ]
   },
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "stevehoang-media" }],
   "routes": [{ "pattern": "write.stevehoang.com", "custom_domain": true }],
   "vars": {
     "BLOG_REPO": "lotusk08/stevehoang.com",
@@ -45,6 +46,7 @@
     "SITE_URL": "https://stevehoang.com",
     "POSTS_DIR": "src/posts",
     "DRAFTS_DIR": "src/drafts",
-    "IMAGES_DIR": "public/assets/img/post"
+    "IMAGES_DIR": "public/assets/img/post",
+    "MEDIA_URL": "https://media.stevehoang.com"
   }
 }

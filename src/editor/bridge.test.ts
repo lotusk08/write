@@ -10,7 +10,6 @@ import { docToHtml, htmlToDoc } from "./bridge.ts";
 import { sanitizerOptions } from "./config.ts";
 import type { JSONContent } from "./doc.ts";
 
-/** What the editor hands back for a draft: rendered, sanitized as the editor does, and read again. */
 function throughEditor(doc: JSONContent): JSONContent {
   const html = docToHtml(doc, { display: (src) => src });
   return htmlToDoc(sanitizeHtml(html, sanitizerOptions));
@@ -48,6 +47,15 @@ describe("bridge", () => {
   ])("keeps %s", (_name, markdown) => {
     const expected = docToMarkdown(markdownToDoc(markdown));
     expect(roundTrip(markdown)).toBe(expected);
+  });
+
+  it("keeps an uploaded video's still and shape, and a Dropbox video, as players written as they were", () => {
+    const markdown =
+      'Clip\n\n<EmbedVideo src="https://media.example/video/a-0123456789ab.mp4" poster="https://media.example/video/a-0123456789ab.webp" width="1080" height="1920" />\n\n<EmbedVideo src="https://www.dropbox.com/scl/fi/x1/clip.mp4?rlkey=k&amp;dl=0" />';
+    const doc = markdownToDoc(markdown);
+    expect(doc.content?.[1]).toMatchObject({ type: "embed", attrs: { platform: "video", extra: ' poster="https://media.example/video/a-0123456789ab.webp" width="1080" height="1920"' } });
+    expect(doc.content?.[2]).toMatchObject({ type: "embed", attrs: { platform: "video", id: "https://www.dropbox.com/scl/fi/x1/clip.mp4?rlkey=k&dl=0" } });
+    expect(roundTrip(markdown)).toBe(markdown);
   });
 
   it("keeps a Spotify player, which the blog no longer draws, as the raw line it was", () => {
@@ -141,7 +149,36 @@ describe("bridge", () => {
     ["a list an attribute list splits", "- a\n- b\n{.cols}\n- c"],
     ["HTML written straight under a section", "<details>\n<summary>S</summary>\n\nBody\n\n</details>\n<p>after</p>"],
     ["spaces ending a paragraph", "Text   \n\nNext"],
+    ["text right above and below a player", 'Text\n<EmbedVideo src="/v.mp4" />\nMore **bold**'],
+    ["a player with text right below it", '<EmbedYoutube id="dQw4w9WgXcQ" />\nMore'],
+    ["a player between text lines in a quote", '> Text\n> <EmbedVideo src="/v.mp4" />\n> More'],
   ])("keeps %s as written", (_name, markdown) => {
+    expect(docToMarkdown(markdownToDoc(markdown))).toBe(markdown);
+    expect(roundTrip(markdown)).toBe(markdown);
+  });
+
+  it("lets text written under a player stand as its own paragraph once the player is taken out", () => {
+    const html = docToHtml(markdownToDoc('Text\n<EmbedVideo src="/v.mp4" />\nAfter'), { display: (src) => src });
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    template.content.querySelector("[data-embed]")?.remove();
+    expect(docToMarkdown(htmlToDoc(sanitizeHtml(template.innerHTML, sanitizerOptions)))).toBe("Text\n\nAfter");
+  });
+
+  it.each([
+    ["a photo", "![a](/p.jpg)"],
+    ["raw HTML", '<div class="x">hi</div>'],
+  ])("keeps text under a removed player apart from %s above it", (_name, above) => {
+    const html = docToHtml(markdownToDoc(`${above}\n\n<EmbedVideo src="/v.mp4" />\nText`), { display: (src) => src });
+    const template = document.createElement("template");
+    template.innerHTML = html;
+    template.content.querySelector("[data-embed]")?.remove();
+    expect(docToMarkdown(htmlToDoc(sanitizeHtml(template.innerHTML, sanitizerOptions)))).toBe(`${above}\n\nText`);
+  });
+
+  it("keeps text right under a hand-written player that stays raw", () => {
+    const markdown = '<EmbedThing id="x" />\nText';
+    expect(markdownToDoc(markdown).content?.[0].type).toBe("rawBlock");
     expect(docToMarkdown(markdownToDoc(markdown))).toBe(markdown);
     expect(roundTrip(markdown)).toBe(markdown);
   });

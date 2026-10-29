@@ -62,6 +62,32 @@ browser.
   link, or an audio or video file's address, and the right component is
   written for you. Any other attribute list a post carries is kept exactly as
   written, so editing a post does not rewrite lines you did not touch.
+- **Videos.** The Video button in the dock takes a link (YouTube, Dropbox, an
+  X post, a video or audio file) or a file to upload; a video dropped on the page
+  or pasted goes up too, and the writing goes on while it is made ready: on this device, with
+  WebCodecs ([Mediabunny](https://mediabunny.dev)), into an MP4 every browser
+  plays — H.264 and AAC, no side over 1920px, its index at the front so it
+  starts before it has loaded. A file already like that is only repacked. It
+  is then sent in 16 MB parts, three at a time, to the media bucket (R2, never
+  the repository: the host refuses any file over 25 MiB), with a still taken a
+  little way in, and lands where it was dropped as
+  `<EmbedVideo src="…" poster="…" width="…" height="…" />`. The panel shows how
+  far it has got, asks for the password if the sitting has none, and can stop
+  it; a video the bucket already holds is not sent again. YouTube links, HLS
+  streams (`.m3u8`) and Dropbox share links embed too, and the blog plays all of
+  them in one player.
+- **Managing videos.** Under a video in the post, *Replace video* uploads
+  another in its place, keeping its caption and the rest it was written with.
+  A Dropbox link gets *Convert to MP4*: the Worker fetches the file, this
+  browser makes it an MP4 and it goes to the bucket in the link's place — what
+  an iPhone's HEVC `.mov` needs to play beyond Safari (the preview says when
+  this browser cannot draw a video's picture). The Videos button at the foot of
+  the menu (`⌘\`) lists every video in the bucket with its size, its day and the posts,
+  drafts and pages using it, here or on the site; one nothing uses can be
+  deleted, one in use cannot. Publishing removes the videos the post stopped
+  using, and those its draft uploaded and dropped, unless a post, draft or page
+  on the site, or a draft on this device, still uses them; a video used only
+  elsewhere in the blog's repository is not seen, and is listed as not used.
 - **Seeing what the blog will render.** Diagrams (`diagram` fences in Mermaid syntax, drawn with Pele, as
   the blog does) and Chart.js charts are drawn live above their source; embedded videos play in
   place. The libraries load only when a post actually uses them.
@@ -170,3 +196,26 @@ is worse than a broken one, so it fails closed and says so.
 Changing the password locks every session out at once: the next publish gets a
 401, drops what it held, and asks. Revoking the token on GitHub stops the
 Worker itself. Those are the two independent ways back.
+
+### The media bucket, for videos
+
+Videos go to an R2 bucket bound to the Worker as `MEDIA`, and the blog plays
+them from the address in `MEDIA_URL` (`wrangler.jsonc`). Once:
+
+```bash
+npx wrangler r2 bucket create stevehoang-media
+```
+
+Then, in the Cloudflare dashboard, R2 → `stevehoang-media` → Settings →
+Custom Domains, connect `media.stevehoang.com`. `wrangler deploy` refuses to
+run until the bucket exists. Without `MEDIA` or `MEDIA_URL` the app says
+uploads are not set up and everything else works as before.
+
+Each video is kept at `video/<name>-<fingerprint>.mp4`, the fingerprint taken
+from the file it was made from, so the same file given twice is kept once; it is
+cached for a year, since its name changes whenever that file does; its still sits beside it as
+`.webp` (`.jpg` from Safari), cached for a week. A replaced video is so a new
+file, and the old one is removed once nothing uses it. Under `wrangler dev` the
+bucket is a local one in `.wrangler/`, while the players it writes still point at
+`MEDIA_URL`: they play once the same files are in the real bucket, or set
+`MEDIA_URL` in `.dev.vars` to where a local copy is served.

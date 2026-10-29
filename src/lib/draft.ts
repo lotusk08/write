@@ -30,10 +30,6 @@ export function currentMeta(meta: StoredMeta): PostMeta {
   return { ...rest, lang: rest.lang ?? languageOf(categories ?? []) };
 }
 
-/**
- * A body kept from before the blog read only Pandoc's attribute lists, with each of kramdown's `{: .x}` in it as `{.x}`;
- * a body, or any part of one, with none is given back as it is.
- */
 export function currentDoc(node: JSONContent): JSONContent {
   let attrs = node.attrs;
   for (const key of ["blockIal", "ial"]) {
@@ -54,10 +50,6 @@ export function currentDoc(node: JSONContent): JSONContent {
 
 const OLD_LIST = new RegExp(`^${OLD_ATTRIBUTES}`);
 
-/**
- * kramdown's `{: …}` straight after a link, a mark or code, which the app kept as text before: the list it is, kept as
- * written in Pandoc's form, as the reader now keeps one there.
- */
 function takenLists(nodes: JSONContent[]): JSONContent[] {
   const list = (node: JSONContent, before: JSONContent | undefined) =>
     before?.type === "text" &&
@@ -84,7 +76,6 @@ function takenLists(nodes: JSONContent[]): JSONContent[] {
 
 const OLD = new RegExp(OLD_ATTRIBUTES);
 
-/** The source view's text as last typed, unless it was typed in kramdown's forms, which the post is no longer written in. */
 export function currentSource(source: SourceText | undefined): SourceText | undefined {
   return source && OLD.test(source.text) ? undefined : source;
 }

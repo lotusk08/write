@@ -20,11 +20,6 @@ const SETTLE_MS = 120;
 const JUMP_MS = 320;
 const JUMP_MARGIN_PX = 40;
 
-/**
- * A fixed 320ms ease-out: Chrome's own smooth scroll inside an overflow
- * container scales with distance and took a second and a half across a long
- * post, where the blog's document scroll feels instant.
- */
 function jumpTo(container: HTMLElement, to: number): boolean {
   const from = container.scrollTop;
   const target = Math.max(0, Math.min(to, container.scrollHeight - container.clientHeight));
@@ -79,7 +74,6 @@ function sameOutline(a: OutlineEntry[], b: OutlineEntry[]): boolean {
   );
 }
 
-/** The post's H2–H4, the one being read, and a jump to each — the blog's tocbot, inside the editor. */
 export function useOutline(
   root: Ref<HTMLElement | null>,
   scroll: Ref<HTMLElement | null>,

@@ -28,7 +28,6 @@ describe("diffLines", () => {
   });
 
   it("finds the fewest changes, as a table of every line against every other does, in memory as long as the lines", () => {
-    /** The length of the longest common run of lines, by the full table: the diff must leave that many lines alone. */
     const common = (a: string[], b: string[]) => {
       let row = new Array<number>(b.length + 1).fill(0);
       for (const line of a) {

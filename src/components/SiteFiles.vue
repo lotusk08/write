@@ -35,10 +35,6 @@ const LABELS = new Map(PIN_CHOICES.map((choice) => [choice.id, choice.label]));
 
 const IDLE = "Pinned, but it holds no place: the newest post is first anyway, or both places are taken";
 
-/**
- * `onPinned` is a prop, not an emitted event, so a save the menu closed under still hands its pins on: an unmounted
- * component's emit goes nowhere.
- */
 const props = defineProps<{ onPinned?: (written: PinWritten[]) => void }>();
 const emit = defineEmits<{ open: [path: string] }>();
 
@@ -77,16 +73,12 @@ const pending = computed(() =>
 
 const name = (path: string) => path.split("/").pop() ?? path;
 const titleOf = (file: SiteFile) => file.title || name(file.path);
-/** A pinned post's badge, named as the pin switch names its place; none for a post not pinned. */
 const badge = (pin: Pin) => (pin === false ? "" : LABELS.get(choiceOf(pin)));
-/** Pinned, yet standing at no place on the home page. */
 const idle = (file: SiteFile) => file.pin !== false && !standing.value.has(file.path);
-/** The pin button's name: what it does, and the pin it shows, as a screen reader cannot see the dimmed badge. */
 const pinLabel = (file: SiteFile) =>
   [`Pin ${titleOf(file)}`, typeof file.pin === "number" ? badge(file.pin) : file.pin ? "pinned" : "not pinned", idle(file) && "holds no place"]
     .filter(Boolean)
     .join(", ");
-/** One change at a time: while one waits, only its own row's switch, Save and Cancel answer. */
 const locked = (path?: string) => saving.value || (changes.value.size > 0 && editing.value !== path);
 
 const load = async () => {

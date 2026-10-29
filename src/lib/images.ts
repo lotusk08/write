@@ -89,10 +89,8 @@ export async function shrinkImage(blob: Blob): Promise<Blob> {
   }
 }
 
-/** The size of one value of each TIFF field type, to find the values an entry keeps outside itself. */
 const TIFF_SIZES: Record<number, number> = { 1: 1, 2: 1, 3: 2, 4: 4, 5: 8, 6: 1, 7: 1, 8: 2, 9: 4, 10: 8, 11: 4, 12: 8 };
 
-/** Blanks the GPS directory of an Exif block in place, its every entry and value, keeping all else, the orientation included. */
 function blankGps(bytes: Uint8Array, tiff: number, end: number): void {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   if (tiff + 8 > end) {
@@ -127,7 +125,6 @@ function blankGps(bytes: Uint8Array, tiff: number, end: number): void {
 
 const ascii = (bytes: Uint8Array, at: number, text: string) => [...text].every((char, index) => bytes[at + index] === char.charCodeAt(0));
 
-/** A JPEG with no place in it: the Exif block's GPS directory blanked, and the XMP blocks, which can repeat it, left out. */
 function jpegWithoutLocation(bytes: Uint8Array): Uint8Array[] {
   const parts: Uint8Array[] = [bytes.subarray(0, 2)];
   let at = 2;
@@ -148,7 +145,6 @@ function jpegWithoutLocation(bytes: Uint8Array): Uint8Array[] {
       try {
         blankGps(bytes, at + 10, end);
       } catch {
-        // An Exif block too broken to read for its place goes whole, orientation and all.
         at = end;
         continue;
       }
@@ -160,7 +156,6 @@ function jpegWithoutLocation(bytes: Uint8Array): Uint8Array[] {
   return parts;
 }
 
-/** A PNG without its Exif and text chunks, where a camera or an app writes where a photo was taken. */
 function pngWithoutLocation(bytes: Uint8Array): Uint8Array[] {
   const parts: Uint8Array[] = [bytes.subarray(0, 8)];
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
@@ -180,7 +175,6 @@ function pngWithoutLocation(bytes: Uint8Array): Uint8Array[] {
   return parts;
 }
 
-/** A WebP without its EXIF and XMP chunks, its header's size and flags made to match. */
 function webpWithoutLocation(bytes: Uint8Array): Uint8Array[] {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
   const chunks: Uint8Array[] = [];
@@ -202,17 +196,11 @@ function webpWithoutLocation(bytes: Uint8Array): Uint8Array[] {
   return [header, ...chunks];
 }
 
-/** Photos whose place the app takes out, and those that never hold one. */
 const PLACE_REMOVED = new Set(["image/jpeg", "image/png", "image/webp"]);
 const PLACELESS = new Set(["image/gif", "image/svg+xml"]);
 
-/** Whether a photo may hold where it was taken in a form the app cannot take out, as HEIC, AVIF or TIFF can. */
 export const keepsLocation = (blob: Blob): boolean => !PLACE_REMOVED.has(blob.type) && !PLACELESS.has(blob.type);
 
-/**
- * A photo as it is published: with nothing in it of where it was taken. Its pixels are not touched; a JPEG keeps its
- * orientation, which sits beside the place in the Exif block.
- */
 export async function withoutLocation(blob: Blob): Promise<Blob> {
   const bytes = new Uint8Array(await blob.arrayBuffer());
   try {
