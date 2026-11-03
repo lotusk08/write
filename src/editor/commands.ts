@@ -293,9 +293,7 @@ export function quoteAt(root: HTMLElement): HTMLElement | null {
 
 export function togglePlainQuote(root: HTMLElement): boolean {
   const quote = quoteAt(root);
-  if (quote?.hasAttribute("data-note")) {
-    quote.removeAttribute("data-note");
-  } else if (quote) {
+  if (quote) {
     unwrap(quote);
   } else if (!wrapInQuote(root)) {
     return false;
@@ -322,7 +320,7 @@ export function setNote(root: HTMLElement, note: NoteType): boolean {
     return false;
   }
   if (quote.getAttribute("data-note") === note) {
-    quote.removeAttribute("data-note");
+    unwrap(quote);
   } else {
     quote.setAttribute("data-note", note);
   }

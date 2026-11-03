@@ -108,11 +108,11 @@ describe("quotes", () => {
     expect(markdown()).toBe("one\n\ntwo");
   });
 
-  it("⌘⇧B quotes, and a callout loses its kind", () => {
+  it("⌘⇧B lifts a callout entirely, not just its kind", () => {
     load("> a tip\n{: .tip}");
     caretAfter("a tip");
     handleKeydown(root, new KeyboardEvent("keydown", { metaKey: true, shiftKey: true, code: "KeyB", key: "B" }));
-    expect(markdown()).toBe("> a tip");
+    expect(markdown()).toBe("a tip");
   });
 
   it("reads back a quote holding a photo, a list and a nested quote", () => {
