@@ -1314,6 +1314,21 @@ textarea {
   --note-bg: rgb(218 54 51 / 7%);
 }
 
+[data-note="sidenote"] {
+  --note-color: var(--muted);
+}
+
+.editor-host .post-body blockquote[data-note="sidenote"] {
+  width: 80%;
+  padding: 0 0 0 0.75em;
+  border-left: 1px dashed var(--border-strong);
+  border-radius: 0;
+  margin-inline: auto;
+  background: none;
+  color: var(--muted);
+  font-size: 0.85em;
+}
+
 .editor-host .post-body blockquote:is([data-note="author"], [data-note="poem"]) {
   width: fit-content;
   padding: 0.75em min(2em, 6vw);

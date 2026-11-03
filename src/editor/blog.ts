@@ -1,7 +1,7 @@
 import { dropboxFile, isDropbox } from "../../shared/media.ts";
 import { displaySrc } from "../lib/site.ts";
 
-export const NOTE_TYPES = ["tip", "info", "important", "warning", "danger", "author", "poem"] as const;
+export const NOTE_TYPES = ["tip", "info", "important", "warning", "danger", "author", "poem", "sidenote"] as const;
 
 export type NoteType = (typeof NOTE_TYPES)[number];
 
@@ -13,6 +13,7 @@ export const NOTE_LABELS: Record<NoteType, string> = {
   danger: "Danger",
   author: "Author",
   poem: "Poem",
+  sidenote: "Sidenote",
 };
 
 export function isNoteType(value: unknown): value is NoteType {
@@ -27,6 +28,7 @@ export const NOTE_CLASSES: Record<NoteType, string> = {
   danger: "risk",
   author: "author",
   poem: "poem",
+  sidenote: "sidenote",
 };
 
 function noteOfClass(name: string): NoteType | null {

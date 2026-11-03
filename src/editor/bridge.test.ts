@@ -119,6 +119,7 @@ describe("bridge", () => {
     ["risk", "danger"],
     ["author", "author"],
     ["poem", "poem"],
+    ["sidenote", "sidenote"],
   ])("reads > [!%s] as the %s callout and writes it back, and the older {: .%s } as it", (name, note) => {
     const markdown = `> [!${name}]\n> said`;
     expect(markdownToDoc(markdown).content?.[0].attrs?.note).toBe(note);
