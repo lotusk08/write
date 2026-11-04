@@ -19,7 +19,6 @@ const MARKS: Record<string, string> = {
 };
 const PAIRED_TAG = /^<(\/?)(u|mark|sup|sub)>$/;
 const RAW: Mark = { type: "rawInline" };
-const REF_MARKS = new Set(["bold", "italic", "strike", "underline", "highlight"]);
 export const INLINE_IAL = new RegExp(`^${ATTRIBUTES}`);
 const FILEPATH = /^\{\s*\.path\s*\}/;
 const ESCAPE = /\\([!-/:-@[-`{-~])/g;
@@ -107,7 +106,6 @@ function settlePairs(tokens: Token[], pairs: Map<number, Pair>, images: boolean)
     if (
       !inner.some(substantive) ||
       (images && inner.some((token) => token.type === "image")) ||
-      (!REF_MARKS.has(MARKS[pair.kind]) && pair.kind !== "a" && inner.some((token) => token.type === "footnote_ref")) ||
       (pair.kind === "a" && follows(tokens, pairs, pair, (index) => empty(index) || pairs.has(index)))
     ) {
       pair.raw = true;
@@ -304,13 +302,6 @@ export function inlineContent(source: string, children: Token[], images: boolean
             title: token.attrGet("title") || null,
           },
         });
-        break;
-      case "footnote_ref":
-        if (meta(token).label === undefined) {
-          emit(written(token), [RAW]);
-        } else {
-          out.push(withMarks({ type: "footnoteRef", attrs: { label: meta(token).label } }));
-        }
         break;
       case "html_inline":
         emit(token.content, [RAW]);

@@ -5,6 +5,7 @@ import {
   headingLevel,
   imageRun,
   inCodeBlock,
+  inStyledItalic,
   isFormatted,
   linkAt,
   listKind,
@@ -72,7 +73,7 @@ export function readTools(root: HTMLElement): ToolState {
   return {
     heading: headingLevel(root),
     bold: typing && isFormatted("bold"),
-    italic: typing && isFormatted("italic"),
+    italic: typing && (inStyledItalic(root) ? inside("em, i") : isFormatted("italic")),
     strike: typing && isFormatted("strikeThrough"),
     superscript: typing && isFormatted("superscript"),
     subscript: typing && isFormatted("subscript"),

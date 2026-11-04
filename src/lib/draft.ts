@@ -30,7 +30,82 @@ export function currentMeta(meta: StoredMeta): PostMeta {
   return { ...rest, lang: rest.lang ?? languageOf(categories ?? []) };
 }
 
+const INLINE = new Set(["text", "hardBreak", "footnoteRef"]);
+
+function hasFootnotes(node: JSONContent): boolean {
+  return node.type === "footnoteRef" || node.type === "footnoteDef" || Boolean(node.content?.some(hasFootnotes));
+}
+
+function footnotesToSidenotes(doc: JSONContent): JSONContent {
+  if (!hasFootnotes(doc)) {
+    return doc;
+  }
+  const notes = new Map<string, JSONContent[]>();
+  const withoutNotes = (node: JSONContent): JSONContent => {
+    if (!node.content) {
+      return node;
+    }
+    const content: JSONContent[] = [];
+    for (const child of node.content) {
+      if (child.type === "footnoteDef") {
+        notes.set(String(child.attrs?.label ?? ""), child.content ?? []);
+      } else {
+        content.push(withoutNotes(child));
+      }
+    }
+    return { ...node, content };
+  };
+  const placed = new Set<string>();
+  const sidenote = (content: JSONContent[]): JSONContent => ({
+    type: "blockquote",
+    attrs: { note: "sidenote" },
+    content: content.length ? content : [{ type: "paragraph" }],
+  });
+  const withoutRefs = (node: JSONContent, labels: string[]): JSONContent => {
+    if (!node.content) {
+      return node;
+    }
+    const content: JSONContent[] = [];
+    for (const child of node.content) {
+      if (child.type === "footnoteRef") {
+        labels.push(String(child.attrs?.label ?? ""));
+      } else {
+        content.push(withoutRefs(child, labels));
+      }
+    }
+    return { ...node, content };
+  };
+  const place = (node: JSONContent): JSONContent => {
+    if (!node.content) {
+      return node;
+    }
+    const content: JSONContent[] = [];
+    for (const child of node.content) {
+      if (!child.content?.some((grand) => INLINE.has(grand.type ?? ""))) {
+        content.push(place(child));
+        continue;
+      }
+      const labels: string[] = [];
+      content.push(withoutRefs(child, labels));
+      for (const label of labels) {
+        const note = notes.get(label);
+        if (note && !placed.has(label)) {
+          placed.add(label);
+          content.push(sidenote(note));
+        }
+      }
+    }
+    return { ...node, content };
+  };
+  const converted = place(withoutNotes(doc));
+  const orphans = [...notes].filter(([label]) => !placed.has(label)).map(([, note]) => sidenote(note));
+  return { ...converted, content: [...(converted.content ?? []), ...orphans] };
+}
+
 export function currentDoc(node: JSONContent): JSONContent {
+  if (node.type === "doc") {
+    node = footnotesToSidenotes(node);
+  }
   let attrs = node.attrs;
   for (const key of ["blockIal", "ial"]) {
     const value: unknown = attrs?.[key];

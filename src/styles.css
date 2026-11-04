@@ -1333,66 +1333,40 @@ textarea {
   width: fit-content;
   padding: 0.75em min(2em, 6vw);
   border: none;
+  border-radius: 0;
   margin-inline: auto;
   background: none;
   color: var(--muted);
-  font-size: 1.05em;
 }
 
-.editor-host .post-body blockquote[data-note="author"] p:last-child {
-  padding-right: 1.5em;
-  font-size: 0.9em;
+.editor-host .post-body blockquote:is([data-note="author"], [data-note="poem"]) p {
+  font-family: "Domaine Display Narrow", Georgia, serif;
+  font-size: 1.15em;
   font-style: italic;
-  opacity: 0.85;
-  text-align: right;
+  text-align: start;
 }
 
-.editor-host .post-body blockquote[data-note="author"] p:last-child::before {
+.editor-host .post-body blockquote:is([data-note="author"], [data-note="poem"]) em {
+  font-family: Newsreader, Georgia, serif;
+}
+
+.editor-host .post-body blockquote[data-note="author"] > p:last-child {
+  color: var(--accent);
+  font-family: Newsreader, Georgia, serif;
+  font-size: 1em;
+  opacity: 0.8;
+  text-align: end;
+}
+
+.editor-host .post-body blockquote[data-note="author"] > p:last-child::before {
+  color: var(--muted);
+  font-family: var(--font-ui);
   content: "— ";
-}
-
-.editor-host .post-body blockquote[data-note="author"] p:only-child {
-  padding-right: 0;
-  font-size: inherit;
-  font-style: inherit;
-  opacity: 1;
-  text-align: inherit;
-}
-
-.editor-host .post-body blockquote[data-note="author"] p:only-child::before {
-  content: none;
 }
 
 .editor-host .post-body code.filepath {
   border: none;
   background: none;
-  color: var(--accent);
-  font-weight: 600;
-}
-
-.editor-host .post-body sup.footnote-ref {
-  padding: 0 0.1em;
-  color: var(--accent);
-  font-size: 0.75em;
-  font-weight: 600;
-  line-height: 0;
-}
-
-.editor-host .post-body sup.footnote-ref::before {
-  content: "^";
-}
-
-.editor-host .post-body .footnote {
-  padding-left: 1em;
-  border-left: 2px solid var(--border);
-  color: var(--muted);
-  font-size: 0.92em;
-}
-
-.editor-host .post-body .footnote::before {
-  float: left;
-  margin-right: 0.5em;
-  content: "^" attr(data-footnote);
   color: var(--accent);
   font-weight: 600;
 }
@@ -2712,10 +2686,6 @@ textarea {
 .editor-host .post-body .embed-block {
   cursor: default;
   user-select: none;
-}
-
-.editor-host .post-body .footnote-ref {
-  user-select: all;
 }
 
 .embed-frame {

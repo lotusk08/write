@@ -5,7 +5,7 @@ import { markdownToDoc } from "../lib/import.ts";
 import { docToMarkdown } from "../lib/markdown.ts";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
 import { embedExtra, embedField, embedFromUrl, embedTag, isPlayerLink, mergeExtra, playableUrl } from "./blog.ts";
-import { insertFootnote, toggleCodeBlock, toggleFilepath, toggleInline, toggleList, togglePlainQuote } from "./commands.ts";
+import { toggleCodeBlock, toggleFilepath, toggleInline, toggleList, togglePlainQuote } from "./commands.ts";
 import { sanitizerOptions } from "./config.ts";
 import { handleInput, handleKeydown } from "./keys.ts";
 
@@ -337,13 +337,6 @@ describe("toolbar commands", () => {
     window.getSelection()?.addRange(range);
     toggleInline(root, "code");
     expect(markdown()).toBe("`alpha `<mark>`beta`</mark>\n\n`gamma`");
-  });
-
-  it("a footnote goes after the selection rather than over it", () => {
-    load("alpha beta");
-    selectText("beta");
-    insertFootnote(root);
-    expect(markdown()).toBe("alpha beta[^1]\n\n[^1]:");
   });
 
   it("a list switches kind as a whole, and comes off as paragraphs", () => {

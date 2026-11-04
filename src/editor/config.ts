@@ -30,10 +30,8 @@ const allowedAttributes: Record<string, string[]> = {
     "data-open",
     "data-collapsible-summary",
     "data-collapsible-content",
-    "data-footnote",
     "data-raw",
   ],
-  sup: ["data-footnote-ref", "contenteditable"],
   span: ["data-raw-inline", "data-mark", "style"],
 };
 

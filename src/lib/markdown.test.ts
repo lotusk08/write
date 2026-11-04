@@ -92,7 +92,6 @@ describe("what a node carries that the page does not show", () => {
           attrs: { blockIal: "{: .x}\n\n<script>1</script>" },
           content: [
             { type: "text", text: "this", marks: [{ type: "link", attrs: { href: "https://a.com/\n\n<script>2</script>", title: "t\n\n<b>" } }] },
-            { type: "footnoteRef", attrs: { label: "1]\n\n<script>3</script>" } },
           ],
         },
         { type: "image", attrs: { src: "/a.jpg\n\n<script>4</script>", alt: "", ial: "{: .y}\n<script>5</script>" } },

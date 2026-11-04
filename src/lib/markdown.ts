@@ -12,7 +12,6 @@ export interface SerializeOptions {
 
 type Mark = { type: string; attrs?: Record<string, unknown> };
 
-const REF_MARKS = new Set(["bold", "italic", "strike", "underline", "highlight"]);
 const DELIMITED = new Set(["bold", "italic", "strike"]);
 
 function outside(mark: Mark): string[] {
@@ -37,9 +36,6 @@ function marksOf(node: JSONContent): Mark[] {
   }
   if (node.type === "hardBreak") {
     return nesting(marks.filter((mark) => mark.type !== "code" && mark.type !== "rawInline"));
-  }
-  if (node.type === "footnoteRef") {
-    return marks.filter((mark) => REF_MARKS.has(mark.type));
   }
   return [];
 }
@@ -185,10 +181,6 @@ function ialOf(value: unknown): string {
   return IAL.test(ial) ? ial : "";
 }
 
-function footnoteLabel(value: unknown): string {
-  return String(value ?? "").replace(/[\]\s]/g, "");
-}
-
 function nextLine(block: string, addition: string): string {
   const leadingBreak = /^[ \t]{2,}\n/.exec(addition);
   if (leadingBreak) {
@@ -213,30 +205,6 @@ function withoutEdgeBreaks(
     content.shift();
   }
   return content;
-}
-
-function captionContent(nodes: JSONContent[] | undefined): JSONContent[] | undefined {
-  if (!nodes?.length) {
-    return nodes;
-  }
-  let italic: Mark | null = null;
-  return nodes.map((node) => {
-    if (node.type === "text") {
-      const marks = marksOf(node);
-      italic = marks.some((mark) => mark.type === "code")
-        ? null
-        : (marks.find((mark) => mark.type === "italic") ?? null);
-      return node;
-    }
-    if (node.type !== "footnoteRef") {
-      italic = null;
-      return node;
-    }
-    if (!italic) {
-      return node;
-    }
-    return { ...node, marks: [...marksOf(node).filter((mark) => mark.type !== "italic"), italic] };
-  });
 }
 
 function sameMark(a: Mark, b: Mark): boolean {
@@ -314,8 +282,6 @@ function inline(nodes: JSONContent[] | undefined, options: SerializeOptions, lin
       rendered.push("\n");
     } else if (node.type === "image") {
       rendered.push(image(node, options));
-    } else if (node.type === "footnoteRef") {
-      rendered.push(applyMarks(`[^${footnoteLabel(node.attrs?.label)}]`, marks));
     } else {
       rendered.push(inline(node.content, options, linked));
     }
@@ -481,8 +447,7 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         const after = Boolean(nodes[index + 1]?.attrs?.joinPrevious);
         const before = Boolean(node.attrs?.joinPrevious);
         const content = withoutEdgeBreaks(node.content, before, after);
-        const caption = before && nodes[index - 1]?.type === "image";
-        const written = inline(caption ? captionContent(content) : content, options);
+        const written = inline(content, options);
         const spacer = written.includes("\u00a0") && !written.trim();
         out.push(spacer ? "&nbsp;" : escapeLineStarts(written, !(before && node.attrs?.sameLine)));
         break;
@@ -543,11 +508,6 @@ function blocks(nodes: JSONContent[] | undefined, options: SerializeOptions): st
         break;
       case "collapsible":
         out.push(collapsibleBlock(node, options));
-        break;
-      case "footnoteDef":
-        out.push(
-          `[^${footnoteLabel(node.attrs?.label)}]: ${indentedBody(node.content, "    ", options)}`,
-        );
         break;
       case "listItem":
       case "taskItem":

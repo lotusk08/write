@@ -3,7 +3,6 @@ import { onBeforeUnmount, onMounted, ref } from "vue";
 import {
   askLink,
   format,
-  insertFootnote,
   insertRule,
   insertTable,
   setAllCollapsibles,
@@ -127,7 +126,6 @@ const pickFiles = (event: Event) => {
     <div class="tool-group">
       <ToolButton icon="rule" title="Divider" @press="run(insertRule)" />
       <ToolButton icon="codeBlock" title="Code block" :active="tools.codeBlock" @press="run(toggleCodeBlock)" />
-      <ToolButton icon="footnote" title="Footnote — marker here, note at the end" @press="run(insertFootnote)" />
       <ToolButton
         icon="orderedList"
         title="Numbered list"

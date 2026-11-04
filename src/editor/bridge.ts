@@ -121,13 +121,6 @@ function inlineHtml(nodes: JSONContent[]): string {
           return withMarks(escapeText(node.text ?? ""), node.marks);
         case "hardBreak":
           return withMarks("<br>", node.marks);
-        case "footnoteRef": {
-          const label = String(node.attrs?.label ?? "1");
-          return withMarks(
-            `<sup class="footnote-ref"${attr("data-footnote-ref", label)} contenteditable="false">${escapeText(label)}</sup>`,
-            node.marks,
-          );
-        }
         default:
           return node.content ? inlineHtml(node.content) : "";
       }
@@ -242,8 +235,6 @@ function blockHtml(node: JSONContent, options: RenderOptions): string {
         "</div>"
       );
     }
-    case "footnoteDef":
-      return `<div class="footnote"${attr("data-footnote", node.attrs?.label ?? "1")}${extra}>${blocksHtml(children, options) || "<p><br></p>"}</div>`;
     default:
       return blocksHtml(children, options);
   }
@@ -391,8 +382,6 @@ function inlineFrom(nodes: Iterable<Node>, marks: DocMark[] = []): JSONContent[]
       if (image) {
         out.push(image);
       }
-    } else if (tag === "sup" && node.hasAttribute("data-footnote-ref")) {
-      out.push({ type: "footnoteRef", attrs: { label: node.getAttribute("data-footnote-ref") ?? "1" }, ...markOf() });
     } else if (tag === "input") {
       continue;
     } else {
@@ -650,18 +639,6 @@ function blockFrom(element: Element): JSONContent[] {
             summaryContent?.type === "collapsibleSummary" ? summaryContent : { type: "collapsibleSummary" },
             { type: "collapsibleContent", content: blocksOrParagraph(rest) },
           ],
-        },
-        attrs,
-      ),
-    ];
-  }
-  if (tag === "div" && element.hasAttribute("data-footnote")) {
-    return [
-      withAttrs(
-        {
-          type: "footnoteDef",
-          attrs: { label: element.getAttribute("data-footnote") ?? "1" },
-          content: blocksOrParagraph(element.childNodes),
         },
         attrs,
       ),

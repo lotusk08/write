@@ -5,7 +5,7 @@ import type { JSONContent } from "./doc.ts";
 
 const TEXTBLOCK = "p, h1, h2, h3, h4, h5, h6, pre, li, td, th, [data-collapsible-summary]";
 
-const FLOW = "blockquote, [data-collapsible-content], [data-footnote], li, td, th";
+const FLOW = "blockquote, [data-collapsible-content], li, td, th";
 
 const selectedFigures = new WeakMap<HTMLElement, HTMLElement>();
 
@@ -252,39 +252,6 @@ function codeCovering(root: HTMLElement, range: Range): HTMLElement | null {
   }
   const covered = [...root.querySelectorAll<HTMLElement>("code")].filter((code) => range.intersectsNode(code));
   return covered.length === 1 && covered[0].textContent === range.toString() ? covered[0] : null;
-}
-
-export function insertFootnote(root: HTMLElement): boolean {
-  const range = selectionIn(root);
-  if (!range || closestIn(root, anchor(root), "[data-footnote]") || !currentTextblock(root)) {
-    return false;
-  }
-  const used = new Set(
-    [...root.querySelectorAll("[data-footnote-ref], [data-footnote]")].map(
-      (node) => node.getAttribute("data-footnote-ref") ?? node.getAttribute("data-footnote"),
-    ),
-  );
-  let number = 1;
-  while (used.has(String(number))) {
-    number += 1;
-  }
-  const label = String(number);
-  range.collapse(false);
-  const ref = fragmentOf(docToHtml({ type: "doc", content: [{ type: "paragraph", content: [{ type: "footnoteRef", attrs: { label } }] }] }))
-    .querySelector("sup");
-  if (ref) {
-    range.insertNode(ref);
-  }
-  const definition = document.createElement("div");
-  definition.className = "footnote";
-  definition.setAttribute("data-footnote", label);
-  const body = emptyParagraph();
-  definition.append(body);
-  root.append(definition);
-  placeCaret(body, false);
-  definition.scrollIntoView({ block: "nearest" });
-  notify(root);
-  return true;
 }
 
 export function quoteAt(root: HTMLElement): HTMLElement | null {
@@ -818,9 +785,36 @@ export function setImageCaption(root: HTMLElement, figure: HTMLElement, value: s
   notify(root);
 }
 
+const STYLED_ITALIC = 'blockquote:is([data-note="author"], [data-note="poem"])';
+
+export function inStyledItalic(root: HTMLElement): boolean {
+  const range = selectionIn(root);
+  const quote = closestIn(root, anchor(root), STYLED_ITALIC);
+  return Boolean(range && quote?.contains(range.endContainer));
+}
+
 export function format(root: HTMLElement, command: string): boolean {
   if (!selectionIn(root)) {
     root.focus();
+  }
+  if (command === "italic" && inStyledItalic(root)) {
+    const old = selectionIn(root)!;
+    const swapped = new Map<Node, Node>();
+    const [start, startOffset, end, endOffset] = [old.startContainer, old.startOffset, old.endContainer, old.endOffset];
+    for (const element of closestIn(root, anchor(root), STYLED_ITALIC)?.querySelectorAll("i") ?? []) {
+      const em = document.createElement("em");
+      em.append(...element.childNodes);
+      element.replaceWith(em);
+      swapped.set(element, em);
+    }
+    if (swapped.size) {
+      const kept = document.createRange();
+      kept.setStart(swapped.get(start) ?? start, startOffset);
+      kept.setEnd(swapped.get(end) ?? end, endOffset);
+      window.getSelection()?.removeAllRanges();
+      window.getSelection()?.addRange(kept);
+    }
+    return toggleInline(root, "em");
   }
   const done = document.execCommand(command);
   notify(root);

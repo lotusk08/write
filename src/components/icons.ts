@@ -1,7 +1,6 @@
 export const ICONS = {
   superscript: '<path d="m4 8 8 11M12 8l-8 11"/><path d="M15.5 6.5c0-1.6 4-1.7 4 .2 0 1.9-4 2.6-4 4.8h4.2"/>',
   subscript: '<path d="m4 5 8 11M12 5l-8 11"/><path d="M15.5 14.5c0-1.6 4-1.7 4 .2 0 1.9-4 2.6-4 4.8h4.2"/>',
-  footnote: '<path d="M4 12h8M4 17h13"/><path d="M16 4.5c0-1.6 4-1.7 4 .2 0 1.9-4 2.6-4 4.8h4.2"/>',
   bold: '<path d="M7 5h6.5a3.5 3.5 0 0 1 0 7H7z"/><path d="M7 12h7.5a3.5 3.5 0 0 1 0 7H7z"/>',
   italic: '<path d="M14 5h-4M14 19h-4M15 5l-6 14"/>',
   strike: '<path d="M4 12h16"/><path d="M16 7.5C16 6 14.2 5 12 5S8 6 8 7.5s1.8 2.3 4 2.8"/><path d="M8 16.5C8 18 9.8 19 12 19s4-1 4-2.5"/>',
@@ -12,6 +11,7 @@ export const ICONS = {
   taskList: '<path d="M11 6h9M11 12h9M11 18h9"/><path d="m3 6 1.6 1.6L7.6 4.6"/><path d="m3 12.5 1.6 1.6 3-3"/><path d="m3 18.5 1.6 1.6 3-3"/>',
   quote: '<path d="M9.5 7c-2.4 0-4 1.7-4 3.9 0 2 1.5 3.4 3.4 3.4.3 0 .6 0 .9-.1-.4 1.5-1.7 2.5-3.3 2.8"/><path d="M19 7c-2.4 0-4 1.7-4 3.9 0 2 1.5 3.4 3.4 3.4.3 0 .6 0 .9-.1-.4 1.5-1.7 2.5-3.3 2.8"/>',
   note: '<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8M8 14h5"/>',
+  sidenote: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M15 5v14M6 9h6M6 12h6M6 15h4"/>',
   codeBlock: '<rect x="2.5" y="4.5" width="19" height="15" rx="2.5"/><path d="m9 9.5-2.5 2.5L9 14.5M15 9.5l2.5 2.5-2.5 2.5"/>',
   image: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><circle cx="8.5" cy="9.5" r="1.4"/><path d="m21 16-5-5L5 20"/>',
   table: '<rect x="3" y="4" width="18" height="16" rx="2.5"/><path d="M3 10h18M9 10v10"/>',

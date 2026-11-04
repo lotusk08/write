@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { nextTick, onBeforeUnmount, onMounted, ref } from "vue";
-import { askLink, format, selectionIn, toggleInline } from "../editor/commands.ts";
+import { askLink, format, selectionIn, setNote, toggleInline } from "../editor/commands.ts";
 import type { ToolState } from "../editor/tools.ts";
 import { viewportBand } from "../lib/viewport.ts";
 import Icon from "./Icon.vue";
@@ -72,6 +72,12 @@ const buttons: { icon: IconName; label: string; active: () => boolean; press: ()
   { icon: "bold", label: "Bold", active: () => props.tools.bold, press: () => props.run((root) => format(root, "bold")) },
   { icon: "link", label: "Link", active: () => props.tools.link, press: () => props.run(askLink) },
   { icon: "code", label: "Inline code", active: () => props.tools.code, press: () => props.run((root) => toggleInline(root, "code")) },
+  {
+    icon: "sidenote",
+    label: "Sidenote",
+    active: () => props.tools.note === "sidenote",
+    press: () => props.run((root) => setNote(root, "sidenote")),
+  },
 ];
 </script>
 

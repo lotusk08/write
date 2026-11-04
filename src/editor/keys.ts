@@ -2,6 +2,7 @@ import {
   continueAfter,
   format,
   freeCaption,
+  inStyledItalic,
   insertRule,
   keepCaretInNewItem,
   liftLists,
@@ -18,7 +19,7 @@ import {
   unsetCollapsible,
 } from "./commands.ts";
 
-const FLOWING = "blockquote, [data-collapsible-content], [data-footnote]";
+const FLOWING = "blockquote, [data-collapsible-content]";
 
 const FENCE_OPENER = /^(?:`{3,}|~{3,})([^`]*)$/;
 
@@ -303,7 +304,7 @@ export function handleKeydown(root: HTMLElement, event: KeyboardEvent): boolean 
     return false;
   }
   const cellMark = mod && !event.altKey && !event.shiftKey && { KeyB: "bold", KeyI: "italic" }[event.code];
-  if (cellMark && currentTextblock(root)?.matches("td, th")) {
+  if (cellMark && (currentTextblock(root)?.matches("td, th") || (cellMark === "italic" && inStyledItalic(root)))) {
     event.preventDefault();
     format(root, cellMark);
     return true;
@@ -438,7 +439,8 @@ function markShortcut(root: HTMLElement): boolean {
   inner.setStart(caret.startContainer, caret.startOffset - typed.inner.length);
   inner.setEnd(caret.startContainer, caret.startOffset);
   select(inner);
-  const command = typed.tag === "a" ? "createLink" : COMMANDS[typed.tag];
+  const command =
+    typed.tag === "a" ? "createLink" : typed.tag === "em" && inStyledItalic(root) ? undefined : COMMANDS[typed.tag];
   if (command) {
     document.execCommand(command, false, typed.href);
     const focus = window.getSelection()?.focusNode;

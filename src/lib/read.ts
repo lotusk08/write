@@ -1,7 +1,6 @@
 import markdownit from "markdown-it";
 import type { MarkdownIt, StateBlock, StateInline, Token } from "markdown-it";
 import deflist from "markdown-it-deflist";
-import footnote from "markdown-it-footnote";
 import type { JSONContent } from "../editor/doc.ts";
 import { ATTRIBUTES, EMBED_LIQUID, EMBED_TAG, embedPlatform, noteOfIal, unquoted } from "../editor/blog.ts";
 import {
@@ -46,7 +45,7 @@ const keepLines =
     return true;
   };
 
-const PLACED = new Set(["backticks", "strikethrough", "emphasis", "link", "image", "autolink", "footnote_inline"]);
+const PLACED = new Set(["backticks", "strikethrough", "emphasis", "link", "image", "autolink"]);
 
 const keepPlace =
   (rule: InlineRule): InlineRule =>
@@ -68,9 +67,7 @@ const keepPlace =
 
 function blogMarkdown(): MarkdownIt {
   const md = markdownit({ html: true, linkify: true, breaks: true });
-  md.use(footnote);
   md.use(deflist);
-  md.core.ruler.disable("footnote_tail");
   md.core.ruler.at("strip_references", setDefinitionsAside);
   md.core.ruler.before("block", "kramdown_lazy_quotes", lazyQuotes);
   md.core.ruler.before("inline", "alerts", alerts);
@@ -286,14 +283,6 @@ class Reader {
         return [withIal(this.table(block))];
       case "dl_open":
         return [withIal(raw(attributes.raw ?? ""))];
-      case "footnote_reference_open":
-        return [
-          {
-            type: "footnoteDef",
-            attrs: { label: attributes.label },
-            content: this.content(children, { indent: 4, opener: open.map?.[0] ?? -1, quoted: container.quoted }),
-          },
-        ];
       default:
         return children.length ? this.blocks(children, container) : [];
     }
