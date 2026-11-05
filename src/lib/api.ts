@@ -239,7 +239,7 @@ export async function fetchDropboxVideo(
 }
 
 export function startMedia(
-  video: { name: string; fingerprint: string; size: number; type: string },
+  video: { name: string; fingerprint: string; size: number; type: string; width: number; height: number },
   password: string,
   signal?: AbortSignal,
 ): Promise<MediaStart> {

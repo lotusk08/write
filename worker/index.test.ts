@@ -370,9 +370,14 @@ describe("video uploads", () => {
   const pending = new Map<string, { key: string; parts: Map<number, Uint8Array>; type?: string; meta?: Record<string, string> }>();
   const bucket = {
     head: async (key: string) => (objects.has(key) ? { size: objects.get(key)!.bytes.byteLength, customMetadata: objects.get(key)!.meta } : null),
-    list: async () => ({
+    list: async (options?: { include?: string[] }) => ({
       truncated: false,
-      objects: [...objects].map(([key, { bytes }], index) => ({ key, size: bytes.byteLength, uploaded: new Date(Date.UTC(2026, 9, 1 + index)) })),
+      objects: [...objects].map(([key, { bytes, meta }], index) => ({
+        key,
+        size: bytes.byteLength,
+        uploaded: new Date(Date.UTC(2026, 9, 1 + index)),
+        ...(options?.include?.includes("customMetadata") ? { customMetadata: meta ?? {} } : {}),
+      })),
     }),
     delete: async (keys: string[]) => keys.forEach((key) => objects.delete(key)),
     put: async (key: string, bytes: Uint8Array, options?: { httpMetadata?: { contentType?: string; cacheControl?: string } }) => {
@@ -438,6 +443,32 @@ describe("video uploads", () => {
     expect(objects.get(key)!.type).toBe("video/mp4");
     const again = (await (await start({ name: "Ngày tuyển hôn!", fingerprint, size: 9, type: "video/mp4" })).json()) as { upload?: string };
     expect(again.upload).toBeUndefined();
+  });
+
+  it("keeps the size measured on upload with the video and lists it, and lists a video without one unsized", async () => {
+    const upload = async (name: string, hex: string, size: object) => {
+      const { key, upload } = (await (await start({ name, fingerprint: hex.repeat(64), size: 1, type: "video/mp4", ...size })).json()) as { key: string; upload: string };
+      const parts = [(await (await send(`/api/media/part?key=${key}&upload=${upload}&part=1`, { method: "PUT", body: "a" })).json()) as object];
+      await send("/api/media/complete", { method: "POST", body: JSON.stringify({ key, upload, parts }) });
+      return key;
+    };
+    const tall = await upload("tall", "a", { width: 1080, height: 1920 });
+    const unmeasured = await upload("unmeasured", "b", { width: 0, height: 0 });
+    const odd = await upload("odd", "c", { width: 1.5, height: 99_999 });
+    const half = await upload("half", "d", { width: 640 });
+    const older = keyOf("older", "e");
+    objects.set(older, { bytes: new Uint8Array(1), meta: { fingerprint } });
+    fakeSite({ "src/posts/2026-10-01-a.md": "Words" });
+    const { videos } = (await (await send("/api/media")).json()) as { videos: { key: string; width: number | null; height: number | null }[] };
+    expect(Object.fromEntries(videos.map(({ key, width, height }) => [key, [width, height]]))).toEqual({
+      [tall]: [1080, 1920],
+      [unmeasured]: [null, null],
+      [odd]: [null, null],
+      [half]: [null, null],
+      [older]: [null, null],
+    });
+    expect(objects.get(tall)!.meta).toEqual({ fingerprint: "a".repeat(64), width: "1080", height: "1920" });
+    expect(objects.get(unmeasured)!.meta).toEqual({ fingerprint: "b".repeat(64) });
   });
 
   it("keeps the still beside its video and stops an upload when asked", async () => {

@@ -247,7 +247,11 @@ export async function uploadVideo(
 ): Promise<UploadedVideo> {
   const print = await fingerprint(video.source, video.blob !== video.source);
   signal.throwIfAborted();
-  const started = await startMedia({ name, fingerprint: print, size: video.blob.size, type: video.type }, password, signal);
+  const started = await startMedia(
+    { name, fingerprint: print, size: video.blob.size, type: video.type, width: video.width, height: video.height },
+    password,
+    signal,
+  );
   onAuthorized();
   if (started.upload) {
     try {

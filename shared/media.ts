@@ -54,5 +54,7 @@ export interface MediaVideo {
   size: number;
   uploaded: number;
   poster: string | null;
+  width: number | null;
+  height: number | null;
   used: string[];
 }

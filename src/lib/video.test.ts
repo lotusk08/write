@@ -73,6 +73,16 @@ describe("stopping a video's upload", () => {
     expect(sentAsIs.sent).toBe(false);
   });
 
+  it("sends the size it measured with the upload, so the library can hand it on", async () => {
+    const bodies: { width: number; height: number }[] = [];
+    vi.stubGlobal("fetch", async (_path: string, init?: RequestInit) => {
+      bodies.push(JSON.parse(String(init?.body)));
+      return new Response(JSON.stringify({ key: "video/a-0123456789ab.mp4", url: "https://m/video/a-0123456789ab.mp4" }), { status: 200 });
+    });
+    await uploadVideo({ ...VIDEO, width: 1080, height: 1920, poster: null }, "a", "pw", new AbortController().signal, () => undefined);
+    expect(bodies[0]).toMatchObject({ width: 1080, height: 1920 });
+  });
+
   it("goes through when nothing stops it", async () => {
     const calls: string[] = [];
     stubNetwork(calls);

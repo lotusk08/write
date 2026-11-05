@@ -105,7 +105,7 @@ const remove = async (chosen: MediaVideo[]) => {
 };
 
 const copy = async (video: MediaVideo) => {
-  const tag = embedTag("video", video.url, embedExtra({ poster: video.poster }));
+  const tag = embedTag("video", video.url, embedExtra({ poster: video.poster, width: video.width, height: video.height }));
   try {
     await navigator.clipboard.writeText(tag);
     copied.value = video.key;

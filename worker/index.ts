@@ -857,11 +857,23 @@ async function deleteVideos(bucket: R2Bucket, keys: string[]): Promise<string[]>
   return keys;
 }
 
+const MAX_VIDEO_SIDE = 16_384;
+
+function videoSide(value: unknown): number | null {
+  const side = Number(value);
+  return Number.isInteger(side) && side > 0 && side <= MAX_VIDEO_SIDE ? side : null;
+}
+
+function videoSize(width: unknown, height: unknown): { width: number; height: number } | { width: null; height: null } {
+  const [across, down] = [videoSide(width), videoSide(height)];
+  return across && down ? { width: across, height: down } : { width: null, height: null };
+}
+
 async function listVideos(bucket: R2Bucket): Promise<R2Object[]> {
   const objects: R2Object[] = [];
   let cursor: string | undefined;
   for (let page = 0; page < 20; page++) {
-    const listed = await bucket.list({ prefix: "video/", cursor, limit: 1000 });
+    const listed = await bucket.list({ prefix: "video/", cursor, limit: 1000, include: ["customMetadata"] });
     objects.push(...listed.objects);
     if (!listed.truncated) {
       break;
@@ -889,6 +901,7 @@ async function handleMediaList(request: Request, env: Env): Promise<Response> {
           size: object.size,
           uploaded: object.uploaded.getTime(),
           poster: poster ? `${gate.base}/${poster}` : null,
+          ...videoSize(object.customMetadata?.width, object.customMetadata?.height),
           used: uses.get(object.key) ?? [],
         };
       })
@@ -981,6 +994,7 @@ async function handleMediaStart(request: Request, env: Env): Promise<Response> {
   }
   const key = videoKey(typeof body?.name === "string" ? body.name : "", fingerprint, extension);
   const url = `${gate.base}/${key}`;
+  const { width, height } = videoSize(body?.width, body?.height);
   try {
     const kept = await gate.bucket.head(key);
     if (kept?.customMetadata?.fingerprint === fingerprint) {
@@ -988,7 +1002,7 @@ async function handleMediaStart(request: Request, env: Env): Promise<Response> {
     }
     const upload = await gate.bucket.createMultipartUpload(key, {
       httpMetadata: { contentType: type, cacheControl: VIDEO_CACHE },
-      customMetadata: { fingerprint },
+      customMetadata: { fingerprint, ...(width && height ? { width: String(width), height: String(height) } : {}) },
     });
     return json({ key, url, upload: upload.uploadId } satisfies MediaStart);
   } catch (error) {
