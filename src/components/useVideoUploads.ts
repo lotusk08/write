@@ -141,12 +141,15 @@ async function run(job: VideoJob, source: VideoSource, place: (embed: Embed, sen
     };
     job.stage = "done";
     job.fraction = 1;
+    const noPoster = uploaded.posterProblem ? ` No poster: ${uploaded.posterProblem} Use Make poster in Videos to add one.` : "";
     if (place(embed, uploaded.sent)) {
-      job.note = `${video.note} It is in the post.`;
-      window.setTimeout(() => dismiss(job), DONE_MS);
+      job.note = `${video.note} It is in the post.${noPoster}`;
+      if (!noPoster) {
+        window.setTimeout(() => dismiss(job), DONE_MS);
+      }
     } else {
       job.tag = embedTag(embed.platform, embed.id, embed.extra);
-      job.note = "Uploaded, but its draft is not open in the editor now, or the player it was replacing is gone: copy its tag and paste it where it goes.";
+      job.note = `Uploaded, but its draft is not open in the editor now, or the player it was replacing is gone: copy its tag and paste it where it goes.${noPoster}`;
     }
   } catch (cause) {
     if (signal.aborted) {

@@ -951,6 +951,32 @@ async function handleMediaFetch(request: Request, env: Env): Promise<Response> {
   }
 }
 
+async function handleMediaVideo(request: Request, env: Env): Promise<Response> {
+  const gate = await mediaGate(request, env);
+  if (gate instanceof Response) {
+    return gate;
+  }
+  const key = new URL(request.url).searchParams.get("key") ?? "";
+  if (!VIDEO_KEY.test(key)) {
+    return json({ error: "Malformed video to read." }, 400);
+  }
+  try {
+    const object = await gate.bucket.get(key);
+    if (!object) {
+      return json({ error: "That video is not in the media bucket." }, 404);
+    }
+    return new Response(object.body, {
+      headers: {
+        "content-type": object.httpMetadata?.contentType || `video/${key.split(".").pop()}`,
+        "content-length": String(object.size),
+        "cache-control": "no-store",
+      },
+    });
+  } catch (error) {
+    return failed(error, "Could not read the video.");
+  }
+}
+
 async function handleMediaDelete(request: Request, env: Env): Promise<Response> {
   const gate = await mediaGate(request, env);
   if (gate instanceof Response) {
@@ -1171,6 +1197,7 @@ const ROUTES = new Map<string, [method: "GET" | "POST" | "PUT", handle: Handler]
   ["/api/media", ["GET", handleMediaList]],
   ["/api/media/delete", ["POST", handleMediaDelete]],
   ["/api/media/fetch", ["GET", handleMediaFetch]],
+  ["/api/media/video", ["GET", handleMediaVideo]],
   ["/api/media/start", ["POST", handleMediaStart]],
   ["/api/media/part", ["PUT", handleMediaPart]],
   ["/api/media/complete", ["POST", handleMediaComplete]],

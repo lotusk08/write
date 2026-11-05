@@ -1,10 +1,10 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { type PreparedVideo, uploadVideo } from "./video.ts";
+import { makePoster, type PreparedVideo, uploadVideo } from "./video.ts";
 
 const VIDEO: PreparedVideo = { blob: new Blob(["video bytes"], { type: "video/mp4" }), source: new Blob(["source bytes"]), type: "video/mp4", width: 1, height: 1, poster: new Blob(["p"], { type: "image/webp" }), note: "" };
 
-function stubNetwork(calls: string[], onPoster = () => {}): void {
+function stubNetwork(calls: string[], onPoster = () => {}, posterStatus = 200): void {
   vi.stubGlobal("fetch", async (path: string) => {
     calls.push(path);
     const body = path.includes("start") ? { key: "video/a-0123456789ab.mp4", url: "https://m/video/a-0123456789ab.mp4", upload: "u1" } : { url: "https://m/video/a-0123456789ab.mp4" };
@@ -29,8 +29,10 @@ function stubNetwork(calls: string[], onPoster = () => {}): void {
       calls.push(this.path);
       if (this.path.includes("poster")) {onPoster();}
       setTimeout(() => {
-        this.status = 200;
-        this.responseText = JSON.stringify(this.path.includes("part") ? { partNumber: 1, etag: "e1" } : { url: "https://m/video/a-0123456789ab.webp" });
+        this.status = this.path.includes("poster") ? posterStatus : 200;
+        this.responseText = JSON.stringify(
+          this.path.includes("part") ? { partNumber: 1, etag: "e1" } : this.status === 200 ? { url: "https://m/video/a-0123456789ab.webp" } : { error: "Could not upload the video's still." },
+        );
         this.onload?.();
       }, 5);
     }
@@ -89,7 +91,45 @@ describe("stopping a video's upload", () => {
     await expect(uploadVideo(VIDEO, "a", "pw", new AbortController().signal, () => undefined)).resolves.toEqual({
       url: "https://m/video/a-0123456789ab.mp4",
       poster: "https://m/video/a-0123456789ab.webp",
+      posterProblem: "",
       sent: true,
     });
+  });
+});
+
+describe("a video without its poster", () => {
+  it("still uploads when its still is refused, and says why it has none", async () => {
+    stubNetwork([], () => {}, 500);
+    await expect(uploadVideo(VIDEO, "a", "pw", new AbortController().signal, () => undefined)).resolves.toEqual({
+      url: "https://m/video/a-0123456789ab.mp4",
+      poster: null,
+      posterProblem: "Its still did not upload: Could not upload the video's still.",
+      sent: true,
+    });
+  });
+
+  it("says so when no still could be taken from it", async () => {
+    stubNetwork([]);
+    const uploaded = await uploadVideo({ ...VIDEO, poster: null }, "a", "pw", new AbortController().signal, () => undefined);
+    expect([uploaded.poster, uploaded.posterProblem]).toEqual([null, "This browser could not take a still from it."]);
+  });
+
+  it("reads the video back through the app and says when this browser cannot decode it, sending no poster", async () => {
+    const calls: string[] = [];
+    stubNetwork(calls);
+    vi.stubGlobal("fetch", async (path: string, init?: RequestInit) => {
+      calls.push(`${path} ${new Headers(init?.headers).get("x-write-password")}`);
+      return new Response("not a video", { status: 200, headers: { "content-type": "video/mp4", "content-length": "11" } });
+    });
+    vi.useFakeTimers();
+    try {
+      const made = makePoster("video/a-0123456789ab.mp4", "pw");
+      const failure = expect(made).rejects.toThrow("cannot decode this video");
+      await vi.advanceTimersByTimeAsync(20_000);
+      await failure;
+    } finally {
+      vi.useRealTimers();
+    }
+    expect(calls).toEqual(["/api/media/video?key=video%2Fa-0123456789ab.mp4 pw"]);
   });
 });

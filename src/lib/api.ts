@@ -202,17 +202,19 @@ export function deleteMediaVideos(keys: string[], password: string): Promise<{ d
   return mediaJson("/api/media/delete", { keys }, password, "Could not delete the videos");
 }
 
-export async function fetchDropboxVideo(
-  url: string,
+async function streamVideo(
+  path: string,
+  name: string,
+  failure: string,
   password: string,
   signal: AbortSignal,
   onProgress: (fraction: number) => void,
-  onAuthorized: () => void = () => {},
+  onAuthorized: () => void,
 ): Promise<File> {
-  const response = await fetch(`/api/media/fetch?${new URLSearchParams({ url })}`, { headers: headers(password), signal });
+  const response = await fetch(path, { headers: headers(password), signal });
   if (!response.ok || !response.body) {
-    await readJson(response, "Could not fetch the video from Dropbox");
-    throw new Error("Could not fetch the video from Dropbox.");
+    await readJson(response, failure);
+    throw new Error(`${failure}.`);
   }
   onAuthorized();
   const total = Number(response.headers.get("content-length") ?? "0");
@@ -234,8 +236,23 @@ export async function fetchDropboxVideo(
       onProgress(loaded / total);
     }
   }
-  const name = decodeURIComponent(new URL(url).pathname.split("/").pop() || "video");
   return new File(chunks as BlobPart[], name, { type: response.headers.get("content-type") ?? "" });
+}
+
+export async function fetchDropboxVideo(
+  url: string,
+  password: string,
+  signal: AbortSignal,
+  onProgress: (fraction: number) => void,
+  onAuthorized: () => void = () => {},
+): Promise<File> {
+  const name = decodeURIComponent(new URL(url).pathname.split("/").pop() || "video");
+  return streamVideo(`/api/media/fetch?${new URLSearchParams({ url })}`, name, "Could not fetch the video from Dropbox", password, signal, onProgress, onAuthorized);
+}
+
+export async function fetchBucketVideo(key: string, password: string, signal: AbortSignal, onProgress: (fraction: number) => void = () => {}): Promise<File> {
+  const name = key.split("/").pop() || "video";
+  return streamVideo(`/api/media/video?${new URLSearchParams({ key })}`, name, "Could not read the video from the media bucket", password, signal, onProgress, () => {});
 }
 
 export function startMedia(

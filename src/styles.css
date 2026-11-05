@@ -2996,6 +2996,11 @@ textarea {
   font-style: italic;
 }
 
+.video-row-problem {
+  color: var(--danger);
+  font-size: var(--text-sm);
+}
+
 .video-row-actions {
   display: flex;
   gap: 4px;

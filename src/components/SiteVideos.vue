@@ -7,6 +7,7 @@ import { deleteMediaVideos, fetchMediaVideos, PasswordRejected } from "../lib/ap
 import { draftStore } from "../lib/db.ts";
 import { draftLabel } from "../lib/draft.ts";
 import { slugFromPath } from "../lib/paths.ts";
+import { makePoster } from "../lib/video.ts";
 import Icon from "./Icon.vue";
 import SignIn from "./SignIn.vue";
 import { useFloatingMenu } from "./useFloatingMenu.ts";
@@ -24,6 +25,9 @@ const problem = ref("");
 const notice = ref("");
 const busy = ref(false);
 const copied = ref("");
+const making = ref("");
+const reading = ref(0);
+const posterProblems = ref<Record<string, string>>({});
 const { password, asking, credential, accepted, signedIn, forget } = useSignIn();
 
 useFloatingMenu(open, anchor, list);
@@ -104,6 +108,24 @@ const remove = async (chosen: MediaVideo[]) => {
   }
 };
 
+const addPoster = async (video: MediaVideo) => {
+  making.value = video.key;
+  reading.value = 0;
+  const { [video.key]: _, ...others } = posterProblems.value;
+  posterProblems.value = others;
+  try {
+    video.poster = await makePoster(video.key, credential(), (fraction) => (reading.value = fraction));
+    accepted();
+  } catch (cause) {
+    if (cause instanceof PasswordRejected) {
+      forget();
+    }
+    posterProblems.value = { ...posterProblems.value, [video.key]: cause instanceof Error ? cause.message : "Could not make its poster." };
+  } finally {
+    making.value = "";
+  }
+};
+
 const copy = async (video: MediaVideo) => {
   const tag = embedTag("video", video.url, embedExtra({ poster: video.poster, width: video.width, height: video.height }));
   try {
@@ -163,8 +185,19 @@ const copy = async (video: MediaVideo) => {
           <span class="video-row-uses" :title="usesOf(video).join('\n')">
             {{ unused(video) ? (fresh(video) ? "Not used yet — uploaded today" : "Not used") : usesOf(video).length ? `In ${usesOf(video).join(", ")}` : "Not used on the site" }}
           </span>
+          <span v-if="posterProblems[video.key]" class="video-row-problem" role="alert">{{ posterProblems[video.key] }}</span>
         </div>
         <div class="video-row-actions">
+          <button
+            v-if="!video.poster"
+            type="button"
+            class="btn tiny"
+            title="Take a still from the video and upload it as its poster"
+            :disabled="making !== ''"
+            @click="addPoster(video)"
+          >
+            {{ making === video.key ? `Making ${Math.round(reading * 100)}%` : "Make poster" }}
+          </button>
           <button type="button" class="btn tiny" :title="'Copy its tag, to put it in a post'" @click="copy(video)">
             {{ copied === video.key ? "Copied" : "Tag" }}
           </button>

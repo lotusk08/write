@@ -1,5 +1,5 @@
 import { MAX_VIDEO_BYTES, type MediaPart, PART_BYTES, VIDEO_TYPES } from "../../shared/media.ts";
-import { abortMedia, completeMedia, HttpError, PasswordRejected, sendMediaPart, startMedia, uploadPoster } from "./api.ts";
+import { abortMedia, completeMedia, fetchBucketVideo, HttpError, PasswordRejected, sendMediaPart, startMedia, uploadPoster } from "./api.ts";
 
 const MAX_EDGE = 1920;
 const COPY_BITRATE = 10_000_000;
@@ -24,6 +24,7 @@ export interface PreparedVideo {
 export interface UploadedVideo {
   url: string;
   poster: string | null;
+  posterProblem: string;
   sent: boolean;
 }
 
@@ -263,7 +264,30 @@ export async function uploadVideo(
     }
   }
   onProgress(1);
-  const poster = video.poster ? await uploadPoster(started.key, video.poster, password, signal).catch(() => null) : null;
+  let poster: string | null = null;
+  let posterProblem = video.poster ? "" : "This browser could not take a still from it.";
+  if (video.poster) {
+    try {
+      poster = (await uploadPoster(started.key, video.poster, password, signal)).url;
+    } catch (cause) {
+      posterProblem = `Its still did not upload: ${cause instanceof Error ? cause.message : String(cause)}`;
+    }
+  }
   signal.throwIfAborted();
-  return { url: started.url, poster: poster?.url ?? null, sent: Boolean(started.upload) };
+  return { url: started.url, poster, posterProblem, sent: Boolean(started.upload) };
+}
+
+export async function makePoster(
+  key: string,
+  password: string,
+  onProgress: (fraction: number) => void = () => {},
+  signal: AbortSignal = new AbortController().signal,
+): Promise<string> {
+  const file = await fetchBucketVideo(key, password, signal, onProgress);
+  const { poster } = await still(file);
+  signal.throwIfAborted();
+  if (!poster) {
+    throw new Error("This browser cannot decode this video, so it cannot take a still from it. Try another browser, such as Safari.");
+  }
+  return (await uploadPoster(key, poster, password, signal)).url;
 }

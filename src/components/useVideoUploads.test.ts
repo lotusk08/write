@@ -4,6 +4,7 @@ import { beforeEach, expect, it, vi } from "vitest";
 const calls: string[] = [];
 const gates = new Map<string, Promise<void>>();
 const fail = new Set<string>();
+const noPoster = new Set<string>();
 vi.mock("../lib/api.ts", async (original) => ({ ...(await original<typeof import("../lib/api.ts")>()), fetchAppConfig: async () => ({ media: "https://m" }) }));
 vi.mock("../lib/video.ts", async () => {
   const { PasswordRejected } = await import("../lib/api.ts");
@@ -20,7 +21,12 @@ vi.mock("../lib/video.ts", async () => {
       authorized();
       await gates.get(name);
       signal.throwIfAborted();
-      return { url: `https://m/video/${name}-0123456789ab.mp4`, poster: null, sent: true };
+      return {
+        url: `https://m/video/${name}-0123456789ab.mp4`,
+        poster: noPoster.has(name) ? null : `https://m/video/${name}-0123456789ab.webp`,
+        posterProblem: noPoster.has(name) ? "Its still did not upload: The connection dropped." : "",
+        sent: true,
+      };
     },
   };
 });
@@ -31,6 +37,7 @@ beforeEach(async () => {
   calls.length = 0;
   gates.clear();
   fail.clear();
+  noPoster.clear();
   const { useSignIn } = await import("./useSignIn.ts");
   useSignIn().forget();
 });
@@ -86,4 +93,26 @@ it("passes a typed password on to the next upload when the one trying it fails f
   await settle();
   expect(calls).toContain("i:right");
   expect(jobs.value.find((job) => job.name === "i.mp4")?.stage).toBe("done");
+});
+
+it("finishes an upload whose poster did not go, but keeps a note up saying so", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout"], shouldAdvanceTime: true });
+  try {
+    const { resume } = await import("./useVideoUploads.ts");
+    const { useSignIn } = await import("./useSignIn.ts");
+    noPoster.add("j");
+    const { jobs, placed } = await queue(["j", "k"]);
+    useSignIn().password.value = "right";
+    resume();
+    await settle();
+    expect(placed).toHaveLength(2);
+    const job = (name: string) => jobs.value.find((entry) => entry.name === name);
+    expect(job("j.mp4")).toMatchObject({ stage: "done", note: expect.stringContaining("No poster: Its still did not upload: The connection dropped. Use Make poster in Videos") });
+    expect(job("k.mp4")?.note).not.toContain("No poster");
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(job("j.mp4")?.stage).toBe("done");
+    expect(job("k.mp4")).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
 });

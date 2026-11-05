@@ -83,6 +83,7 @@ describe("worker", () => {
       ["/api/media", "GET"],
       ["/api/media/delete", "POST"],
       ["/api/media/fetch", "GET"],
+      ["/api/media/video", "GET"],
       ["/api/media/start", "POST"],
       ["/api/media/part", "PUT"],
       ["/api/media/complete", "POST"],
@@ -106,6 +107,7 @@ describe("worker", () => {
       ["/api/source?path=src/drafts/x.md", "GET"],
       ["/api/media", "GET"],
       ["/api/media/delete", "POST"],
+      ["/api/media/video", "GET"],
       ["/api/media/start", "POST"],
       ["/api/media/part", "PUT"],
       ["/api/media/complete", "POST"],
@@ -370,6 +372,10 @@ describe("video uploads", () => {
   const pending = new Map<string, { key: string; parts: Map<number, Uint8Array>; type?: string; meta?: Record<string, string> }>();
   const bucket = {
     head: async (key: string) => (objects.has(key) ? { size: objects.get(key)!.bytes.byteLength, customMetadata: objects.get(key)!.meta } : null),
+    get: async (key: string) => {
+      const object = objects.get(key);
+      return object ? { body: new Response(object.bytes).body, size: object.bytes.byteLength, httpMetadata: { contentType: object.type } } : null;
+    },
     list: async (options?: { include?: string[] }) => ({
       truncated: false,
       objects: [...objects].map(([key, { bytes, meta }], index) => ({
@@ -469,6 +475,17 @@ describe("video uploads", () => {
     });
     expect(objects.get(tall)!.meta).toEqual({ fingerprint: "a".repeat(64), width: "1080", height: "1920" });
     expect(objects.get(unmeasured)!.meta).toEqual({ fingerprint: "b".repeat(64) });
+  });
+
+  it("hands a video in the bucket back to the app, so a poster can be taken from it later", async () => {
+    const key = `video/clip-${fingerprint.slice(0, 12)}.mp4`;
+    objects.set(key, { bytes: new TextEncoder().encode("frames"), type: "video/mp4" });
+    const read = await send(`/api/media/video?key=${key}`);
+    expect([read.status, read.headers.get("content-type"), read.headers.get("content-length"), await read.text()]).toEqual([200, "video/mp4", "6", "frames"]);
+    expect(read.headers.get("cache-control")).toBe("no-store");
+    expect((await send(`/api/media/video?key=video/gone-${fingerprint.slice(0, 12)}.mp4`)).status).toBe(404);
+    expect((await send("/api/media/video?key=video/../secret.mp4")).status).toBe(400);
+    expect((await send(`/api/media/video?key=${key.replace(".mp4", ".webp")}`)).status).toBe(400);
   });
 
   it("keeps the still beside its video and stops an upload when asked", async () => {
