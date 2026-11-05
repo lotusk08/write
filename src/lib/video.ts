@@ -7,6 +7,7 @@ const POSTER_EDGE = 1280;
 const POSTER_QUALITY = 0.82;
 const STILL_WAIT_MS = 15_000;
 const SAMPLE_BYTES = 8 * 1024 * 1024;
+export const POSTER_READ_BYTES = 32 * 1024 * 1024;
 const PARALLEL_PARTS = 3;
 const PART_TRIES = 3;
 const PLAYABLE = new Set(["avc", "vp8", "vp9", "av1"]);
@@ -86,23 +87,33 @@ async function convert(
   }
 }
 
-function settled(video: HTMLVideoElement, event: string): Promise<void> {
+const CANNOT_DECODE = "This browser cannot decode this video.";
+const TOO_SLOW = "This browser took too long to open this video.";
+const CANNOT_DRAW = "This browser could not draw a still from this video.";
+
+function settled(video: HTMLVideoElement, event: string, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error("The video did not load.")), STILL_WAIT_MS);
-    const done = (fail: boolean) => () => {
+    const finish = (failure?: unknown) => {
       window.clearTimeout(timer);
       video.removeEventListener(event, ok);
       video.removeEventListener("error", bad);
-      if (fail) {
-        reject(new Error("The video could not be read."));
+      signal?.removeEventListener("abort", stop);
+      if (failure) {
+        reject(failure);
       } else {
         resolve();
       }
     };
-    const ok = done(false);
-    const bad = done(true);
+    const ok = () => finish();
+    const bad = () => finish(new Error(CANNOT_DECODE));
+    const stop = () => finish(signal?.reason);
+    const timer = window.setTimeout(() => finish(new Error(TOO_SLOW)), STILL_WAIT_MS);
     video.addEventListener(event, ok, { once: true });
     video.addEventListener("error", bad, { once: true });
+    signal?.addEventListener("abort", stop, { once: true });
+    if (signal?.aborted) {
+      stop();
+    }
   });
 }
 
@@ -110,30 +121,43 @@ function canvasBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob | nul
   return new Promise((resolve) => canvas.toBlob(resolve, type, POSTER_QUALITY));
 }
 
-async function still(blob: Blob): Promise<{ width: number; height: number; poster: Blob | null }> {
+async function still(blob: Blob, signal?: AbortSignal): Promise<{ width: number; height: number; poster: Blob | null; problem: string }> {
   const url = URL.createObjectURL(blob);
   const video = document.createElement("video");
   video.muted = true;
   video.playsInline = true;
   video.preload = "auto";
   try {
-    const loaded = settled(video, "loadeddata");
+    signal?.throwIfAborted();
+    const loaded = settled(video, "loadeddata", signal);
     video.src = url;
     await loaded;
     const { videoWidth: width, videoHeight: height } = video;
-    const sought = settled(video, "seeked");
+    if (!width || !height) {
+      throw new Error(CANNOT_DECODE);
+    }
+    const sought = settled(video, "seeked", signal);
     video.currentTime = Math.min((video.duration || 0) / 4, 2);
     await sought;
     const scale = Math.min(1, POSTER_EDGE / Math.max(width, height));
     const canvas = document.createElement("canvas");
     canvas.width = Math.round(width * scale);
     canvas.height = Math.round(height * scale);
-    canvas.getContext("2d")!.drawImage(video, 0, 0, canvas.width, canvas.height);
+    const context = canvas.getContext("2d");
+    if (!context) {
+      throw new Error(CANNOT_DRAW);
+    }
+    context.drawImage(video, 0, 0, canvas.width, canvas.height);
     const webp = await canvasBlob(canvas, "image/webp");
     const poster = webp?.type === "image/webp" ? webp : await canvasBlob(canvas, "image/jpeg");
-    return { width, height, poster };
-  } catch {
-    return { width: 0, height: 0, poster: null };
+    if (!poster) {
+      throw new Error(CANNOT_DRAW);
+    }
+    return { width, height, poster, problem: "" };
+  } catch (cause) {
+    signal?.throwIfAborted();
+    const known = cause instanceof Error && [CANNOT_DECODE, TOO_SLOW].includes(cause.message);
+    return { width: 0, height: 0, poster: null, problem: known ? cause.message : CANNOT_DRAW };
   } finally {
     video.removeAttribute("src");
     video.load();
@@ -165,7 +189,7 @@ export async function prepareVideo(file: File, signal: AbortSignal, onProgress: 
   if (blob.size > MAX_VIDEO_BYTES) {
     throw new Error(`${file.name} is ${megabytes(blob.size)}; a video can be ${megabytes(MAX_VIDEO_BYTES)} at most.`);
   }
-  const { width, height, poster } = await still(blob);
+  const { width, height, poster } = await still(blob, signal);
   signal.throwIfAborted();
   const note = smaller
     ? made.copied
@@ -265,7 +289,7 @@ export async function uploadVideo(
   }
   onProgress(1);
   let poster: string | null = null;
-  let posterProblem = video.poster ? "" : "This browser could not take a still from it.";
+  let posterProblem = "";
   if (video.poster) {
     try {
       poster = (await uploadPoster(started.key, video.poster, password, signal)).url;
@@ -283,11 +307,15 @@ export async function makePoster(
   onProgress: (fraction: number) => void = () => {},
   signal: AbortSignal = new AbortController().signal,
 ): Promise<string> {
-  const file = await fetchBucketVideo(key, password, signal, onProgress);
-  const { poster } = await still(file);
+  const { file, whole } = await fetchBucketVideo(key, password, signal, POSTER_READ_BYTES, onProgress);
+  const { poster, problem } = await still(file, signal);
   signal.throwIfAborted();
   if (!poster) {
-    throw new Error("This browser cannot decode this video, so it cannot take a still from it. Try another browser, such as Safari.");
+    throw new Error(
+      whole
+        ? `${problem} Try another browser, such as Safari; the blog also takes a still from it when it builds.`
+        : `No still from the first ${megabytes(POSTER_READ_BYTES)} of this video here (its index may be at the end of the file). The blog takes a still from it when it builds.`,
+    );
   }
   return (await uploadPoster(key, poster, password, signal)).url;
 }

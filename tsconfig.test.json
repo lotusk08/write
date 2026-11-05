@@ -28,7 +28,10 @@
     "src/**/*.test.ts",
     "src/editor/**/*.ts",
     "src/lib/**/*.ts",
-    "src/components/use*.ts",
+    "src/components/*.ts",
+    "src/components/SiteVideos.vue",
+    "src/components/SignIn.vue",
+    "src/components/Icon.vue",
     "shared"
   ]
 }

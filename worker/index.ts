@@ -860,8 +860,7 @@ async function deleteVideos(bucket: R2Bucket, keys: string[]): Promise<string[]>
 const MAX_VIDEO_SIDE = 16_384;
 
 function videoSide(value: unknown): number | null {
-  const side = Number(value);
-  return Number.isInteger(side) && side > 0 && side <= MAX_VIDEO_SIDE ? side : null;
+  return typeof value === "number" && Number.isInteger(value) && value > 0 && value <= MAX_VIDEO_SIDE ? value : null;
 }
 
 function videoSize(width: unknown, height: unknown): { width: number; height: number } | { width: null; height: null } {
@@ -901,7 +900,7 @@ async function handleMediaList(request: Request, env: Env): Promise<Response> {
           size: object.size,
           uploaded: object.uploaded.getTime(),
           poster: poster ? `${gate.base}/${poster}` : null,
-          ...videoSize(object.customMetadata?.width, object.customMetadata?.height),
+          ...videoSize(Number(object.customMetadata?.width), Number(object.customMetadata?.height)),
           used: uses.get(object.key) ?? [],
         };
       })
@@ -951,6 +950,23 @@ async function handleMediaFetch(request: Request, env: Env): Promise<Response> {
   }
 }
 
+function byteRange(header: string | null, size: number): { offset: number; length: number } | "unsatisfiable" | null {
+  const match = /^bytes=(\d*)-(\d*)$/.exec(header?.trim() ?? "");
+  if (!match || (!match[1] && !match[2])) {
+    return null;
+  }
+  if (!match[1]) {
+    const length = Math.min(Number(match[2]), size);
+    return length > 0 ? { offset: size - length, length } : "unsatisfiable";
+  }
+  const offset = Number(match[1]);
+  const last = match[2] ? Math.min(Number(match[2]), size - 1) : size - 1;
+  if (match[2] && Number(match[2]) < offset) {
+    return null;
+  }
+  return offset < size ? { offset, length: last - offset + 1 } : "unsatisfiable";
+}
+
 async function handleMediaVideo(request: Request, env: Env): Promise<Response> {
   const gate = await mediaGate(request, env);
   if (gate instanceof Response) {
@@ -961,15 +977,29 @@ async function handleMediaVideo(request: Request, env: Env): Promise<Response> {
     return json({ error: "Malformed video to read." }, 400);
   }
   try {
-    const object = await gate.bucket.get(key);
+    const missing = json({ error: "That video is not in the media bucket." }, 404);
+    const found = await gate.bucket.head(key);
+    if (!found) {
+      return missing;
+    }
+    const range = byteRange(request.headers.get("range"), found.size);
+    if (range === "unsatisfiable") {
+      const refused = json({ error: "That part of the video is not there." }, 416);
+      refused.headers.set("content-range", `bytes */${found.size}`);
+      return refused;
+    }
+    const object = await gate.bucket.get(key, range ? { range } : undefined);
     if (!object) {
-      return json({ error: "That video is not in the media bucket." }, 404);
+      return missing;
     }
     return new Response(object.body, {
+      status: range ? 206 : 200,
       headers: {
-        "content-type": object.httpMetadata?.contentType || `video/${key.split(".").pop()}`,
-        "content-length": String(object.size),
+        "content-type": key.endsWith(".webm") ? "video/webm" : "video/mp4",
+        "content-length": String(range ? range.length : object.size),
+        "accept-ranges": "bytes",
         "cache-control": "no-store",
+        ...(range ? { "content-range": `bytes ${range.offset}-${range.offset + range.length - 1}/${object.size}` } : {}),
       },
     });
   } catch (error) {
@@ -1122,6 +1152,9 @@ async function handleMediaPoster(request: Request, env: Env): Promise<Response> 
   }
   const target = posterKey(key, extension);
   try {
+    if (!(await gate.bucket.head(key))) {
+      return json({ error: "That video is not in the media bucket any more." }, 404);
+    }
     await gate.bucket.put(target, bytes, { httpMetadata: { contentType: type, cacheControl: POSTER_CACHE } });
     return json({ key: target, url: `${gate.base}/${target}` });
   } catch (error) {

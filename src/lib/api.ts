@@ -210,33 +210,55 @@ async function streamVideo(
   signal: AbortSignal,
   onProgress: (fraction: number) => void,
   onAuthorized: () => void,
-): Promise<File> {
-  const response = await fetch(path, { headers: headers(password), signal });
+  limit?: number,
+): Promise<{ file: File; whole: boolean }> {
+  const unreachable = (cause: unknown) => (cause instanceof TypeError ? new Error(`${failure}.`) : cause);
+  let response: Response;
+  try {
+    response = await fetch(path, { headers: headers(password, limit ? { range: `bytes=0-${limit - 1}` } : undefined), signal });
+  } catch (cause) {
+    throw unreachable(cause);
+  }
   if (!response.ok || !response.body) {
     await readJson(response, failure);
     throw new Error(`${failure}.`);
   }
   onAuthorized();
-  const total = Number(response.headers.get("content-length") ?? "0");
+  const length = Number(response.headers.get("content-length") ?? "0");
+  const size = Number(/\/(\d+)$/.exec(response.headers.get("content-range") ?? "")?.[1] ?? length);
+  const expected = limit && length ? Math.min(length, limit) : (limit ?? length);
   const reader = response.body.getReader();
   const chunks: Uint8Array[] = [];
   let loaded = 0;
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) {
-      break;
+  let cut = false;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) {
+        break;
+      }
+      const kept = limit ? value.subarray(0, limit - loaded) : value;
+      chunks.push(kept);
+      loaded += kept.byteLength;
+      if (limit && loaded >= limit) {
+        cut = true;
+        await reader.cancel();
+        break;
+      }
+      if (loaded > MAX_VIDEO_BYTES) {
+        await reader.cancel();
+        throw new Error(`This video is too large (max ${MAX_VIDEO_BYTES / 1024 ** 3} GB).`);
+      }
+      if (expected) {
+        onProgress(loaded / expected);
+      }
     }
-    chunks.push(value);
-    loaded += value.byteLength;
-    if (loaded > MAX_VIDEO_BYTES) {
-      await reader.cancel();
-      throw new Error(`This video is too large (max ${MAX_VIDEO_BYTES / 1024 ** 3} GB).`);
-    }
-    if (total) {
-      onProgress(loaded / total);
-    }
+  } catch (cause) {
+    throw unreachable(cause);
   }
-  return new File(chunks as BlobPart[], name, { type: response.headers.get("content-type") ?? "" });
+  onProgress(1);
+  const file = new File(chunks as BlobPart[], name, { type: response.headers.get("content-type") ?? "" });
+  return { file, whole: size ? loaded >= size : !cut };
 }
 
 export async function fetchDropboxVideo(
@@ -247,12 +269,19 @@ export async function fetchDropboxVideo(
   onAuthorized: () => void = () => {},
 ): Promise<File> {
   const name = decodeURIComponent(new URL(url).pathname.split("/").pop() || "video");
-  return streamVideo(`/api/media/fetch?${new URLSearchParams({ url })}`, name, "Could not fetch the video from Dropbox", password, signal, onProgress, onAuthorized);
+  const fetched = await streamVideo(`/api/media/fetch?${new URLSearchParams({ url })}`, name, "Could not fetch the video from Dropbox", password, signal, onProgress, onAuthorized);
+  return fetched.file;
 }
 
-export async function fetchBucketVideo(key: string, password: string, signal: AbortSignal, onProgress: (fraction: number) => void = () => {}): Promise<File> {
+export function fetchBucketVideo(
+  key: string,
+  password: string,
+  signal: AbortSignal,
+  limit: number,
+  onProgress: (fraction: number) => void = () => {},
+): Promise<{ file: File; whole: boolean }> {
   const name = key.split("/").pop() || "video";
-  return streamVideo(`/api/media/video?${new URLSearchParams({ key })}`, name, "Could not read the video from the media bucket", password, signal, onProgress, () => {});
+  return streamVideo(`/api/media/video?${new URLSearchParams({ key })}`, name, "Could not read the video from the media bucket", password, signal, onProgress, () => {}, limit);
 }
 
 export function startMedia(

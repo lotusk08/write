@@ -141,10 +141,14 @@ async function run(job: VideoJob, source: VideoSource, place: (embed: Embed, sen
     };
     job.stage = "done";
     job.fraction = 1;
-    const noPoster = uploaded.posterProblem ? ` No poster: ${uploaded.posterProblem} Use Make poster in Videos to add one.` : "";
+    const noPoster = uploaded.posterProblem
+      ? ` No poster: ${uploaded.posterProblem}${uploaded.sent ? " Use Make poster in Videos to add one." : ""}`
+      : video.poster || !uploaded.sent
+        ? ""
+        : " No still from this browser; the blog takes one at build.";
     if (place(embed, uploaded.sent)) {
       job.note = `${video.note} It is in the post.${noPoster}`;
-      if (!noPoster) {
+      if (!uploaded.posterProblem) {
         window.setTimeout(() => dismiss(job), DONE_MS);
       }
     } else {

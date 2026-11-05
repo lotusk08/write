@@ -372,9 +372,10 @@ describe("video uploads", () => {
   const pending = new Map<string, { key: string; parts: Map<number, Uint8Array>; type?: string; meta?: Record<string, string> }>();
   const bucket = {
     head: async (key: string) => (objects.has(key) ? { size: objects.get(key)!.bytes.byteLength, customMetadata: objects.get(key)!.meta } : null),
-    get: async (key: string) => {
+    get: async (key: string, options?: { range?: { offset: number; length: number } }) => {
       const object = objects.get(key);
-      return object ? { body: new Response(object.bytes).body, size: object.bytes.byteLength, httpMetadata: { contentType: object.type } } : null;
+      const { offset, length } = options?.range ?? { offset: 0, length: object?.bytes.byteLength ?? 0 };
+      return object ? { body: new Response(object.bytes.slice(offset, offset + length)).body, size: object.bytes.byteLength, httpMetadata: { contentType: object.type } } : null;
     },
     list: async (options?: { include?: string[] }) => ({
       truncated: false,
@@ -459,7 +460,7 @@ describe("video uploads", () => {
       return key;
     };
     const tall = await upload("tall", "a", { width: 1080, height: 1920 });
-    const unmeasured = await upload("unmeasured", "b", { width: 0, height: 0 });
+    const unmeasured = await upload("unmeasured", "b", { width: "1080", height: "1920" });
     const odd = await upload("odd", "c", { width: 1.5, height: 99_999 });
     const half = await upload("half", "d", { width: 640 });
     const older = keyOf("older", "e");
@@ -479,7 +480,7 @@ describe("video uploads", () => {
 
   it("hands a video in the bucket back to the app, so a poster can be taken from it later", async () => {
     const key = `video/clip-${fingerprint.slice(0, 12)}.mp4`;
-    objects.set(key, { bytes: new TextEncoder().encode("frames"), type: "video/mp4" });
+    objects.set(key, { bytes: new TextEncoder().encode("frames"), type: "application/octet-stream" });
     const read = await send(`/api/media/video?key=${key}`);
     expect([read.status, read.headers.get("content-type"), read.headers.get("content-length"), await read.text()]).toEqual([200, "video/mp4", "6", "frames"]);
     expect(read.headers.get("cache-control")).toBe("no-store");
@@ -488,12 +489,38 @@ describe("video uploads", () => {
     expect((await send(`/api/media/video?key=${key.replace(".mp4", ".webp")}`)).status).toBe(400);
   });
 
+  it("reads only the part of a video asked for, so a still is taken without the whole file", async () => {
+    const key = `video/clip-${fingerprint.slice(0, 12)}.webm`;
+    objects.set(key, { bytes: new TextEncoder().encode("0123456789") });
+    const part = async (range: string) => {
+      const read = await send(`/api/media/video?key=${key}`, { headers: { range } });
+      return [read.status, read.headers.get("content-range"), read.headers.get("content-length"), await read.text()];
+    };
+    expect(await part("bytes=0-3")).toEqual([206, "bytes 0-3/10", "4", "0123"]);
+    expect(await part("bytes=6-")).toEqual([206, "bytes 6-9/10", "4", "6789"]);
+    expect(await part("bytes=-3")).toEqual([206, "bytes 7-9/10", "3", "789"]);
+    expect(await part("bytes=0-33554431")).toEqual([206, "bytes 0-9/10", "10", "0123456789"]);
+    const whole = await send(`/api/media/video?key=${key}`, { headers: { range: "bytes=0-1,4-5" } });
+    expect([whole.status, whole.headers.get("content-type"), whole.headers.get("accept-ranges"), await whole.text()]).toEqual([200, "video/webm", "bytes", "0123456789"]);
+    const beyond = await send(`/api/media/video?key=${key}`, { headers: { range: "bytes=10-" } });
+    expect([beyond.status, beyond.headers.get("content-range")]).toEqual([416, "bytes */10"]);
+    expect((await send(`/api/media/video?key=video/gone-${fingerprint.slice(0, 12)}.mp4`, { headers: { range: "bytes=0-3" } })).status).toBe(404);
+  });
+
   it("keeps the still beside its video and stops an upload when asked", async () => {
     const { key, upload } = (await (await start({ name: "clip", fingerprint, size: 3, type: "video/webm" })).json()) as { key: string; upload: string };
+    objects.set(key, { bytes: new TextEncoder().encode("vid") });
     const still = await send(`/api/media/poster?key=${key}`, { method: "PUT", headers: { "content-type": "image/webp" }, body: "img" });
     expect(await still.json()).toEqual({ key: key.replace(".webm", ".webp"), url: `https://media.test/${key.replace(".webm", ".webp")}` });
     expect((await send("/api/media/abort", { method: "POST", body: JSON.stringify({ key, upload }) })).status).toBe(200);
     expect(pending.size).toBe(0);
+  });
+
+  it("keeps no still for a video that is not in the bucket, so a deleted one leaves nothing behind", async () => {
+    const key = `video/clip-${fingerprint.slice(0, 12)}.mp4`;
+    const still = await send(`/api/media/poster?key=${key}`, { method: "PUT", headers: { "content-type": "image/webp" }, body: "img" });
+    expect(still.status).toBe(404);
+    expect([...objects.keys()]).toEqual([]);
   });
 
   it("refuses what is not a video upload of the app's", async () => {

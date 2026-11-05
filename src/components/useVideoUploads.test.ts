@@ -5,11 +5,21 @@ const calls: string[] = [];
 const gates = new Map<string, Promise<void>>();
 const fail = new Set<string>();
 const noPoster = new Set<string>();
+const skipped = new Set<string>();
+const stills = new Set<string>();
 vi.mock("../lib/api.ts", async (original) => ({ ...(await original<typeof import("../lib/api.ts")>()), fetchAppConfig: async () => ({ media: "https://m" }) }));
 vi.mock("../lib/video.ts", async () => {
   const { PasswordRejected } = await import("../lib/api.ts");
   return {
-    prepareVideo: async () => ({ blob: new Blob(["x"]), source: new Blob(["x"]), type: "video/mp4", width: 1, height: 1, poster: null, note: "" }),
+    prepareVideo: async (file: File) => ({
+      blob: new Blob(["x"]),
+      source: new Blob(["x"]),
+      type: "video/mp4",
+      width: 1,
+      height: 1,
+      poster: stills.has(file.name.replace(".mp4", "")) ? new Blob(["p"], { type: "image/webp" }) : null,
+      note: "",
+    }),
     uploadVideo: async (_video: unknown, name: string, password: string, signal: AbortSignal, _progress: unknown, authorized: () => void) => {
       calls.push(`${name}:${password}`);
       if (password !== "right") {
@@ -25,7 +35,7 @@ vi.mock("../lib/video.ts", async () => {
         url: `https://m/video/${name}-0123456789ab.mp4`,
         poster: noPoster.has(name) ? null : `https://m/video/${name}-0123456789ab.webp`,
         posterProblem: noPoster.has(name) ? "Its still did not upload: The connection dropped." : "",
-        sent: true,
+        sent: !skipped.has(name),
       };
     },
   };
@@ -38,6 +48,8 @@ beforeEach(async () => {
   gates.clear();
   fail.clear();
   noPoster.clear();
+  skipped.clear();
+  stills.clear();
   const { useSignIn } = await import("./useSignIn.ts");
   useSignIn().forget();
 });
@@ -101,6 +113,8 @@ it("finishes an upload whose poster did not go, but keeps a note up saying so", 
     const { resume } = await import("./useVideoUploads.ts");
     const { useSignIn } = await import("./useSignIn.ts");
     noPoster.add("j");
+    stills.add("j");
+    stills.add("k");
     const { jobs, placed } = await queue(["j", "k"]);
     useSignIn().password.value = "right";
     resume();
@@ -112,6 +126,29 @@ it("finishes an upload whose poster did not go, but keeps a note up saying so", 
     await vi.advanceTimersByTimeAsync(6000);
     expect(job("j.mp4")?.stage).toBe("done");
     expect(job("k.mp4")).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("closes an upload this browser took no still of by itself, saying the blog takes one", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout"], shouldAdvanceTime: true });
+  try {
+    const { resume } = await import("./useVideoUploads.ts");
+    const { useSignIn } = await import("./useSignIn.ts");
+    noPoster.add("m");
+    stills.add("m");
+    skipped.add("m");
+    const { jobs } = await queue(["l", "m"]);
+    useSignIn().password.value = "right";
+    resume();
+    await settle();
+    const job = (name: string) => jobs.value.find((entry) => entry.name === name);
+    expect(job("l.mp4")?.note).toContain("No still from this browser; the blog takes one at build.");
+    expect(job("m.mp4")?.note).toContain("No poster: Its still did not upload");
+    expect(job("m.mp4")?.note).not.toContain("Make poster");
+    await vi.advanceTimersByTimeAsync(6000);
+    expect(job("l.mp4")).toBeUndefined();
   } finally {
     vi.useRealTimers();
   }

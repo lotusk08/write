@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, nextTick, onBeforeUnmount, ref } from "vue";
 import type { MediaVideo } from "../../shared/media.ts";
 import { videoKeysIn } from "../../shared/media.ts";
 import { embedExtra, embedTag } from "../editor/blog.ts";
@@ -27,6 +27,8 @@ const busy = ref(false);
 const copied = ref("");
 const making = ref("");
 const reading = ref(0);
+const made = ref("");
+let stopMaking: AbortController | null = null;
 const posterProblems = ref<Record<string, string>>({});
 const { password, asking, credential, accepted, signedIn, forget } = useSignIn();
 
@@ -108,23 +110,50 @@ const remove = async (chosen: MediaVideo[]) => {
   }
 };
 
+const spoken = computed(() =>
+  making.value ? (reading.value < 1 ? `Reading ${nameOf(making.value)} to take a still…` : "Uploading still…") : made.value,
+);
+
 const addPoster = async (video: MediaVideo) => {
-  making.value = video.key;
+  if (making.value) {
+    return;
+  }
+  const key = video.key;
+  const controller = new AbortController();
+  stopMaking = controller;
+  making.value = key;
+  made.value = "";
   reading.value = 0;
-  const { [video.key]: _, ...others } = posterProblems.value;
+  const { [key]: _, ...others } = posterProblems.value;
   posterProblems.value = others;
   try {
-    video.poster = await makePoster(video.key, credential(), (fraction) => (reading.value = fraction));
+    const poster = await makePoster(key, credential(), (fraction) => (reading.value = fraction), controller.signal);
     accepted();
-  } catch (cause) {
-    if (cause instanceof PasswordRejected) {
-      forget();
+    const row = videos.value?.find((entry) => entry.key === key);
+    if (row) {
+      row.poster = poster;
     }
-    posterProblems.value = { ...posterProblems.value, [video.key]: cause instanceof Error ? cause.message : "Could not make its poster." };
+    made.value = `Poster made for ${nameOf(key)}.`;
+  } catch (cause) {
+    if (!controller.signal.aborted) {
+      if (cause instanceof PasswordRejected) {
+        forget();
+      }
+      posterProblems.value = { ...posterProblems.value, [key]: cause instanceof Error ? cause.message : "Could not make its poster." };
+    }
   } finally {
+    stopMaking = null;
     making.value = "";
+    await nextTick();
+    if (list.value && !list.value.contains(document.activeElement)) {
+      list.value.focus();
+    }
   }
 };
+
+const cancelPoster = () => stopMaking?.abort();
+
+onBeforeUnmount(cancelPoster);
 
 const copy = async (video: MediaVideo) => {
   const tag = embedTag("video", video.url, embedExtra({ poster: video.poster, width: video.width, height: video.height }));
@@ -169,13 +198,14 @@ const copy = async (video: MediaVideo) => {
         <p v-else-if="!videos.length" class="notice">No videos uploaded yet.</p>
         <div v-else class="video-list-head">
           <span>{{ videos.length }} video(s), {{ megabytes(total) }}</span>
-          <button v-if="sweepable.length" type="button" class="btn tiny danger" :disabled="busy" @click="remove(sweepable)">
+          <button v-if="sweepable.length" type="button" class="btn tiny danger" :disabled="busy || making !== ''" @click="remove(sweepable)">
             Delete {{ sweepable.length }} unused
           </button>
         </div>
       </template>
       <p v-if="videos && !local" class="notice warn">This device's drafts could not be read, so no video is offered for deletion.</p>
       <p v-if="notice" class="notice" role="status">{{ notice }}</p>
+      <p class="sr-only" aria-live="polite">{{ spoken }}</p>
       <div v-for="video in videos ?? []" :key="video.key" :class="['video-row', { 'is-unused': unused(video) }]">
         <img v-if="video.poster" class="video-row-still" :src="video.poster" alt="" loading="lazy" />
         <span v-else class="video-row-still"><Icon name="video" :size="16" /></span>
@@ -193,15 +223,16 @@ const copy = async (video: MediaVideo) => {
             type="button"
             class="btn tiny"
             title="Take a still from the video and upload it as its poster"
-            :disabled="making !== ''"
+            :aria-disabled="making !== ''"
             @click="addPoster(video)"
           >
-            {{ making === video.key ? `Making ${Math.round(reading * 100)}%` : "Make poster" }}
+            {{ making === video.key ? (reading < 1 ? `Reading ${Math.round(reading * 100)}%` : "Uploading still…") : "Make poster" }}
           </button>
+          <button v-if="making === video.key" type="button" class="btn tiny" @click="cancelPoster">Cancel</button>
           <button type="button" class="btn tiny" :title="'Copy its tag, to put it in a post'" @click="copy(video)">
             {{ copied === video.key ? "Copied" : "Tag" }}
           </button>
-          <button v-if="unused(video)" type="button" class="btn tiny danger" :disabled="busy" @click="remove([video])">Delete</button>
+          <button v-if="unused(video)" type="button" class="btn tiny danger" :disabled="busy || making === video.key" @click="remove([video])">Delete</button>
         </div>
       </div>
     </div>
