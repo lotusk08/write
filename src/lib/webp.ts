@@ -1,9 +1,8 @@
+import { MAX_UPLOAD_BYTES } from "./images.ts";
 import type { WebpAnswer, WebpJob } from "./webp.worker.ts";
 
-const QUALITY = 88;
-const MAX_WIDTH = 3840;
+const QUALITY = 100;
 const MAX_PIXELS = 16_777_216;
-const MAX_BYTES = 4 * 1024 * 1024;
 const TRIES = 8;
 const TO_WEBP = new Set(["image/jpeg", "image/png"]);
 const IDLE_MS = 20_000;
@@ -78,7 +77,7 @@ export async function toWebp(blob: Blob): Promise<Blob> {
     if (!image.width || !image.height) {
       throw new Error("The photo has no size.");
     }
-    let width = Math.min(image.width, MAX_WIDTH, Math.floor(Math.sqrt((MAX_PIXELS * image.width) / image.height)));
+    let width = Math.min(image.width, Math.floor(Math.sqrt((MAX_PIXELS * image.width) / image.height)));
     let lossless = blob.type === "image/png";
     let smallest: ArrayBuffer | null = null;
     for (let tries = 0; tries < TRIES; tries++) {
@@ -86,7 +85,7 @@ export async function toWebp(blob: Blob): Promise<Blob> {
       if (!smallest || webp.byteLength < smallest.byteLength) {
         smallest = webp;
       }
-      if (webp.byteLength <= MAX_BYTES) {
+      if (webp.byteLength <= MAX_UPLOAD_BYTES) {
         break;
       }
       if (lossless) {

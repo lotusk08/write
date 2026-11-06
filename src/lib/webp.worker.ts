@@ -14,7 +14,7 @@ export type WebpAnswer = { id: number; webp: ArrayBuffer } | { id: number; error
 self.onmessage = async ({ data }: MessageEvent<WebpJob>) => {
   try {
     const image = new ImageData(new Uint8ClampedArray(data.pixels), data.width, data.height);
-    const webp = await encode(image, { quality: data.quality, lossless: data.lossless ? 1 : 0, exact: 0 });
+    const webp = await encode(image, { quality: data.quality, lossless: data.lossless ? 1 : 0, use_sharp_yuv: 1, exact: 0 });
     self.postMessage({ id: data.id, webp } satisfies WebpAnswer, { transfer: [webp] });
   } catch (cause) {
     self.postMessage({ id: data.id, error: cause instanceof Error ? cause.message : String(cause) } satisfies WebpAnswer);

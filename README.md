@@ -117,8 +117,9 @@ browser.
   every image, in one commit, the photos sent one per request first. Images are
   named from their alt text (`public/assets/img/post/<slug>-<alt>.webp`,
   `<slug>-N.webp` with none). A new JPEG or PNG is turned into WebP in the browser
-  before it is sent — quality 88 like the site's build, a PNG lossless while it
-  stays under 4 MB, at most 3840 px wide — by libwebp in a worker, since Safari
+  before it is sent, keeping its quality — a JPEG at WebP quality 100, a PNG
+  lossless, at full size up to the 16.7 megapixels a browser can draw, and
+  narrowed only past the 8 MB a photo may be — by libwebp in a worker, since Safari
   cannot write WebP itself; other kinds are sent as they are and the site's build
   converts what it can. A published photo whose name no longer follows its alt
   is renamed and its old address redirected, and the Markdown is rewritten to
