@@ -37,6 +37,13 @@ function caretAtEnd(block: HTMLElement, range: Range): boolean {
   return rest.toString() === "" && !rest.cloneContents().querySelector("img, sup, input");
 }
 
+function caretAtStart(block: HTMLElement, range: Range): boolean {
+  const before = document.createRange();
+  before.setStart(block, 0);
+  before.setEnd(range.startContainer, range.startOffset);
+  return before.toString() === "" && !before.cloneContents().querySelector("br, img, sup, input");
+}
+
 function nodeBefore(range: Range): Node | null {
   const { startContainer, startOffset } = range;
   if (startContainer.nodeType === 3) {
@@ -173,14 +180,67 @@ function enter(root: HTMLElement): boolean {
     notify(root);
     return true;
   }
-  const before = nodeBefore(range);
-  if (atEnd && before?.nodeName === "BR") {
-    before.parentNode?.removeChild(before);
-    document.execCommand("insertParagraph");
-    return true;
+  if (nodeBefore(range)?.nodeName === "BR") {
+    splitParagraph(root, block, range);
+  } else if (caretAtStart(block, range) && holdsContent(block)) {
+    const above = document.createElement("p");
+    above.append(document.createElement("br"));
+    block.before(above);
+    notify(root);
+  } else {
+    insertBreak(root, block, range);
   }
-  insertBreak(root, block, range);
   return true;
+}
+
+const KEPT = "img, sup, input";
+
+const holdsContent = (element: Element | DocumentFragment): boolean =>
+  Boolean(element.textContent?.replace(/\u200b/g, "")) || Boolean(element.querySelector(KEPT));
+
+function trimBreaks(parent: Node, end: boolean): void {
+  for (;;) {
+    const edge = end ? parent.lastChild : parent.firstChild;
+    if (!edge) {
+      return;
+    }
+    if (edge.nodeType === 3) {
+      const text = edge as Text;
+      text.data = end ? text.data.replace(/[ \u00a0]+$/, "") : text.data.replace(/^[ \u00a0]+/, "");
+      if (text.data) {
+        return;
+      }
+    }
+    if (edge.nodeName === "BR" || edge.nodeType === 3) {
+      edge.remove();
+      continue;
+    }
+    if (edge.nodeType !== 1 || (edge as Element).matches(KEPT)) {
+      return;
+    }
+    trimBreaks(edge, end);
+    if (edge.childNodes.length) {
+      return;
+    }
+    edge.remove();
+  }
+}
+
+function splitParagraph(root: HTMLElement, block: HTMLElement, range: Range): void {
+  const tail = document.createRange();
+  tail.setStart(range.startContainer, range.startOffset);
+  tail.setEnd(block, block.childNodes.length);
+  const rest = tail.extractContents();
+  trimBreaks(block, true);
+  trimBreaks(rest, false);
+  if (!holdsContent(block)) {
+    block.replaceChildren(document.createElement("br"));
+  }
+  const next = document.createElement("p");
+  next.append(...(holdsContent(rest) ? rest.childNodes : [document.createElement("br")]));
+  block.after(next);
+  placeCaret(next, false);
+  notify(root);
 }
 
 type Command = (root: HTMLElement) => unknown;

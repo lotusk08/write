@@ -382,6 +382,39 @@ describe("toolbar commands", () => {
   });
 });
 
+describe("Enter in a paragraph", () => {
+  const enter = () => handleKeydown(root, new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
+
+  it("breaks the line once, and a second Enter makes a paragraph a quote takes alone", () => {
+    load("one two");
+    caretAfter("one ");
+    enter();
+    expect(root.querySelectorAll("p")).toHaveLength(1);
+    enter();
+    expect([...root.querySelectorAll("p")].map((p) => p.innerHTML)).toEqual(["one", "two"]);
+    togglePlainQuote(root);
+    expect(markdown()).toBe("one\n\n> two");
+  });
+
+  it("leaves no line break behind at the end, nor bold in the new paragraph", () => {
+    load("keep **bold**");
+    caretAfter("bold");
+    enter();
+    enter();
+    expect([...root.querySelectorAll("p")].map((p) => p.innerHTML)).toEqual(["keep <strong>bold</strong>", "<br>"]);
+  });
+
+  it("turns the line break before the caret into the paragraph break, then adds a paragraph above", () => {
+    load("a  \nb  \nc");
+    caretAfter("b");
+    window.getSelection()!.getRangeAt(0).setStartBefore(root.querySelector("p")!.lastChild!);
+    enter();
+    expect([...root.querySelectorAll("p")].map((p) => p.innerHTML)).toEqual(["a<br>b", "c"]);
+    enter();
+    expect([...root.querySelectorAll("p")].map((p) => p.innerHTML)).toEqual(["a<br>b", "<br>", "c"]);
+  });
+});
+
 describe("Enter in a code block", () => {
   const enter = () => handleKeydown(root, new KeyboardEvent("keydown", { key: "Enter", cancelable: true }));
 
