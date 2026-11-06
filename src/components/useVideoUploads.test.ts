@@ -7,9 +7,21 @@ const fail = new Set<string>();
 const noPoster = new Set<string>();
 const skipped = new Set<string>();
 const stills = new Set<string>();
-vi.mock("../lib/api.ts", async (original) => ({ ...(await original<typeof import("../lib/api.ts")>()), fetchAppConfig: async () => ({ media: "https://m" }) }));
+vi.mock("../lib/api.ts", async (original) => {
+  const api = await original<typeof import("../lib/api.ts")>();
+  return {
+    ...api,
+    fetchAppConfig: async () => ({ media: "https://m" }),
+    login: async (password: string) => {
+      calls.push(`login:${password}`);
+      if (password !== "right") {
+        throw new api.PasswordRejected("Wrong password.");
+      }
+      return "session";
+    },
+  };
+});
 vi.mock("../lib/video.ts", async () => {
-  const { PasswordRejected } = await import("../lib/api.ts");
   return {
     prepareVideo: async () => ({
       blob: new Blob(["x"]),
@@ -20,15 +32,11 @@ vi.mock("../lib/video.ts", async () => {
       poster: async () => null,
       note: "",
     }),
-    uploadVideo: async (_video: unknown, name: string, password: string, signal: AbortSignal, _progress: unknown, authorized: () => void) => {
-      calls.push(`${name}:${password}`);
-      if (password !== "right") {
-        throw new PasswordRejected("Wrong password.");
-      }
+    uploadVideo: async (_video: unknown, name: string, signal: AbortSignal) => {
+      calls.push(name);
       if (fail.has(name)) {
         throw new Error("The connection dropped.");
       }
-      authorized();
       await gates.get(name);
       signal.throwIfAborted();
       return {
@@ -65,37 +73,37 @@ async function queue(names: string[]) {
   return { jobs, placed };
 }
 
-it("tries each typed password once, then lets every waiting upload go once one is accepted, from any panel", async () => {
+it("signs in once for each typed password, then sends every waiting upload with the session alone", async () => {
   const { resume } = await import("./useVideoUploads.ts");
   const { useSignIn } = await import("./useSignIn.ts");
-  const { password, accepted } = useSignIn();
+  const { password } = useSignIn();
   const { jobs, placed } = await queue(["a", "b", "c", "d"]);
   expect(jobs.value.filter((job) => ["a.mp4", "b.mp4", "c.mp4", "d.mp4"].includes(job.name)).map((job) => job.stage)).toEqual(["signing-in", "signing-in", "signing-in", "signing-in"]);
   password.value = "typo";
   resume();
   await settle();
-  expect(calls).toEqual(["a:typo"]);
+  expect(calls).toEqual(["login:typo"]);
   password.value = "right";
-  accepted();
+  resume();
   await settle();
-  expect(calls.slice(1).sort()).toEqual(["a:right", "b:right", "c:right", "d:right"]);
+  expect(calls.slice(1, 2)).toEqual(["login:right"]);
+  expect(calls.slice(2).sort()).toEqual(["a", "b", "c", "d"]);
+  expect(password.value).toBe("");
   expect(placed).toHaveLength(4);
 });
 
-it("starts every waiting upload as soon as the password is accepted, not after the first upload ends", async () => {
-  const { resume } = await import("./useVideoUploads.ts");
+it("starts every waiting upload as soon as a passkey signs in, not after the first upload ends", async () => {
   const { useSignIn } = await import("./useSignIn.ts");
   let open = () => {};
   gates.set("e", new Promise((resolve) => (open = resolve)));
   await queue(["e", "f", "g"]);
-  useSignIn().password.value = "right";
-  resume();
+  useSignIn().signedIn("session");
   await settle();
-  expect(calls.sort()).toEqual(["e:right", "f:right", "g:right"]);
+  expect(calls.sort()).toEqual(["e", "f", "g"]);
   open();
 });
 
-it("passes a typed password on to the next upload when the one trying it fails for another reason", async () => {
+it("keeps the others going when the upload that signed in fails for another reason", async () => {
   const { resume } = await import("./useVideoUploads.ts");
   const { useSignIn } = await import("./useSignIn.ts");
   fail.add("h");
@@ -103,7 +111,7 @@ it("passes a typed password on to the next upload when the one trying it fails f
   useSignIn().password.value = "right";
   resume();
   await settle();
-  expect(calls).toContain("i:right");
+  expect(calls).toContain("i");
   expect(jobs.value.find((job) => job.name === "i.mp4")?.stage).toBe("done");
 });
 

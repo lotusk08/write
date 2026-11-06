@@ -31,7 +31,7 @@ const reading = ref(0);
 const made = ref("");
 let stopMaking: AbortController | null = null;
 const posterProblems = ref<Record<string, string>>({});
-const { password, asking, credential, accepted, signedIn, forget } = useSignIn();
+const { password, asking, signIn, signedIn, forget } = useSignIn();
 
 useFloatingMenu(open, anchor, list);
 
@@ -60,8 +60,8 @@ const load = async () => {
     return;
   }
   try {
-    const [found, uses] = await Promise.all([fetchMediaVideos(credential()), localUses().catch(() => null)]);
-    accepted();
+    await signIn();
+    const [found, uses] = await Promise.all([fetchMediaVideos(), localUses().catch(() => null)]);
     local.value = uses;
     videos.value = found;
   } catch (cause) {
@@ -91,7 +91,7 @@ const remove = async (chosen: MediaVideo[]) => {
     const deleted: string[] = [];
     const kept: { key: string; used: string[] }[] = [];
     for (let at = 0; at < chosen.length; at += BATCH) {
-      const done = await deleteMediaVideos(chosen.slice(at, at + BATCH).map((video) => video.key), credential());
+      const done = await deleteMediaVideos(chosen.slice(at, at + BATCH).map((video) => video.key));
       deleted.push(...done.deleted);
       kept.push(...done.kept);
     }
@@ -127,8 +127,7 @@ const addPoster = async (video: MediaVideo) => {
   const { [key]: _, ...others } = posterProblems.value;
   posterProblems.value = others;
   try {
-    const still = await makePoster(key, credential(), (fraction) => (reading.value = fraction), controller.signal);
-    accepted();
+    const still = await makePoster(key, (fraction) => (reading.value = fraction), controller.signal);
     const row = videos.value?.find((entry) => entry.key === key);
     if (row) {
       row.poster = still.url;

@@ -130,16 +130,15 @@ const pinsOf = (posts: SiteFile[]) => JSON.stringify(posts.map(({ path, pin, hid
 export async function publishPins(
   changes: Map<string, Pin>,
   posts: SiteFile[],
-  password: string,
 ): Promise<{ commitUrl: string; written: PinWritten[] }> {
-  if (pinsOf((await fetchSiteFiles(password)).posts) !== pinsOf(posts)) {
+  if (pinsOf((await fetchSiteFiles()).posts) !== pinsOf(posts)) {
     throw new Error("The site changed since the list was read.");
   }
   const files = await Promise.all(
     [...changes].map(async ([path, pin]) => {
       const listed = posts.find((post) => post.path === path);
       const title = listed?.title || path;
-      const source = await fetchPostSource(path, password);
+      const source = await fetchPostSource(path);
       const yaml = frontMatter(source.markdown)?.yaml;
       const field = yaml === undefined ? null : frontField(yaml, "pin");
       if (!listed || (field ? readPin(field.text, field.plain) : false) !== listed.pin) {
@@ -159,7 +158,6 @@ export async function publishPins(
       files: written.map(({ path, markdown }) => ({ path, contentBase64: bytesToBase64(new TextEncoder().encode(markdown)) })),
       expect: files.map(({ path, was }) => ({ path, sha: was })),
     },
-    password,
   );
   return {
     commitUrl: result.commitUrl,

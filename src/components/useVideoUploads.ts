@@ -23,7 +23,7 @@ const DONE_MS = 5000;
 const jobs = ref<VideoJob[]>([]);
 let counter = 0;
 let waiting: (() => void)[] = [];
-const { asking, credential, accepted, forget } = useSignIn();
+const { asking, signIn, forget } = useSignIn();
 
 function dismiss(job: VideoJob): void {
   jobs.value = jobs.value.filter((entry) => entry.id !== job.id);
@@ -70,7 +70,7 @@ async function signed<T>(
   job: VideoJob,
   stage: VideoJob["stage"],
   signal: AbortSignal,
-  step: (password: string, authorized: () => void) => Promise<T>,
+  step: () => Promise<T>,
 ): Promise<T> {
   for (;;) {
     if (asking.value) {
@@ -78,17 +78,9 @@ async function signed<T>(
       await signedIn(signal);
     }
     job.stage = stage;
-    let trying = asking.value;
-    const authorized = () => {
-      if (trying) {
-        trying = false;
-        accepted();
-      }
-    };
     try {
-      const done = await step(credential(), authorized);
-      authorized();
-      return done;
+      await signIn();
+      return await step();
     } catch (cause) {
       const locked = cause instanceof HttpError && cause.status === 429;
       if (cause instanceof PasswordRejected || locked) {
@@ -96,7 +88,7 @@ async function signed<T>(
         forget();
         continue;
       }
-      if (trying) {
+      if (asking.value) {
         resume();
       }
       throw cause;
@@ -105,8 +97,8 @@ async function signed<T>(
 }
 
 function send(job: VideoJob, video: PreparedVideo, name: string, signal: AbortSignal): Promise<UploadedVideo> {
-  return signed(job, "uploading", signal, (password, authorized) =>
-    uploadVideo(video, name, password, signal, (fraction) => (job.fraction = fraction), authorized),
+  return signed(job, "uploading", signal, () =>
+    uploadVideo(video, name, signal, (fraction) => (job.fraction = fraction)),
   );
 }
 
@@ -122,8 +114,8 @@ async function run(job: VideoJob, source: VideoSource, place: (embed: Embed, sen
       file = source;
     } else {
       job.note = "Fetching it from Dropbox…";
-      file = await signed(job, "fetching", signal, (password, authorized) =>
-        fetchDropboxVideo(source.dropbox, password, signal, (fraction) => (job.fraction = fraction), authorized),
+      file = await signed(job, "fetching", signal, () =>
+        fetchDropboxVideo(source.dropbox, signal, (fraction) => (job.fraction = fraction)),
       );
       job.stage = "preparing";
       job.fraction = 0;

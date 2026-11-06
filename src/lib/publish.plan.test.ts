@@ -130,7 +130,7 @@ describe("buildPublishPlan", () => {
       ...(await buildPublishPlan(draft({}), settings)),
       photos: [{ path: "public/assets/img/post/trip-1.gif", blob: gif, src: "local:1", alt: "" }],
     };
-    await expect(sendPlan(plan, "m", "pw", () => {})).rejects.toThrow("trip-1.gif is 9.0 MB");
+    await expect(sendPlan(plan, "m", () => {})).rejects.toThrow("trip-1.gif is 9.0 MB");
   });
 
   it("refuses a photo whose place it cannot take out, as a HEIC, before uploading any", async () => {
@@ -139,6 +139,6 @@ describe("buildPublishPlan", () => {
       ...(await buildPublishPlan(draft({}), settings)),
       photos: [{ path: "public/assets/img/post/trip-1.heic", blob: heic, src: "local:1", alt: "" }],
     };
-    await expect(sendPlan(plan, "m", "pw", () => {})).rejects.toThrow("trip-1.heic may hold where it was taken");
+    await expect(sendPlan(plan, "m", () => {})).rejects.toThrow("trip-1.heic may hold where it was taken");
   });
 });

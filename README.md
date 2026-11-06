@@ -185,11 +185,14 @@ piping it — a trailing newline makes GitHub treat the request as anonymous,
 which a private repo answers with a flat "not found".
 
 `WRITE_PASSWORD` is the whole of what stands in front of it, so make it long.
-It is the only thing the browser is ever trusted with, and only for a sitting:
-the first publish after the app opens asks for it, and it is held in session
-storage until the tab closes — or the app goes away on a phone — then asked for
-again. Nothing stores it. It guards sending, not reading — a post under
-`src/posts` opens without it, because it is on the blog anyway; a draft does not. Until it is set the Worker refuses to
+It is typed once a sitting and sent once, to `/api/login`, the one place it is
+checked and the one place wrong guesses are counted; the tab keeps only the
+signed session it gets back, in session storage until the tab closes — or the
+app goes away on a phone — and sends that alone after. Nothing stores the
+password. Signed out, the app is a local demo: drafts, the editor and the
+preview work, but topics, the site's photos and files, videos, sharing and
+publishing wait for sign-in. A post under `src/posts` opens without it, because
+it is on the blog anyway; a draft does not. Until it is set the Worker refuses to
 publish at all — an endpoint holding a write token with nothing in front of it
 is worse than a broken one, so it fails closed and says so.
 

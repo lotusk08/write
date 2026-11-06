@@ -1,5 +1,8 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchDropboxVideo, fetchSitePhotos, PasswordRejected, publish, uploadPhoto } from "./api.ts";
+import { fetchDropboxVideo, fetchSiteFiles, fetchSitePhotos, login, PasswordRejected, publish, uploadPhoto } from "./api.ts";
+
+const kept = vi.hoisted(() => ({ session: "" }));
+vi.mock("./password.ts", () => ({ sessionToken: () => kept.session }));
 
 function answers(...statuses: number[]) {
   const calls = vi.fn(async () => {
@@ -12,6 +15,29 @@ function answers(...statuses: number[]) {
 
 afterEach(() => vi.unstubAllGlobals());
 
+describe("login", () => {
+  it("sends the password once to sign in, then only the session", async () => {
+    const sent: Headers[] = [];
+    vi.stubGlobal("fetch", async (_url: string, init?: RequestInit) => {
+      sent.push(new Headers(init?.headers));
+      return Response.json({ session: "s1", posts: [], drafts: [] });
+    });
+    expect(await login("pw")).toBe("s1");
+    kept.session = "s1";
+    await fetchSiteFiles();
+    kept.session = "";
+    expect(sent.map((headers) => [headers.get("x-write-password"), headers.get("x-write-session")])).toEqual([
+      ["pw", null],
+      [null, "s1"],
+    ]);
+  });
+
+  it("says a wrong password was refused", async () => {
+    vi.stubGlobal("fetch", async () => Response.json({ error: "Wrong password." }, { status: 401 }));
+    await expect(login("typo")).rejects.toBeInstanceOf(PasswordRejected);
+  });
+});
+
 describe("fetchSitePhotos", () => {
   it("reads the site's photos once a minute for the same post, and afresh after a publish", async () => {
     const calls = vi.fn(async (url: string) =>
@@ -22,7 +48,7 @@ describe("fetchSitePhotos", () => {
     await fetchSitePhotos(own);
     expect((await fetchSitePhotos(own)).files).toHaveLength(1);
     expect(calls).toHaveBeenCalledTimes(1);
-    await publish({ message: "m", files: [] }, "pw");
+    await publish({ message: "m", files: [] });
     await fetchSitePhotos(own);
     expect(calls).toHaveBeenCalledTimes(3);
   });
@@ -31,16 +57,16 @@ describe("fetchSitePhotos", () => {
 describe("uploadPhoto", () => {
   it("tries once more after a server error", async () => {
     const calls = answers(502, 200);
-    expect(await uploadPhoto("aGk=", "pw")).toBe("a".repeat(40));
+    expect(await uploadPhoto("aGk=")).toBe("a".repeat(40));
     expect(calls).toHaveBeenCalledTimes(2);
   });
 
   it("does not resend a photo the worker refused, or a wrong password", async () => {
     let calls = answers(400, 200);
-    await expect(uploadPhoto("aGk=", "pw")).rejects.toThrow("failed 400");
+    await expect(uploadPhoto("aGk=")).rejects.toThrow("failed 400");
     expect(calls).toHaveBeenCalledTimes(1);
     calls = answers(401, 200);
-    await expect(uploadPhoto("aGk=", "pw")).rejects.toBeInstanceOf(PasswordRejected);
+    await expect(uploadPhoto("aGk=")).rejects.toBeInstanceOf(PasswordRejected);
     expect(calls).toHaveBeenCalledTimes(1);
   });
 });
@@ -55,7 +81,7 @@ describe("fetchDropboxVideo", () => {
       },
     });
     vi.stubGlobal("fetch", async () => new Response(body, { headers: { "content-type": "video/mp4" } }));
-    const file = await fetchDropboxVideo("https://www.dropbox.com/scl/fi/x/clip.mp4?dl=0", "pw", new AbortController().signal, () => {});
+    const file = await fetchDropboxVideo("https://www.dropbox.com/scl/fi/x/clip.mp4?dl=0", new AbortController().signal, () => {});
     const bytes = new Uint8Array(await file.arrayBuffer());
     expect([file.name, file.type, bytes.length]).toEqual(["clip.mp4", "video/mp4", sizes.reduce((sum, size) => sum + size, 0)]);
     expect([bytes[0], bytes[sizes[0]], bytes[sizes[0] + sizes[1]], bytes.at(-1)]).toEqual([1, 2, 3, 4]);

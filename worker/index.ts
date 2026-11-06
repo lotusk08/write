@@ -259,9 +259,9 @@ async function authorize(
   if (missing) {
     return misconfigured(missing, env);
   }
-  const session = request.headers.get("x-write-session");
-  if (!passwordOnly && session && (await validSession(session, env.WRITE_PASSWORD!))) {
-    return null;
+  if (!passwordOnly) {
+    const session = request.headers.get("x-write-session");
+    return session && (await validSession(session, env.WRITE_PASSWORD!)) ? null : json({ error: "Sign in first." }, 401);
   }
   const supplied = request.headers.get("x-write-password") ?? "";
   if (!supplied) {
@@ -362,7 +362,11 @@ function topicList(value: unknown): Topic[] {
     }));
 }
 
-async function handleTopics(env: Env): Promise<Response> {
+async function handleTopics(request: Request, env: Env): Promise<Response> {
+  const denied = await authorize(request, env);
+  if (denied) {
+    return denied;
+  }
   const none: Topics = { tags: [] };
   const site = (env.SITE_URL || "").replace(/\/+$/, "");
   if (!site) {
@@ -510,9 +514,9 @@ async function handlePhoto(request: Request, env: Env): Promise<Response> {
 }
 
 async function handleImages(request: Request, env: Env): Promise<Response> {
-  const missing = unreachable(env);
-  if (missing) {
-    return misconfigured(missing, env);
+  const denied = await authorize(request, env);
+  if (denied) {
+    return denied;
   }
   if (await limited(env.SOURCE_RATE, request, "source")) {
     return tooMany();
@@ -742,6 +746,17 @@ async function handlePasskeyRegister(request: Request, env: Env): Promise<Respon
   }
   if (!(await store.add(base64url(id), publicKey.slice().buffer, alg))) {
     return json({ error: "There are already as many passkeys as the app keeps." }, 400);
+  }
+  return json({ session: await issueSession(env.WRITE_PASSWORD!) });
+}
+
+async function handleLogin(request: Request, env: Env): Promise<Response> {
+  if (crossSite(request)) {
+    return json({ error: "Sign in from the app itself." }, 403);
+  }
+  const denied = await authorize(request, env, { passwordOnly: true });
+  if (denied) {
+    return denied;
   }
   return json({ session: await issueSession(env.WRITE_PASSWORD!) });
 }
@@ -1177,6 +1192,10 @@ async function handleShareCreate(request: Request, env: Env): Promise<Response> 
   if (crossSite(request)) {
     return json({ error: "Shares can only be managed from the app itself." }, 403);
   }
+  const denied = await authorize(request, env);
+  if (denied) {
+    return denied;
+  }
   if (await limited(env.SHARE_RATE, request, "share")) {
     return json(
       { error: "Too many new shares from this connection — wait a minute and try again." },
@@ -1227,10 +1246,11 @@ const ROUTES = new Map<string, [method: "GET" | "POST" | "PUT", handle: Handler]
   ["/api/images", ["GET", handleImages]],
   ["/api/site", ["GET", handleSite]],
   ["/api/source", ["GET", handleSource]],
+  ["/api/login", ["POST", handleLogin]],
   ["/api/passkey/challenge", ["POST", handlePasskeyChallenge]],
   ["/api/passkey/register", ["POST", handlePasskeyRegister]],
   ["/api/passkey/login", ["POST", handlePasskeyLogin]],
-  ["/api/topics", ["GET", (_request, env) => handleTopics(env)]],
+  ["/api/topics", ["GET", handleTopics]],
   ["/api/media", ["GET", handleMediaList]],
   ["/api/media/delete", ["POST", handleMediaDelete]],
   ["/api/media/fetch", ["GET", handleMediaFetch]],

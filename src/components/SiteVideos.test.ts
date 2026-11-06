@@ -10,6 +10,7 @@ let loads = 0;
 
 vi.mock("../lib/api.ts", async (original) => ({
   ...(await original<typeof import("../lib/api.ts")>()),
+  login: async () => "session",
   fetchMediaVideos: async (): Promise<MediaVideo[]> => {
     loads += 1;
     return [{ key: KEY, url: `https://m/${KEY}`, size: 1024, uploaded: 0, poster: null, width: null, height: null, used: [] }];
@@ -17,7 +18,7 @@ vi.mock("../lib/api.ts", async (original) => ({
 }));
 vi.mock("../lib/db.ts", () => ({ draftStore: { all: async () => [] } }));
 vi.mock("../lib/video.ts", () => ({
-  makePoster: (_key: string, _password: string, _progress: unknown, signal: AbortSignal) =>
+  makePoster: (_key: string, _progress: unknown, signal: AbortSignal) =>
     new Promise<{ url: string; width: number; height: number }>((resolve, reject) => {
       making.push({ signal, finish: resolve });
       signal.addEventListener("abort", () => reject(signal.reason), { once: true });

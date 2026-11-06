@@ -17,11 +17,10 @@ export class PasswordRejected extends Error {
   }
 }
 
-function headers(password: string, extra?: Record<string, string>): Record<string, string> {
+function headers(extra?: Record<string, string>): Record<string, string> {
   const session = sessionToken();
   return {
     accept: "application/json",
-    ...(password ? { "x-write-password": password } : {}),
     ...(session ? { "x-write-session": session } : {}),
     ...extra,
   };
@@ -73,7 +72,7 @@ function topicList(value: unknown): Topic[] {
 }
 
 export function fetchTopics(): Promise<Topics> {
-  topics ??= fetch("/api/topics", { headers: { accept: "application/json" } })
+  topics ??= fetch("/api/topics", { headers: headers() })
     .then(async (response) => {
       if (!answeredJson(response)) {
         throw new Error("No topics.");
@@ -99,9 +98,9 @@ export interface PostSource {
   sha: string;
 }
 
-export async function fetchPostSource(path: string, password: string): Promise<PostSource> {
+export async function fetchPostSource(path: string): Promise<PostSource> {
   const response = await fetch(`/api/source?path=${encodeURIComponent(path)}`, {
-    headers: headers(password),
+    headers: headers(),
   });
   const source = await readJson<PostSource>(response, `Could not open ${path}`);
   if (typeof source.markdown !== "string") {
@@ -110,8 +109,8 @@ export async function fetchPostSource(path: string, password: string): Promise<P
   return source;
 }
 
-export async function fetchSiteFiles(password: string): Promise<SiteFiles> {
-  const response = await fetch("/api/site", { headers: headers(password) });
+export async function fetchSiteFiles(): Promise<SiteFiles> {
+  const response = await fetch("/api/site", { headers: headers() });
   const result = await readJson<Partial<SiteFiles>>(response, "Could not read the site's posts and drafts");
   return {
     posts: Array.isArray(result.posts) ? result.posts : [],
@@ -131,7 +130,7 @@ export function fetchSitePhotos(own: string[]): Promise<SitePhotos> {
     return kept.read;
   }
   const read = (async () => {
-    const response = await fetch(`/api/images?${query}`, { headers: { accept: "application/json" } });
+    const response = await fetch(`/api/images?${query}`, { headers: headers() });
     const result = await readJson<{ files?: SitePhoto[]; redirected?: string[] }>(response, "Could not read the site's photos");
     return {
       files: Array.isArray(result.files) ? result.files : [],
@@ -143,13 +142,13 @@ export function fetchSitePhotos(own: string[]): Promise<SitePhotos> {
   return read;
 }
 
-export async function uploadPhoto(contentBase64: string, password: string, signal?: AbortSignal): Promise<string> {
+export async function uploadPhoto(contentBase64: string, signal?: AbortSignal): Promise<string> {
   let status = 0;
   const send = async () => {
     status = 0;
     const response = await fetch("/api/publish/photo", {
       method: "POST",
-      headers: headers(password, { "content-type": "text/plain" }),
+      headers: headers({ "content-type": "text/plain" }),
       body: contentBase64,
       signal,
     });
@@ -178,39 +177,37 @@ export class HttpError extends Error {
   }
 }
 
-async function mediaJson<T>(path: string, body: unknown, password: string, whenItFails: string, signal?: AbortSignal): Promise<T> {
+async function mediaJson<T>(path: string, body: unknown, whenItFails: string, signal?: AbortSignal): Promise<T> {
   const response = await fetch(path, {
     method: "POST",
-    headers: headers(password, { "content-type": "application/json" }),
+    headers: headers({ "content-type": "application/json" }),
     body: JSON.stringify(body),
     signal,
   });
   return readJson<T>(response, whenItFails);
 }
 
-export async function fetchMediaVideos(password: string): Promise<MediaVideo[]> {
-  const response = await fetch("/api/media", { headers: headers(password) });
+export async function fetchMediaVideos(): Promise<MediaVideo[]> {
+  const response = await fetch("/api/media", { headers: headers() });
   const result = await readJson<{ videos?: MediaVideo[] }>(response, "Could not read the videos");
   return Array.isArray(result.videos) ? result.videos : [];
 }
 
-export function deleteMediaVideos(keys: string[], password: string): Promise<{ deleted: string[]; kept: { key: string; used: string[] }[] }> {
-  return mediaJson("/api/media/delete", { keys }, password, "Could not delete the videos");
+export function deleteMediaVideos(keys: string[]): Promise<{ deleted: string[]; kept: { key: string; used: string[] }[] }> {
+  return mediaJson("/api/media/delete", { keys }, "Could not delete the videos");
 }
 
 async function streamVideo(
   path: string,
   name: string,
   failure: string,
-  password: string,
   signal: AbortSignal,
   onProgress: (fraction: number) => void,
-  onAuthorized: () => void,
 ): Promise<File> {
   const unreachable = (cause: unknown) => (cause instanceof TypeError ? new Error(`${failure}.`) : cause);
   let response: Response;
   try {
-    response = await fetch(path, { headers: headers(password), signal });
+    response = await fetch(path, { headers: headers(), signal });
   } catch (cause) {
     throw unreachable(cause);
   }
@@ -218,7 +215,6 @@ async function streamVideo(
     await readJson(response, failure);
     throw new Error(`${failure}.`);
   }
-  onAuthorized();
   const expected = Number(response.headers.get("content-length") ?? "0");
   const reader = response.body.getReader();
   const parts: Blob[] = [];
@@ -256,23 +252,21 @@ async function streamVideo(
 
 export function fetchDropboxVideo(
   url: string,
-  password: string,
   signal: AbortSignal,
   onProgress: (fraction: number) => void,
-  onAuthorized: () => void = () => {},
 ): Promise<File> {
   const name = decodeURIComponent(new URL(url).pathname.split("/").pop() || "video");
-  return streamVideo(`/api/media/fetch?${new URLSearchParams({ url })}`, name, "Could not fetch the video from Dropbox", password, signal, onProgress, onAuthorized);
+  return streamVideo(`/api/media/fetch?${new URLSearchParams({ url })}`, name, "Could not fetch the video from Dropbox", signal, onProgress);
 }
 
 export function bucketVideoUrl(key: string): string {
   return `/api/media/video?${new URLSearchParams({ key })}`;
 }
 
-export function bucketVideoFetch(password: string): typeof fetch {
+export function bucketVideoFetch(): typeof fetch {
   return async (input, init) => {
     const sent = new Headers(init?.headers);
-    for (const [name, value] of Object.entries(headers(password))) {
+    for (const [name, value] of Object.entries(headers())) {
       sent.set(name, value);
     }
     const response = await fetch(input, { ...init, headers: sent });
@@ -285,21 +279,20 @@ export function bucketVideoFetch(password: string): typeof fetch {
 
 export function startMedia(
   video: { name: string; fingerprint: string; size: number; type: string; width: number; height: number },
-  password: string,
   signal?: AbortSignal,
 ): Promise<MediaStart> {
-  return mediaJson<MediaStart>("/api/media/start", video, password, "Could not start the upload", signal);
+  return mediaJson<MediaStart>("/api/media/start", video, "Could not start the upload", signal);
 }
 
-export function completeMedia(key: string, upload: string, parts: MediaPart[], password: string, signal?: AbortSignal): Promise<{ url: string }> {
-  return mediaJson("/api/media/complete", { key, upload, parts }, password, "Could not finish the upload", signal);
+export function completeMedia(key: string, upload: string, parts: MediaPart[], signal?: AbortSignal): Promise<{ url: string }> {
+  return mediaJson("/api/media/complete", { key, upload, parts }, "Could not finish the upload", signal);
 }
 
-export async function abortMedia(key: string, upload: string, password: string): Promise<void> {
-  await mediaJson("/api/media/abort", { key, upload }, password, "Could not stop the upload");
+export async function abortMedia(key: string, upload: string): Promise<void> {
+  await mediaJson("/api/media/abort", { key, upload }, "Could not stop the upload");
 }
 
-function put<T>(path: string, body: Blob, password: string, type: string, signal: AbortSignal, onSent: (bytes: number) => void): Promise<T> {
+function put<T>(path: string, body: Blob, type: string, signal: AbortSignal, onSent: (bytes: number) => void): Promise<T> {
   return new Promise((resolve, reject) => {
     if (signal.aborted) {
       reject(signal.reason);
@@ -308,7 +301,7 @@ function put<T>(path: string, body: Blob, password: string, type: string, signal
     const xhr = new XMLHttpRequest();
     const stop = () => xhr.abort();
     xhr.open("PUT", path);
-    for (const [name, value] of Object.entries(headers(password, { "content-type": type }))) {
+    for (const [name, value] of Object.entries(headers({ "content-type": type }))) {
       xhr.setRequestHeader(name, value);
     }
     xhr.upload.onprogress = (event) => onSent(event.loaded);
@@ -342,22 +335,21 @@ export function sendMediaPart(
   upload: string,
   part: number,
   body: Blob,
-  password: string,
   signal: AbortSignal,
   onSent: (bytes: number) => void,
 ): Promise<MediaPart> {
   const query = new URLSearchParams({ key, upload, part: String(part) });
-  return put<MediaPart>(`/api/media/part?${query}`, body, password, "application/octet-stream", signal, onSent);
+  return put<MediaPart>(`/api/media/part?${query}`, body, "application/octet-stream", signal, onSent);
 }
 
-export function uploadPoster(key: string, poster: Blob, password: string, signal: AbortSignal): Promise<{ url: string }> {
-  return put(`/api/media/poster?${new URLSearchParams({ key })}`, poster, password, poster.type, signal, () => undefined);
+export function uploadPoster(key: string, poster: Blob, signal: AbortSignal): Promise<{ url: string }> {
+  return put(`/api/media/poster?${new URLSearchParams({ key })}`, poster, poster.type, signal, () => undefined);
 }
 
 export async function createShareRoom(seed: Uint8Array): Promise<{ token: string; owner: string }> {
   const response = await fetch("/api/share", {
     method: "POST",
-    headers: { accept: "application/json", "content-type": "application/octet-stream" },
+    headers: headers({ "content-type": "application/octet-stream" }),
     body: seed as unknown as BodyInit,
   });
   const result = await readJson<{ token?: string; owner?: string }>(response, "Could not start sharing");
@@ -395,12 +387,11 @@ export async function shareRoomState(token: string): Promise<ShareRoomState> {
 
 export async function publish(
   request: PublishRequest,
-  password: string,
 ): Promise<PublishResult> {
   photosRead.clear();
   const response = await fetch("/api/publish", {
     method: "POST",
-    headers: headers(password, { "content-type": "application/json" }),
+    headers: headers({ "content-type": "application/json" }),
     body: JSON.stringify(request),
   });
   return readJson<PublishResult>(response, "Publish failed");
@@ -416,7 +407,7 @@ export interface PasskeyChallenge {
 export async function passkeyChallenge(purpose: "login" | "register", password = ""): Promise<PasskeyChallenge> {
   const response = await fetch(`/api/passkey/challenge${purpose === "register" ? "?for=register" : ""}`, {
     method: "POST",
-    headers: headers(purpose === "register" ? password : "", {}),
+    headers: { accept: "application/json", ...(purpose === "register" ? { "x-write-password": password } : {}) },
   });
   return readJson<PasskeyChallenge>(response, "Could not start the passkey");
 }
@@ -424,12 +415,24 @@ export async function passkeyChallenge(purpose: "login" | "register", password =
 async function passkeySession(path: string, body: Record<string, unknown>, password = ""): Promise<string> {
   const response = await fetch(path, {
     method: "POST",
-    headers: headers(password, { "content-type": "application/json" }),
+    headers: { accept: "application/json", "content-type": "application/json", ...(password ? { "x-write-password": password } : {}) },
     body: JSON.stringify(body),
   });
   const result = await readJson<{ session?: string }>(response, "The passkey did not work");
   if (!result.session) {
     throw new Error("The passkey did not work.");
+  }
+  return result.session;
+}
+
+export async function login(password: string): Promise<string> {
+  const response = await fetch("/api/login", {
+    method: "POST",
+    headers: { accept: "application/json", "x-write-password": password },
+  });
+  const result = await readJson<{ session?: string }>(response, "Could not sign in");
+  if (!result.session) {
+    throw new Error("Could not sign in.");
   }
   return result.session;
 }

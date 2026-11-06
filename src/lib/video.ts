@@ -220,7 +220,6 @@ async function sendParts(
   blob: Blob,
   key: string,
   upload: string,
-  password: string,
   signal: AbortSignal,
   onProgress: (fraction: number) => void,
 ): Promise<MediaPart[]> {
@@ -240,7 +239,7 @@ async function sendParts(
       for (let attempt = 1; ; attempt++) {
         try {
           parts.push(
-            await sendMediaPart(key, upload, index + 1, body, password, lanes.signal, (bytes) => {
+            await sendMediaPart(key, upload, index + 1, body, lanes.signal, (bytes) => {
               sent[index] = bytes;
               report();
             }),
@@ -270,25 +269,21 @@ async function sendParts(
 export async function uploadVideo(
   video: PreparedVideo,
   name: string,
-  password: string,
   signal: AbortSignal,
   onProgress: (fraction: number) => void,
-  onAuthorized: () => void = () => {},
 ): Promise<UploadedVideo> {
   const print = await fingerprint(video.source, video.blob !== video.source);
   signal.throwIfAborted();
   const started = await startMedia(
     { name, fingerprint: print, size: video.blob.size, type: video.type, width: video.width, height: video.height },
-    password,
     signal,
   );
-  onAuthorized();
   if (started.upload) {
     try {
-      const parts = await sendParts(video.blob, started.key, started.upload, password, signal, onProgress);
-      await completeMedia(started.key, started.upload, parts, password, signal);
+      const parts = await sendParts(video.blob, started.key, started.upload, signal, onProgress);
+      await completeMedia(started.key, started.upload, parts, signal);
     } catch (cause) {
-      void abortMedia(started.key, started.upload, password).catch(() => undefined);
+      void abortMedia(started.key, started.upload).catch(() => undefined);
       throw cause;
     }
   }
@@ -299,7 +294,7 @@ export async function uploadVideo(
   signal.throwIfAborted();
   if (picture) {
     try {
-      poster = (await uploadPoster(started.key, picture, password, signal)).url;
+      poster = (await uploadPoster(started.key, picture, signal)).url;
     } catch (cause) {
       posterProblem = `Its still did not upload: ${cause instanceof Error ? cause.message : String(cause)}`;
     }
@@ -310,14 +305,13 @@ export async function uploadVideo(
 
 export async function makePoster(
   key: string,
-  password: string,
   onProgress: (fraction: number) => void = () => {},
   signal: AbortSignal = new AbortController().signal,
 ): Promise<{ url: string; width: number; height: number }> {
   const { CanvasSink, Input, MATROSKA, MP4, QTFF, UrlSource, WEBM } = await import("mediabunny");
   signal.throwIfAborted();
   const input = new Input({
-    source: new UrlSource(bucketVideoUrl(key), { fetchFn: bucketVideoFetch(password), getRetryDelay: () => null, handleUnhandledError: () => {} }),
+    source: new UrlSource(bucketVideoUrl(key), { fetchFn: bucketVideoFetch(), getRetryDelay: () => null, handleUnhandledError: () => {} }),
     formats: [MP4, QTFF, WEBM, MATROSKA],
   });
   const stop = () => input.dispose();
@@ -353,6 +347,6 @@ export async function makePoster(
     input.dispose();
   }
   onProgress(1);
-  const { url } = await uploadPoster(key, shot.poster, password, signal);
+  const { url } = await uploadPoster(key, shot.poster, signal);
   return { url, width: shot.width, height: shot.height };
 }

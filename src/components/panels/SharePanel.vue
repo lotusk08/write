@@ -1,11 +1,30 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, ref } from "vue";
+import { PasswordRejected } from "../../lib/api.ts";
 import { participantColor, participantName } from "../../lib/participants.ts";
 import Icon from "../Icon.vue";
+import SignIn from "../SignIn.vue";
 import type { ShareState } from "../types.ts";
+import { useSignIn } from "../useSignIn.ts";
 
 const props = defineProps<{ state: ShareState; copied?: boolean }>();
-const emit = defineEmits<{ name: [name: string]; copy: []; disable: [] }>();
+const emit = defineEmits<{ name: [name: string]; copy: []; disable: []; signedIn: [] }>();
+
+const { password, asking, signIn, signedIn, forget } = useSignIn();
+const problem = ref("");
+
+const submit = async () => {
+  problem.value = "";
+  try {
+    await signIn();
+    emit("signedIn");
+  } catch (cause) {
+    if (cause instanceof PasswordRejected) {
+      forget();
+    }
+    problem.value = cause instanceof Error ? cause.message : String(cause);
+  }
+};
 
 const others = computed(() => props.state.peers.filter((peer) => !peer.you));
 const mine = computed(() => props.state.peers.find((peer) => peer.you)?.color ?? participantColor(props.state.name));
@@ -20,6 +39,15 @@ const onBlur = () => {
 <template>
   <div class="share-panel">
     <p v-if="state.error" class="notice warn">{{ state.error }}</p>
+    <SignIn
+      v-if="asking && !state.sharing"
+      id="share-password"
+      v-model="password"
+      @submit="submit"
+      @session="(token) => (signedIn(token), emit('signedIn'))"
+      @error="(message) => (problem = message)"
+    />
+    <p v-if="problem" class="notice warn">{{ problem }}</p>
 
     <template v-if="state.sharing">
       <div class="share-row">

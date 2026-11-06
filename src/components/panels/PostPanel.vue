@@ -11,6 +11,7 @@ import Icon from "../Icon.vue";
 import Toggle from "../Toggle.vue";
 import TokenInput from "../TokenInput.vue";
 import type { ToggleOption } from "../types.ts";
+import { useSignIn } from "../useSignIn.ts";
 import Section from "./Section.vue";
 
 const props = defineProps<{ meta: PostMeta; slug: string }>();
@@ -27,11 +28,19 @@ const coverUrl = ref<string | null>(null);
 const coverInput = ref<HTMLInputElement | null>(null);
 const topics = ref<Topics | null>(null);
 
-onMounted(() => {
-  void fetchTopics().then((found) => {
-    topics.value = found;
-  });
-});
+const { asking } = useSignIn();
+
+watch(
+  asking,
+  (now) => {
+    if (!now) {
+      void fetchTopics().then((found) => {
+        topics.value = found;
+      });
+    }
+  },
+  { immediate: true },
+);
 
 watch(
   () => props.meta.cover?.path,

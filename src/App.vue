@@ -13,9 +13,10 @@ import TocBar from "./components/TocBar.vue";
 import VideoUploads from "./components/VideoUploads.vue";
 import type { DoneAction, ExportFormat, ShareState } from "./components/types.ts";
 import { useOutline } from "./components/useOutline.ts";
+import { useSignIn } from "./components/useSignIn.ts";
 import { docToHtml } from "./editor/bridge.ts";
 import type { JSONContent } from "./editor/doc.ts";
-import { createShareRoom, endShareRoom, fetchAppConfig, fetchPostSource, shareRoomState } from "./lib/api.ts";
+import { createShareRoom, endShareRoom, fetchAppConfig, fetchPostSource, PasswordRejected, shareRoomState } from "./lib/api.ts";
 import { draftStore, isLocalSrc, keepSnapshot, NOTICE, resolveLocalSrc, restoreSnapshots, type Draft } from "./lib/db.ts";
 import { createDraft, currentDoc, currentMeta, currentSource, draftLabel, newPostMeta, sortDrafts } from "./lib/draft.ts";
 import { downloadBlob, downloadText, printDocument } from "./lib/download.ts";
@@ -26,7 +27,6 @@ import { loadReader, preloadReader } from "./lib/reader.ts";
 import { keptFront, readSource, rememberSource, sameMeta, sourceFor, withFront } from "./lib/source.ts";
 import { docToPlainText } from "./lib/markdown.ts";
 import { mindmapUrl } from "./lib/mindmap.ts";
-import { sessionPassword } from "./lib/password.ts";
 import {
   draftPrint,
   draftSlug,
@@ -138,6 +138,7 @@ const words = computed(() => (current.value ? countWords(docToPlainText(current.
 const tocOn = computed(() => Boolean(current.value?.meta.toc) && source.value === null && !settings.value.focusMode);
 const editorRoot = computed(() => (postEditor.value?.root as HTMLElement | null | undefined) ?? null);
 const outline = useOutline(editorRoot, scrollRegion, tocOn, contentVersion);
+const { asking, forget } = useSignIn();
 const displayName = computed(() => shareName.value.trim() || participantName());
 const anchor = computed(() => (settings.value.focusMode ? focusButton.value : menuButton.value));
 
@@ -386,7 +387,7 @@ async function importPost(path: string) {
   try {
     await settle();
     const existing = drafts.value.find((draft) => draft.publishedPath === path);
-    const fetched = await fetchPostSource(path, sessionPassword()).catch((cause: unknown) => {
+    const fetched = await fetchPostSource(path).catch((cause: unknown) => {
       if (existing) {
         return null;
       }
@@ -676,8 +677,12 @@ async function exportAs(formats: ExportFormat[]) {
 }
 
 async function enableShare() {
-  shareTarget.value = true;
   shareError.value = null;
+  if (asking.value) {
+    shareError.value = "Sign in to share this draft.";
+    return;
+  }
+  shareTarget.value = true;
   try {
     await settle();
     const draft = findDraft(currentId.value);
@@ -692,6 +697,9 @@ async function enableShare() {
     queueSave({ shareToken: token, shareOwner: owner, shareSeed: update }, draft.id);
     await flush();
   } catch (cause) {
+    if (cause instanceof PasswordRejected) {
+      forget();
+    }
     shareError.value = errorText(cause);
   } finally {
     shareTarget.value = null;

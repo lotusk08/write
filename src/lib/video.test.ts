@@ -1,6 +1,7 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PasswordRejected } from "./api.ts";
+import { rememberSession } from "./password.ts";
 import { makePoster, type PreparedVideo, uploadVideo } from "./video.ts";
 
 const VIDEO: PreparedVideo = { blob: new Blob(["video bytes"], { type: "video/mp4" }), source: new Blob(["source bytes"]), type: "video/mp4", width: 1, height: 1, poster: async () => new Blob(["p"], { type: "image/webp" }), note: "" };
@@ -51,7 +52,7 @@ describe("stopping a video's upload", () => {
     stubNetwork(calls);
     const controller = new AbortController();
     controller.abort();
-    await expect(uploadVideo(VIDEO, "a", "pw", controller.signal, () => undefined)).rejects.toThrow();
+    await expect(uploadVideo(VIDEO, "a", controller.signal, () => undefined)).rejects.toThrow();
     expect(calls).toEqual([]);
   });
 
@@ -59,7 +60,7 @@ describe("stopping a video's upload", () => {
     const calls: string[] = [];
     const controller = new AbortController();
     stubNetwork(calls, () => controller.abort());
-    await expect(uploadVideo(VIDEO, "a", "pw", controller.signal, () => undefined)).rejects.toThrow();
+    await expect(uploadVideo(VIDEO, "a", controller.signal, () => undefined)).rejects.toThrow();
     expect(calls.some((path) => path.includes("poster"))).toBe(true);
   });
 
@@ -72,8 +73,8 @@ describe("stopping a video's upload", () => {
       return new Response(JSON.stringify({ key: "video/a-0123456789ab.mp4", url: "https://m/video/a-0123456789ab.mp4" }), { status: 200 });
     });
     const source = new Blob(["the file given"]);
-    const sentAsIs = await uploadVideo({ ...VIDEO, blob: source, source, poster: async () => null }, "a", "pw", new AbortController().signal, () => undefined);
-    await uploadVideo({ ...VIDEO, source, poster: async () => null }, "a", "pw", new AbortController().signal, () => undefined);
+    const sentAsIs = await uploadVideo({ ...VIDEO, blob: source, source, poster: async () => null }, "a", new AbortController().signal, () => undefined);
+    await uploadVideo({ ...VIDEO, source, poster: async () => null }, "a", new AbortController().signal, () => undefined);
     expect(bodies[0].fingerprint).not.toBe(bodies[1].fingerprint);
     expect(sentAsIs.sent).toBe(false);
   });
@@ -84,7 +85,7 @@ describe("stopping a video's upload", () => {
       bodies.push(JSON.parse(String(init?.body)));
       return new Response(JSON.stringify({ key: "video/a-0123456789ab.mp4", url: "https://m/video/a-0123456789ab.mp4" }), { status: 200 });
     });
-    await uploadVideo({ ...VIDEO, width: 1080, height: 1920, poster: async () => null }, "a", "pw", new AbortController().signal, () => undefined);
+    await uploadVideo({ ...VIDEO, width: 1080, height: 1920, poster: async () => null }, "a", new AbortController().signal, () => undefined);
     expect(bodies[0]).toMatchObject({ width: 1080, height: 1920 });
   });
 
@@ -95,7 +96,7 @@ describe("stopping a video's upload", () => {
       new Response(JSON.stringify({ key: "video/a-0123456789ab.mp4", url: "https://m/video/a-0123456789ab.mp4", poster: "https://m/video/a-0123456789ab.jpg" }), { status: 200 }),
     );
     const shoot = vi.fn(async () => new Blob(["p"], { type: "image/webp" }));
-    const uploaded = await uploadVideo({ ...VIDEO, poster: shoot }, "a", "pw", new AbortController().signal, () => undefined);
+    const uploaded = await uploadVideo({ ...VIDEO, poster: shoot }, "a", new AbortController().signal, () => undefined);
     expect(uploaded).toEqual({ url: "https://m/video/a-0123456789ab.mp4", poster: "https://m/video/a-0123456789ab.jpg", posterProblem: "", sent: false });
     expect(shoot).not.toHaveBeenCalled();
     expect(calls).toEqual([]);
@@ -104,7 +105,7 @@ describe("stopping a video's upload", () => {
   it("goes through when nothing stops it", async () => {
     const calls: string[] = [];
     stubNetwork(calls);
-    await expect(uploadVideo(VIDEO, "a", "pw", new AbortController().signal, () => undefined)).resolves.toEqual({
+    await expect(uploadVideo(VIDEO, "a", new AbortController().signal, () => undefined)).resolves.toEqual({
       url: "https://m/video/a-0123456789ab.mp4",
       poster: "https://m/video/a-0123456789ab.webp",
       posterProblem: "",
@@ -116,7 +117,7 @@ describe("stopping a video's upload", () => {
 describe("a video without its poster", () => {
   it("still uploads when its still is refused, and says why it has none", async () => {
     stubNetwork([], () => {}, 500);
-    await expect(uploadVideo(VIDEO, "a", "pw", new AbortController().signal, () => undefined)).resolves.toEqual({
+    await expect(uploadVideo(VIDEO, "a", new AbortController().signal, () => undefined)).resolves.toEqual({
       url: "https://m/video/a-0123456789ab.mp4",
       poster: null,
       posterProblem: "Its still did not upload: Could not upload the video's still.",
@@ -127,7 +128,7 @@ describe("a video without its poster", () => {
   it("leaves a video without a still unflagged, as the blog takes one when it builds", async () => {
     const calls: string[] = [];
     stubNetwork(calls);
-    const uploaded = await uploadVideo({ ...VIDEO, poster: async () => null }, "a", "pw", new AbortController().signal, () => undefined);
+    const uploaded = await uploadVideo({ ...VIDEO, poster: async () => null }, "a", new AbortController().signal, () => undefined);
     expect([uploaded.poster, uploaded.posterProblem]).toEqual([null, ""]);
     expect(calls.some((path) => path.includes("poster"))).toBe(false);
   });
@@ -137,23 +138,25 @@ describe("a video without its poster", () => {
     stubNetwork(calls);
     vi.stubGlobal("fetch", async (path: string, init?: RequestInit) => {
       const sent = new Headers(init?.headers);
-      calls.push(`${path} ${sent.get("x-write-password")} ${sent.get("range")}`);
+      calls.push(`${path} ${sent.get("x-write-session")} ${sent.has("x-write-password")} ${sent.get("range")}`);
       return new Response("not a video", { status: 206, headers: { "content-type": "video/mp4", "content-length": "11", "content-range": "bytes 0-10/11" } });
     });
-    await expect(makePoster("video/a-0123456789ab.mp4", "pw")).rejects.toThrow("This browser cannot decode this video. Try another browser");
-    expect(calls[0]).toBe("/api/media/video?key=video%2Fa-0123456789ab.mp4 pw bytes=0-");
+    rememberSession("token");
+    await expect(makePoster("video/a-0123456789ab.mp4")).rejects.toThrow("This browser cannot decode this video. Try another browser");
+    rememberSession("");
+    expect(calls[0]).toBe("/api/media/video?key=video%2Fa-0123456789ab.mp4 token false bytes=0-");
     expect(calls.some((call) => call.includes("poster"))).toBe(false);
   });
 
-  it("says the password was refused when the app will not read the video back", async () => {
+  it("says the sign-in was refused when the app will not read the video back", async () => {
     vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: "Wrong password." }), { status: 401 }));
-    await expect(makePoster("video/a-0123456789ab.mp4", "pw")).rejects.toBeInstanceOf(PasswordRejected);
+    await expect(makePoster("video/a-0123456789ab.mp4")).rejects.toBeInstanceOf(PasswordRejected);
   });
 
   it("says the media bucket could not be reached when the connection fails", async () => {
     vi.stubGlobal("fetch", async () => {
       throw new TypeError("Failed to fetch");
     });
-    await expect(makePoster("video/a-0123456789ab.mp4", "pw")).rejects.toThrow("Could not read the video from the media bucket.");
+    await expect(makePoster("video/a-0123456789ab.mp4")).rejects.toThrow("Could not read the video from the media bucket.");
   });
 });

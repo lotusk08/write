@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("cloudflare:workers", () => ({ DurableObject: class {} }));
 
 const { default: worker, siteFile } = await import("./index.ts");
-const { challengeExpiry, issueChallenge } = await import("./passkeys.ts");
+const { challengeExpiry, issueChallenge, issueSession } = await import("./passkeys.ts");
 
 const failures = new Map<string, number>();
 const spent = new Set<string>();
@@ -28,17 +28,21 @@ const passkeys = {
   }),
 };
 const env = { GITHUB_TOKEN: "t", WRITE_PASSWORD: "pw", BLOG_REPO: "o/r", BLOG_BRANCH: "blog", PASSKEYS: passkeys } as never;
+const session = await issueSession("pw");
 
-function call(path: string, init: RequestInit & { password?: string } = {}) {
+function call(path: string, init: RequestInit & { password?: string; signed?: boolean } = {}) {
   const headers = new Headers(init.headers);
   if (init.password) {
     headers.set("x-write-password", init.password);
+  }
+  if (init.signed) {
+    headers.set("x-write-session", session);
   }
   return worker.fetch(new Request(`https://write.test${path}`, { ...init, headers }), env);
 }
 
 function publish(body: unknown) {
-  return call("/api/publish", { method: "POST", password: "pw", body: JSON.stringify(body) });
+  return call("/api/publish", { method: "POST", signed: true, body: JSON.stringify(body) });
 }
 
 const post = { path: "src/posts/2026-10-11-trip.md", contentBase64: "aGk=" };
@@ -51,10 +55,10 @@ afterEach(() => {
 
 describe("worker", () => {
   it("answers a missing setting and a spent rate limit instead of crashing", async () => {
-    const bare = await worker.fetch(new Request("https://write.test/api/site", { headers: { "x-write-password": "pw" } }), {} as never);
+    const bare = await worker.fetch(new Request("https://write.test/api/site", { headers: { "x-write-session": session } }), {} as never);
     expect([500, 501]).toContain(bare.status);
     const spent = { ...(env as object), SOURCE_RATE: { limit: async () => ({ success: false }) } } as never;
-    const limitedResponse = await worker.fetch(new Request("https://write.test/api/images"), spent);
+    const limitedResponse = await worker.fetch(new Request("https://write.test/api/images", { headers: { "x-write-session": session } }), spent);
     expect(limitedResponse.status).toBe(429);
   });
 
@@ -76,6 +80,7 @@ describe("worker", () => {
       ["/api/images", "GET"],
       ["/api/site", "GET"],
       ["/api/source", "GET"],
+      ["/api/login", "POST"],
       ["/api/passkey/challenge", "POST"],
       ["/api/passkey/register", "POST"],
       ["/api/passkey/login", "POST"],
@@ -99,8 +104,11 @@ describe("worker", () => {
     expect(await (await worker.fetch(new Request("https://write.test/apix"), assets)).text()).toBe("/apix");
   });
 
-  it("asks for the password on every writing or draft-reading endpoint", async () => {
+  it("asks for a session on every endpoint that reads or writes the site, and takes no password there", async () => {
     for (const [path, method] of [
+      ["/api/topics", "GET"],
+      ["/api/images", "GET"],
+      ["/api/share", "POST"],
       ["/api/publish", "POST"],
       ["/api/publish/photo", "POST"],
       ["/api/site", "GET"],
@@ -114,10 +122,31 @@ describe("worker", () => {
       ["/api/media/abort", "POST"],
       ["/api/media/poster", "PUT"],
     ]) {
-      expect((await call(path, { method, body: method === "GET" ? undefined : "{}" })).status).toBe(401);
-      failures.clear();
-      expect((await call(path, { method, password: "wrong", body: method === "GET" ? undefined : "{}" })).status).toBe(401);
+      const body = method === "GET" ? undefined : "{}";
+      expect((await call(path, { method, body })).status).toBe(401);
+      expect((await call(path, { method, password: "wrong", body })).status).toBe(401);
+      expect([path, (await call(path, { method, password: "pw", body })).status]).toEqual([path, 401]);
+      expect((await call(path, { method, body, headers: { "x-write-session": `${session.slice(0, -2)}AA` } })).status).toBe(401);
     }
+    expect(failures.size).toBe(0);
+  });
+
+  it("signs in once for a session that the other endpoints take, only from the app itself", async () => {
+    expect((await call("/api/login", { method: "POST" })).status).toBe(401);
+    const signedIn = await call("/api/login", { method: "POST", password: "pw" });
+    const { session: issued } = (await signedIn.json()) as { session: string };
+    vi.stubGlobal("fetch", async () => Response.json({ data: { repository: { d0: null } } }));
+    expect((await call("/api/site", { headers: { "x-write-session": issued } })).status).toBe(200);
+    expect((await call("/api/login", { method: "POST", password: "pw", headers: { origin: "https://elsewhere.test" } })).status).toBe(403);
+  });
+
+  it("lets anyone with a share link read or join the room, without signing in", async () => {
+    const share = {
+      idFromName: (name: string) => name,
+      get: () => ({ fetch: async () => Response.json({ live: true }) }),
+    };
+    const response = await worker.fetch(new Request(`https://write.test/api/share/${"a".repeat(32)}`), { ...(env as object), SHARE: share } as never);
+    expect([response.status, await response.json()]).toEqual([200, { live: true }]);
   });
 
   it("refuses paths and entries outside what a publish may touch", async () => {
@@ -146,9 +175,9 @@ describe("worker", () => {
 
   it("caps a photo at 8 MB and takes only base64", async () => {
     const big = "A".repeat(Math.ceil((8 * 1024 * 1024 * 4) / 3) + 8);
-    expect((await call("/api/publish/photo", { method: "POST", password: "pw", body: big })).status).toBe(400);
-    expect((await call("/api/publish/photo", { method: "POST", password: "pw", body: "not base64!" })).status).toBe(400);
-    expect((await call("/api/publish/photo", { method: "POST", password: "pw", body: "" })).status).toBe(400);
+    expect((await call("/api/publish/photo", { method: "POST", signed: true, body: big })).status).toBe(400);
+    expect((await call("/api/publish/photo", { method: "POST", signed: true, body: "not base64!" })).status).toBe(400);
+    expect((await call("/api/publish/photo", { method: "POST", signed: true, body: "" })).status).toBe(400);
   });
 
   it("tells which photos another file still uses, without naming the drafts", async () => {
@@ -172,7 +201,7 @@ describe("worker", () => {
       }
       return Response.json({ message: "Not Found" }, { status: 404 });
     });
-    const response = await call(`/api/images?own=${encodeURIComponent(post.path)}`);
+    const response = await call(`/api/images?own=${encodeURIComponent(post.path)}`, { signed: true });
     const body = await response.text();
     expect(JSON.parse(body)).toEqual({
       files: [
@@ -207,7 +236,7 @@ describe("the site's posts and drafts", () => {
         },
       });
     });
-    const response = await call("/api/site", { password: "pw" });
+    const response = await call("/api/site", { signed: true });
     expect(response.status).toBe(200);
     const { posts, drafts } = (await response.json()) as { posts: { path: string; pin: unknown; hidden: boolean; title: string; date: string }[]; drafts: { path: string }[] };
     expect(posts.map(({ path, pin, hidden, title, date }) => [path.split("/").pop(), title, date, pin, hidden])).toEqual([
@@ -301,7 +330,7 @@ describe("passkey challenges", () => {
 
 describe("worker hardening", () => {
   const from = (ip: string, password: string) =>
-    worker.fetch(new Request("https://write.test/api/site", { headers: { "x-write-password": password, "cf-connecting-ip": ip } }), env);
+    worker.fetch(new Request("https://write.test/api/login", { method: "POST", headers: { "x-write-password": password, "cf-connecting-ip": ip } }), env);
 
   it("stops guessing the password after ten misses from one connection, the right one included", async () => {
     vi.stubGlobal("fetch", async () => Response.json({ data: { repository: { d0: null } } }));
@@ -356,7 +385,7 @@ describe("worker hardening", () => {
       }),
     };
     const shareEnv = { ...(env as object), SHARE: share } as never;
-    const created = await worker.fetch(new Request("https://write.test/api/share", { method: "POST", body: new Uint8Array([0, 0]) }), shareEnv);
+    const created = await worker.fetch(new Request("https://write.test/api/share", { method: "POST", headers: { "x-write-session": session }, body: new Uint8Array([0, 0]) }), shareEnv);
     const { token, owner } = (await created.json()) as { token: string; owner: string };
     expect(owner).toMatch(/^[0-9a-f]{32}$/);
     expect(seen[0].headers.get("x-share-owner")).toBe(owner);
@@ -419,7 +448,7 @@ describe("video uploads", () => {
   };
   const mediaEnv = { ...(env as object), MEDIA: bucket, MEDIA_URL: "https://media.test/" } as never;
   const send = (path: string, init: RequestInit = {}) =>
-    worker.fetch(new Request(`https://write.test${path}`, { ...init, headers: { "x-write-password": "pw", ...(init.headers as object) } }), mediaEnv);
+    worker.fetch(new Request(`https://write.test${path}`, { ...init, headers: { "x-write-session": session, ...(init.headers as object) } }), mediaEnv);
   const start = (body: object) => send("/api/media/start", { method: "POST", body: JSON.stringify(body) });
 
   afterEach(() => {
@@ -432,7 +461,7 @@ describe("video uploads", () => {
     expect(await config(mediaEnv as object)).toBe("https://media.test");
     expect(await config({ ...(env as object), MEDIA: bucket })).toBeUndefined();
     expect(await config({ ...(env as object), MEDIA_URL: "https://media.test" })).toBeUndefined();
-    const refused = await worker.fetch(new Request("https://write.test/api/media/start", { method: "POST", headers: { "x-write-password": "pw" }, body: "{}" }), env);
+    const refused = await worker.fetch(new Request("https://write.test/api/media/start", { method: "POST", headers: { "x-write-session": session }, body: "{}" }), env);
     expect(refused.status).toBe(501);
   });
 

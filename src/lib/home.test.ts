@@ -166,7 +166,7 @@ describe("publishPins", () => {
 
   it("writes only the pin lines, in one commit guarded by the shas it read", async () => {
     const sent = site();
-    const { written } = await publishPins(new Map<string, Pin>([["src/posts/b.md", 2], ["src/posts/a.md", 3]]), shown, "pw");
+    const { written } = await publishPins(new Map<string, Pin>([["src/posts/b.md", 2], ["src/posts/a.md", 3]]), shown);
     expect(sent).toHaveLength(1);
     expect(sent[0].message).toBe("docs(post): B pinned 2nd, A pinned 3rd");
     expect(sent[0].expect).toEqual([
@@ -185,14 +185,14 @@ describe("publishPins", () => {
   it("sends nothing when a file's pin is no longer the one the list showed", async () => {
     const stale = shown.map((post) => (post.path === "src/posts/a.md" ? { ...post, pin: false as Pin } : post));
     const sent = site(stale);
-    await expect(publishPins(new Map<string, Pin>([["src/posts/a.md", 3]]), stale, "pw")).rejects.toThrow("A changed on the site");
+    await expect(publishPins(new Map<string, Pin>([["src/posts/a.md", 3]]), stale)).rejects.toThrow("A changed on the site");
     expect(sent).toHaveLength(0);
   });
 
   it("sends nothing when the site's list moved since it was read: a post published, or a pin changed", async () => {
     for (const now of [[file("src/posts/new.md", "New", false, 4), ...shown], shown.map((post) => (post.path === "src/posts/b.md" ? { ...post, pin: 3 as Pin } : post))]) {
       const sent = site(now);
-      await expect(publishPins(new Map<string, Pin>([["src/posts/a.md", 3]]), shown, "pw")).rejects.toThrow("The site changed since the list was read.");
+      await expect(publishPins(new Map<string, Pin>([["src/posts/a.md", 3]]), shown)).rejects.toThrow("The site changed since the list was read.");
       expect(sent).toHaveLength(0);
     }
   });

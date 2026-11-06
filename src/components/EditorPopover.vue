@@ -169,6 +169,7 @@ onBeforeUnmount(stop);
             @name="(name) => emit('shareName', name)"
             @copy="emit('shareCopy')"
             @disable="emit('shareDisable')"
+            @signed-in="emit('share')"
           />
         </Section>
       </div>

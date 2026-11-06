@@ -43,7 +43,7 @@ const result = ref<PublishResult | null>(null);
 const thumbs = reactive(new Map<string, string>());
 const widths = reactive(new Map<string, number>());
 const changes = ref<LineDiff | null>(null);
-const { password, rejected, asking, credential, accepted, signedIn, forget } = useSignIn();
+const { password, rejected, asking, signIn: logIn, signedIn, forget } = useSignIn();
 const signIn = ref<InstanceType<typeof SignIn> | null>(null);
 const primary = ref<HTMLButtonElement | null>(null);
 const cancelButton = ref<HTMLButtonElement | null>(null);
@@ -63,9 +63,9 @@ const REPLAN_MS = 300;
 let generation = 0;
 let replan: number | undefined;
 watch(
-  [() => props.draft, () => props.settings],
+  [() => props.draft, () => props.settings, asking],
   ([draft, settings]) => {
-    if (state.value !== "review") {
+    if (state.value !== "review" || asking.value) {
       return;
     }
     const mine = ++generation;
@@ -183,7 +183,7 @@ const warnings = computed(() => [
 ]);
 const stops = computed(() => warnings.value.find((warning) => warning.blocks)?.text ?? null);
 const reason = computed(() =>
-  blocked.value ?? stops.value ?? (!plan.value ? "Preparing…" : asking.value && !password.value ? "Type the password or use a passkey." : null),
+  blocked.value ?? stops.value ?? (asking.value ? (password.value ? null : "Type the password or use a passkey.") : !plan.value ? "Preparing…" : null),
 );
 
 const megabytes = (bytes: number) =>
@@ -207,13 +207,33 @@ const loadChanges = async (event: Event) => {
     return;
   }
   try {
-    changes.value = diffLines((await fetchPostSource(path, credential())).markdown, plan.value.markdown);
+    changes.value = diffLines((await fetchPostSource(path)).markdown, plan.value.markdown);
   } catch (cause) {
     error.value = cause instanceof Error ? cause.message : String(cause);
   }
 };
 
+const signInFirst = async () => {
+  error.value = null;
+  refused.value = false;
+  try {
+    await logIn();
+  } catch (cause) {
+    if (cause instanceof PasswordRejected) {
+      refused.value = true;
+      forget();
+    }
+    error.value = cause instanceof Error ? cause.message : String(cause);
+  }
+};
+
 const run = async () => {
+  if (asking.value) {
+    if (!reason.value && state.value === "review") {
+      await signInFirst();
+    }
+    return;
+  }
   if (!plan.value || reason.value || state.value !== "review") {
     return;
   }
@@ -225,8 +245,7 @@ const run = async () => {
   const id = props.draft.id;
   const sending = plan.value;
   try {
-    result.value = await sendPlan(sending, message.value, credential(), (done) => (sent.value = done), controller.signal);
-    accepted();
+    result.value = await sendPlan(sending, message.value, (done) => (sent.value = done), controller.signal);
     state.value = "done";
     emit("published", id, result.value, sending);
   } catch (cause) {

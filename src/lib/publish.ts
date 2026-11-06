@@ -330,7 +330,6 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
 export async function sendPlan(
   plan: PublishPlan,
   message: string,
-  password: string,
   progress: (done: number) => void,
   signal?: AbortSignal,
 ): Promise<PublishResult> {
@@ -348,7 +347,7 @@ export async function sendPlan(
   for (const photo of plan.photos) {
     progress(uploaded.length);
     signal?.throwIfAborted();
-    const sha = await uploadPhoto(await blobToBase64(await withoutLocation(await shrinkImage(photo.blob))), password, signal);
+    const sha = await uploadPhoto(await blobToBase64(await withoutLocation(await shrinkImage(photo.blob))), signal);
     uploaded.push({ path: photo.path, sha });
   }
   progress(uploaded.length);
@@ -365,7 +364,6 @@ export async function sendPlan(
       ...(plan.keep?.length ? { keep: plan.keep } : {}),
       ...(plan.sweep === false ? { sweep: false } : {}),
     },
-    password,
   );
 }
 

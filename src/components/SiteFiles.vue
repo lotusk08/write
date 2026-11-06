@@ -50,7 +50,7 @@ const saving = ref(false);
 const saved = ref<string | null>(null);
 const saveButton = ref<HTMLButtonElement | null>(null);
 const status = ref<HTMLElement | null>(null);
-const { password, asking, credential, accepted, signedIn, forget } = useSignIn();
+const { password, asking, signIn, signedIn, forget } = useSignIn();
 
 useFloatingMenu(open, anchor, list);
 
@@ -91,8 +91,8 @@ const load = async () => {
     return;
   }
   try {
-    files.value = await fetchSiteFiles(credential());
-    accepted();
+    await signIn();
+    files.value = await fetchSiteFiles();
   } catch (cause) {
     if (cause instanceof PasswordRejected) {
       forget();
@@ -138,8 +138,7 @@ const save = async () => {
   saving.value = true;
   problem.value = "";
   try {
-    const { commitUrl, written } = await publishPins(sending, posts.value, credential());
-    accepted();
+    const { commitUrl, written } = await publishPins(sending, posts.value);
     props.onPinned?.(written);
     files.value = { ...files.value!, posts: withPins(posts.value, sending) };
     changes.value = new Map();
