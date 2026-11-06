@@ -113,6 +113,7 @@ describe("worker", () => {
       ["/api/publish/photo", "POST"],
       ["/api/site", "GET"],
       ["/api/source?path=src/drafts/x.md", "GET"],
+      ["/api/source?path=src/posts/x.md", "GET"],
       ["/api/media", "GET"],
       ["/api/media/delete", "POST"],
       ["/api/media/video", "GET"],

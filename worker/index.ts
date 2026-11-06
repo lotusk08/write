@@ -636,17 +636,9 @@ async function handleSource(request: Request, env: Env): Promise<Response> {
     return json({ error: "Only Markdown files can be opened." }, 400);
   }
 
-  const published = path.startsWith(`${dirs(env).postsDir}/`);
-  if (published) {
-    const missing = unreachable(env);
-    if (missing) {
-      return misconfigured(missing, env);
-    }
-  } else {
-    const denied = await authorize(request, env);
-    if (denied) {
-      return denied;
-    }
+  const denied = await authorize(request, env);
+  if (denied) {
+    return denied;
   }
 
   const branch = env.BLOG_BRANCH || "main";
