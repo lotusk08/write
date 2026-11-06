@@ -225,7 +225,7 @@ function onShortcut(event: KeyboardEvent): void {
   if (!root.value || event.isComposing) {
     return;
   }
-  const mod = event.metaKey || event.ctrlKey;
+  const mod = (event.metaKey || event.ctrlKey) && !event.getModifierState("AltGraph");
   const key = event.key.toLowerCase();
   const z = key === "z" || event.code === "KeyZ";
   const y = key === "y" || event.code === "KeyY";

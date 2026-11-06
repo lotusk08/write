@@ -178,6 +178,8 @@ describe("worker", () => {
     const big = new Uint8Array(8 * 1024 * 1024 + 1);
     expect((await call("/api/publish/photo", { method: "POST", signed: true, body: big })).status).toBe(400);
     expect((await call("/api/publish/photo", { method: "POST", signed: true, body: "" })).status).toBe(400);
+    const stale = await call("/api/publish/photo", { method: "POST", signed: true, body: "aGk=", headers: { "content-type": "text/plain" } });
+    expect(((await stale.json()) as { error: string }).error).toMatch(/reload/);
     let sent = "";
     vi.stubGlobal("fetch", async (_input: string, init?: RequestInit) => {
       sent = (JSON.parse(String(init?.body)) as { content: string }).content;

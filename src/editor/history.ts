@@ -11,7 +11,7 @@ export interface Snapshot {
 const MERGING = new Set(["type", "delete"]);
 const PAUSE_MS = 1500;
 const LONGEST_MS = 8000;
-const LIMIT = 200;
+const LIMIT = 100;
 
 export class History {
   private undos: Snapshot[] = [];

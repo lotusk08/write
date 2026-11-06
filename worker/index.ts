@@ -499,6 +499,9 @@ async function handlePhoto(request: Request, env: Env): Promise<Response> {
   if (denied) {
     return denied;
   }
+  if (request.headers.get("content-type")?.startsWith("text/plain")) {
+    return json({ error: "This page is out of date: reload it, then publish again." }, 400);
+  }
   const raw = await readCapped(request, MAX_PHOTO_BYTES);
   if (!raw) {
     return json({ error: "This photo is too large to publish (max 8 MB)." }, 400);
