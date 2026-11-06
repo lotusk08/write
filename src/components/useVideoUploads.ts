@@ -102,7 +102,13 @@ function send(job: VideoJob, video: PreparedVideo, name: string, signal: AbortSi
   );
 }
 
-async function run(job: VideoJob, source: VideoSource, place: (embed: Embed, sent: boolean) => boolean, signal: AbortSignal): Promise<void> {
+async function run(
+  job: VideoJob,
+  source: VideoSource,
+  place: (embed: Embed, sent: boolean) => boolean,
+  signal: AbortSignal,
+  name: string,
+): Promise<void> {
   try {
     const config = await fetchAppConfig();
     signal.throwIfAborted();
@@ -124,7 +130,7 @@ async function run(job: VideoJob, source: VideoSource, place: (embed: Embed, sen
     const video = await prepareVideo(file, signal, (fraction) => (job.fraction = fraction));
     job.note = video.note;
     job.fraction = 0;
-    const uploaded = await send(job, video, slugify(file.name.replace(/\.[^.]*$/, "")), signal);
+    const uploaded = await send(job, video, name || slugify(file.name.replace(/\.[^.]*$/, "")), signal);
     signal.throwIfAborted();
     const embed: Embed = {
       platform: "video",
@@ -157,7 +163,7 @@ async function run(job: VideoJob, source: VideoSource, place: (embed: Embed, sen
   }
 }
 
-function add(source: VideoSource, place: (embed: Embed, sent: boolean) => boolean, draft?: string): void {
+function add(source: VideoSource, place: (embed: Embed, sent: boolean) => boolean, draft?: string, name = ""): void {
   const controller = new AbortController();
   const job = reactive<VideoJob>({
     id: ++counter,
@@ -170,7 +176,7 @@ function add(source: VideoSource, place: (embed: Embed, sent: boolean) => boolea
     stop: () => controller.abort(),
   });
   jobs.value = [...jobs.value, job];
-  void run(job, source, place, controller.signal);
+  void run(job, source, place, controller.signal, name);
 }
 
 export function useVideoUploads() {

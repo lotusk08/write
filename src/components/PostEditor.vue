@@ -46,6 +46,7 @@ const props = defineProps<{
   lang: string;
   dark: boolean;
   toolbar: boolean;
+  videoName?: string;
   onUploaded?: (url: string, draftId: string) => void;
 }>();
 const emit = defineEmits<{ change: [doc: JSONContent, draftId: string] }>();
@@ -472,7 +473,7 @@ function addVideos(sources: VideoSource[], spot: DropSpot | null = null, replaci
       const [poster, width, height] = ["poster", "width", "height"].map((name) => embedField(embed.extra, name));
       const fields = { ...videoFields(poster, Number(width), Number(height)), types: null };
       return replaceEmbed(here, old, { ...embed, extra: mergeExtra(old.getAttribute("data-extra") ?? "", fields) });
-    }, draft);
+    }, draft, props.videoName);
   }
 }
 

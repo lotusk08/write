@@ -31,6 +31,7 @@ import {
   draftPrint,
   draftSlug,
   markdownForExport,
+  namedSlug,
   printOf,
   repointCover,
   repointDoc,
@@ -1080,6 +1081,7 @@ onBeforeUnmount(() => {
                 :lang="current.meta.lang || 'en'"
                 :dark="dark"
                 :toolbar="!settings.focusMode"
+                :video-name="namedSlug(current)"
                 :on-uploaded="recordVideo"
                 @change="onEditorChange"
               />

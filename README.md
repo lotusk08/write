@@ -115,12 +115,15 @@ browser.
   each photo with its final name, renames, and a diff against the site — then
   counts the photos up and links the commit and the live post. Commits `src/posts/YYYY-MM-DD-slug.md` — or `src/drafts/…` — plus
   every image, in one commit, the photos sent one per request first. Images are
-  named from their alt text (`public/assets/img/post/<slug>-<alt>.jpg`,
-  `<slug>-N.jpg` with none), a published photo whose name no longer follows its
-  alt is renamed and its old address redirected, the Markdown is rewritten to
-  point at the address they are served from, and the site's own build converts
-  them to WebP. Publish as Post or Draft; either way it is one
-  commit to the blog's branch.
+  named from their alt text (`public/assets/img/post/<slug>-<alt>.webp`,
+  `<slug>-N.webp` with none). A new JPEG or PNG is turned into WebP in the browser
+  before it is sent — quality 88 like the site's build, a PNG lossless while it
+  stays under 4 MB, at most 3840 px wide — by libwebp in a worker, since Safari
+  cannot write WebP itself; other kinds are sent as they are and the site's build
+  converts what it can. A published photo whose name no longer follows its alt
+  is renamed and its old address redirected, and the Markdown is rewritten to
+  point at the address they are served from. Publish as Post or Draft; either way
+  it is one commit to the blog's branch.
 
 Drafts sit as vertical tabs along the left edge, Obsidian-style: the draft you
 are editing spells out its title, and the rest tuck behind each other like
@@ -214,8 +217,10 @@ Custom Domains, connect `media.stevehoang.com`. `wrangler deploy` refuses to
 run until the bucket exists. Without `MEDIA` or `MEDIA_URL` the app says
 uploads are not set up and everything else works as before.
 
-Each video is kept at `video/<name>-<fingerprint>.mp4`, the fingerprint taken
-from the file it was made from, so the same file given twice is kept once; it is
+Each video is kept at `video/<name>-<fingerprint>.mp4`, the name being the
+post's slug (the file's own name while the post has none) and the fingerprint
+taken from the file it was made from, so the same file given twice to a post is
+kept once; it is
 cached for a year, since its name changes whenever that file does; its still sits beside it as
 `.webp` (`.jpg` from Safari), cached for a week. A replaced video is so a new
 file, and the old one is removed once nothing uses it. Under `wrangler dev` the

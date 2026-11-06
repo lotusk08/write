@@ -161,3 +161,19 @@ it("closes an upload this browser took no still of by itself, saying the blog ta
     vi.useRealTimers();
   }
 });
+
+it("names an upload after the post it goes in, and after its file when the post has no name yet", async () => {
+  const { useVideoUploads } = await import("./useVideoUploads.ts");
+  const { useSignIn } = await import("./useSignIn.ts");
+  useSignIn().password.value = "right";
+  const { add } = useVideoUploads();
+  add(new File(["x"], "IMG_0042.mov", { type: "video/quicktime" }), () => true, "draft", "sai-gon-tra-vinh");
+  add(new File(["x"], "Hồ Gươm.mp4", { type: "video/mp4" }), () => true, "draft");
+  await settle();
+  const { resume } = await import("./useVideoUploads.ts");
+  resume();
+  await settle();
+  resume();
+  await settle();
+  expect(calls.filter((call) => !call.startsWith("login:"))).toEqual(["sai-gon-tra-vinh", "ho-guom"]);
+});
