@@ -1,7 +1,7 @@
 import {
   branchExists,
   commitFiles,
-  createBlob,
+  createBlobFrom,
   getDefaultBranch,
   GitHubError,
   listFiles,
@@ -20,7 +20,6 @@ import type {
   Topics,
 } from "../shared/types.ts";
 
-import { bytesToBase64 } from "../shared/base64.ts";
 import { frontField, frontMatter } from "../shared/front.ts";
 import {
   MAX_POSTER_BYTES,
@@ -80,7 +79,7 @@ export interface Env {
 }
 
 const MAX_REQUEST_BYTES = 4 * 1024 * 1024;
-const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
+const MAX_PHOTO_BODY_BYTES = Math.ceil((8 * 1024 * 1024 * 4) / 3) + 64;
 const SHA = /^[0-9a-f]{40}$/;
 const MARKDOWN = /\.(md|markdown)$/i;
 
@@ -499,18 +498,19 @@ async function handlePhoto(request: Request, env: Env): Promise<Response> {
   if (denied) {
     return denied;
   }
-  if (request.headers.get("content-type")?.startsWith("text/plain")) {
+  if (!request.headers.get("content-type")?.startsWith("application/json")) {
     return json({ error: "This page is out of date: reload it, then publish again." }, 400);
   }
-  const raw = await readCapped(request, MAX_PHOTO_BYTES);
-  if (!raw) {
-    return json({ error: "This photo is too large to publish (max 8 MB)." }, 400);
-  }
-  if (!raw.byteLength) {
+  const length = Number(request.headers.get("content-length"));
+  if (!request.body || !Number.isInteger(length) || length < 1) {
     return json({ error: "The photo was empty." }, 400);
   }
+  if (length > MAX_PHOTO_BODY_BYTES) {
+    return json({ error: "This photo is too large to publish (max 8 MB)." }, 400);
+  }
   try {
-    return json({ sha: await createBlob(githubToken(env), env.BLOG_REPO!, bytesToBase64(raw)) });
+    const body = request.body.pipeThrough(new FixedLengthStream(length));
+    return json({ sha: await createBlobFrom(githubToken(env), env.BLOG_REPO!, body) });
   } catch (error) {
     return failed(error, "Upload failed.");
   }

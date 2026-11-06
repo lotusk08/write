@@ -174,21 +174,34 @@ describe("worker", () => {
     }
   });
 
-  it("caps a photo at 8 MB, refuses an empty one, and hands GitHub the bytes as base64", async () => {
-    const big = new Uint8Array(8 * 1024 * 1024 + 1);
-    expect((await call("/api/publish/photo", { method: "POST", signed: true, body: big })).status).toBe(400);
-    expect((await call("/api/publish/photo", { method: "POST", signed: true, body: "" })).status).toBe(400);
-    const stale = await call("/api/publish/photo", { method: "POST", signed: true, body: "aGk=", headers: { "content-type": "text/plain" } });
+  it("streams a photo's blob to GitHub untouched, refusing one too large, empty, or from an out-of-date page", async () => {
+    vi.stubGlobal(
+      "FixedLengthStream",
+      class extends TransformStream {
+        constructor() {
+          super();
+        }
+      },
+    );
+    const photo = (body: string, type = "application/json") =>
+      call("/api/publish/photo", { method: "POST", signed: true, body, headers: { "content-type": type, "content-length": String(body.length) } });
+    const big = JSON.stringify({ content: "A".repeat(Math.ceil((8 * 1024 * 1024 * 4) / 3) + 100), encoding: "base64" });
+    expect((await photo(big)).status).toBe(400);
+    expect((await photo("")).status).toBe(400);
+    const stale = await photo("aGk=", "text/plain");
     expect(((await stale.json()) as { error: string }).error).toMatch(/reload/);
+    expect((await photo("\u0000", "application/octet-stream")).status).toBe(400);
     let sent = "";
-    vi.stubGlobal("fetch", async (_input: string, init?: RequestInit) => {
-      sent = (JSON.parse(String(init?.body)) as { content: string }).content;
+    let path = "";
+    vi.stubGlobal("fetch", async (input: string, init?: RequestInit) => {
+      path = new URL(input).pathname;
+      sent = await new Response(init?.body).text();
       return Response.json({ sha: "b".repeat(40) });
     });
-    const photo = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 1, 2]);
-    const response = await call("/api/publish/photo", { method: "POST", signed: true, body: photo, headers: { "content-length": "3" } });
-    expect(await response.json()).toEqual({ sha: "b".repeat(40) });
-    expect(sent).toBe(Buffer.from(photo).toString("base64"));
+    const body = JSON.stringify({ content: "/9j/4AAB", encoding: "base64" });
+    expect(await (await photo(body)).json()).toEqual({ sha: "b".repeat(40) });
+    expect(path).toBe("/repos/o/r/git/blobs");
+    expect(sent).toBe(body);
   });
 
   it("tells which photos another file still uses, without naming the drafts", async () => {

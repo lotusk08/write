@@ -21,9 +21,9 @@ const RETRY_DELAYS_MS = [400, 1200];
 async function gh<T>(
   token: string,
   path: string,
-  init?: { method?: string; body?: unknown; once?: boolean },
+  init?: { method?: string; body?: unknown; stream?: ReadableStream; once?: boolean },
 ): Promise<T> {
-  const body = init?.body ? JSON.stringify(init.body) : undefined;
+  const body = init?.stream ?? (init?.body ? JSON.stringify(init.body) : undefined);
   const send = () =>
     fetch(`${API}${path}`, {
       method: init?.method ?? "GET",
@@ -32,12 +32,12 @@ async function gh<T>(
         authorization: `Bearer ${token}`,
         "x-github-api-version": "2022-11-28",
         "user-agent": "write-editor",
-        ...(init?.body ? { "content-type": "application/json" } : {}),
+        ...(body ? { "content-type": "application/json" } : {}),
       },
       body,
     });
   let res = await send();
-  for (const delay of init?.once ? [] : RETRY_DELAYS_MS) {
+  for (const delay of init?.once || init?.stream ? [] : RETRY_DELAYS_MS) {
     if (!PASSING.has(res.status)) {
       break;
     }
@@ -205,6 +205,11 @@ export async function createBlob(token: string, repo: string, contentBase64: str
     method: "POST",
     body: { content: contentBase64, encoding: "base64" },
   });
+  return blob.sha;
+}
+
+export async function createBlobFrom(token: string, repo: string, request: ReadableStream): Promise<string> {
+  const blob = await gh<{ sha: string }>(token, `/repos/${repo}/git/blobs`, { method: "POST", stream: request });
   return blob.sha;
 }
 

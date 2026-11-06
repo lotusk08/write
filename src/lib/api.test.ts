@@ -57,17 +57,34 @@ describe("fetchSitePhotos", () => {
 describe("uploadPhoto", () => {
   const photo = new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" });
 
-  it("sends the photo's own bytes, and tries once more a moment after a server error", async () => {
+  it("sends the blob GitHub takes, and tries twice more, waiting longer each time, after server errors", async () => {
     vi.useFakeTimers();
     try {
-      const calls = answers(503, 200);
+      const calls = answers(503, 503, 200);
       const sha = uploadPhoto(photo);
-      await vi.advanceTimersByTimeAsync(1000);
+      await vi.advanceTimersByTimeAsync(1999);
       expect(calls).toHaveBeenCalledTimes(1);
-      await vi.advanceTimersByTimeAsync(1000);
-      expect(await sha).toBe("a".repeat(40));
+      await vi.advanceTimersByTimeAsync(1);
       expect(calls).toHaveBeenCalledTimes(2);
-      expect((calls.mock.calls[0] as unknown as [string, RequestInit])[1].body).toBe(photo);
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(await sha).toBe("a".repeat(40));
+      expect(calls).toHaveBeenCalledTimes(3);
+      const sent = (calls.mock.calls[0] as unknown as [string, RequestInit])[1];
+      expect(JSON.parse(String(sent.body))).toEqual({ content: "AQID", encoding: "base64" });
+      expect(new Headers(sent.headers).get("content-type")).toBe("application/json");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("gives up after three tries", async () => {
+    vi.useFakeTimers();
+    try {
+      const calls = answers(503, 503, 503, 200);
+      const failed = uploadPhoto(photo).catch((error: unknown) => error);
+      await vi.runAllTimersAsync();
+      expect(await failed).toBeInstanceOf(Error);
+      expect(calls).toHaveBeenCalledTimes(3);
     } finally {
       vi.useRealTimers();
     }

@@ -7,6 +7,7 @@ import type {
   Topic,
   Topics,
 } from "../../shared/types.ts";
+import { bytesToBase64 } from "../../shared/base64.ts";
 import { MAX_VIDEO_BYTES, type MediaPart, type MediaStart, type MediaVideo, PART_BYTES } from "../../shared/media.ts";
 import { sessionToken } from "./password.ts";
 
@@ -142,16 +143,17 @@ export function fetchSitePhotos(own: string[]): Promise<SitePhotos> {
   return read;
 }
 
-const PHOTO_RETRY_MS = 2000;
+const PHOTO_RETRY_MS = [2000, 5000];
 
 export async function uploadPhoto(photo: Blob, signal?: AbortSignal): Promise<string> {
+  const body = JSON.stringify({ content: bytesToBase64(new Uint8Array(await photo.arrayBuffer())), encoding: "base64" });
   let status = 0;
   const send = async () => {
     status = 0;
     const response = await fetch("/api/publish/photo", {
       method: "POST",
-      headers: headers({ "content-type": "application/octet-stream" }),
-      body: photo,
+      headers: headers({ "content-type": "application/json" }),
+      body,
       signal,
     });
     status = response.status;
@@ -161,15 +163,18 @@ export async function uploadPhoto(photo: Blob, signal?: AbortSignal): Promise<st
     }
     return result.sha;
   };
-  return send().catch((cause: unknown) => {
-    if ((status >= 400 && status < 500) || signal?.aborted) {
-      throw cause;
-    }
-    return new Promise<void>((resolve) => setTimeout(resolve, PHOTO_RETRY_MS)).then(() => {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await send();
+    } catch (cause) {
+      const wait = PHOTO_RETRY_MS[attempt];
+      if ((status >= 400 && status < 500) || signal?.aborted || wait === undefined) {
+        throw cause;
+      }
+      await new Promise((resolve) => setTimeout(resolve, wait));
       signal?.throwIfAborted();
-      return send();
-    });
-  });
+    }
+  }
 }
 
 export class HttpError extends Error {
