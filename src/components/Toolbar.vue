@@ -23,8 +23,12 @@ import NoteMenu from "./NoteMenu.vue";
 import VideoMenu from "./VideoMenu.vue";
 import ToolButton from "./ToolButton.vue";
 
-defineProps<{ tools: ToolState; run: (command: (root: HTMLElement) => unknown) => void }>();
-const emit = defineEmits<{ images: [files: File[]]; videos: [files: File[]] }>();
+defineProps<{ tools: ToolState; run: (command: (root: HTMLElement) => unknown) => void; canUndo: boolean; canRedo: boolean }>();
+const emit = defineEmits<{ images: [files: File[]]; videos: [files: File[]]; undo: []; redo: [] }>();
+
+const mac = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+const undoTitle = `Undo — ${mac ? "⌘Z" : "Ctrl+Z"}`;
+const redoTitle = `Redo — ${mac ? "⌘⇧Z" : "Ctrl+Y"}`;
 
 const EDGE_SLACK = 2;
 
@@ -80,6 +84,13 @@ const pickFiles = (event: Event) => {
 
 <template>
   <div ref="row" class="toolbar" role="toolbar" aria-label="Formatting">
+    <div class="tool-group">
+      <ToolButton icon="undo" :title="undoTitle" :disabled="!canUndo" @press="emit('undo')" />
+      <ToolButton icon="redo" :title="redoTitle" :disabled="!canRedo" @press="emit('redo')" />
+    </div>
+
+    <span class="tool-sep" />
+
     <div class="tool-group">
       <ToolButton icon="italic" title="Italic — ⌘I" :active="tools.italic" @press="run((root) => format(root, 'italic'))" />
       <ToolButton icon="link" title="Link" :active="tools.link" @press="run(askLink)" />

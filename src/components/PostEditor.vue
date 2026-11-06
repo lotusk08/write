@@ -32,6 +32,7 @@ import { embedField, mergeExtra, videoFields } from "../editor/blog.ts";
 import { editorInit } from "../editor/config.ts";
 import { decorate, Previews, releasePhotos } from "../editor/decorate.ts";
 import type { JSONContent } from "../editor/doc.ts";
+import { History, placeCaretAt, readCaret, type Snapshot } from "../editor/history.ts";
 import { handleInput, handleKeydown } from "../editor/keys.ts";
 import { pasteClipboard } from "../editor/paste.ts";
 import { emptyTools, readTools, type ToolState } from "../editor/tools.ts";
@@ -58,6 +59,9 @@ const html = ref(docToHtml(props.doc));
 const tools = ref<ToolState>(emptyTools());
 const previews = new Previews();
 const videos = useVideoUploads();
+const history = new History();
+const undoable = ref({ undo: false, redo: false });
+let restoring = false;
 
 let epoch = 0;
 let timer: number | undefined;
@@ -91,6 +95,52 @@ function currentDoc(): JSONContent {
   return htmlToDoc(editor.value?.getHtml() ?? html.value);
 }
 
+function snapshot(): Snapshot {
+  return { doc: JSON.stringify(currentDoc()), caret: root.value ? readCaret(root.value) : null };
+}
+
+function syncUndoable(): void {
+  undoable.value = { undo: history.canUndo, redo: history.canRedo };
+}
+
+function before(kind: string): void {
+  if (root.value && !restoring) {
+    history.before(kind, snapshot);
+    syncUndoable();
+  }
+}
+
+function restore(state: Snapshot): void {
+  restoring = true;
+  html.value = docToHtml(JSON.parse(state.doc) as JSONContent);
+  pending = html.value;
+  window.clearTimeout(timer);
+  timer = window.setTimeout(flush, EMIT_DEBOUNCE_MS);
+  void nextTick(() => {
+    restoring = false;
+    if (root.value) {
+      root.value.focus({ preventScroll: true });
+      placeCaretAt(root.value, state.caret);
+      decorate(root.value, previews, props.dark);
+    }
+    refreshTools();
+  });
+}
+
+function undo(): void {
+  if (!restoring && root.value) {
+    history.undo(snapshot, restore);
+    syncUndoable();
+  }
+}
+
+function redo(): void {
+  if (!restoring && root.value) {
+    history.redo(snapshot, restore);
+    syncUndoable();
+  }
+}
+
 function flush(): JSONContent {
   window.clearTimeout(timer);
   const doc = currentDoc();
@@ -111,6 +161,10 @@ function takeUnsent(): JSONContent | null {
 }
 
 function onHtml(value: string): void {
+  if (!restoring) {
+    history.changed();
+    syncUndoable();
+  }
   html.value = value;
   pending = value;
   window.clearTimeout(timer);
@@ -120,6 +174,8 @@ function onHtml(value: string): void {
 
 function setDoc(doc: JSONContent): void {
   epoch += 1;
+  history.clear();
+  syncUndoable();
   pending = null;
   window.clearTimeout(timer);
   html.value = docToHtml(doc);
@@ -139,15 +195,60 @@ function onReady(element: HTMLElement): void {
   element.addEventListener("drop", onDrop, true);
   element.addEventListener("mousedown", onMousedown);
   element.addEventListener("keydown", onShortcut, true);
+  element.addEventListener("beforeinput", onBeforeInput, true);
   element.addEventListener("compositionstart", onCompositionStart, true);
   decorate(element, previews, props.dark);
 }
 
-function onShortcut(event: KeyboardEvent): void {
-  if (!(event.metaKey || event.ctrlKey) || !root.value) {
+const MOVES = new Set(["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"]);
+const EDITING_KEYS: Record<string, string> = { Enter: "enter", Tab: "tab", Backspace: "delete", Delete: "delete" };
+const NOT_EDITING = new Set(["a", "c", "f", "g", "l", "p", "r", "s", "t", "w"]);
+
+function inputKind(type: string): string {
+  return /^insert(Text|ReplacementText|CompositionText)$/.test(type) ? "type" : type.startsWith("delete") && type !== "deleteByCut" ? "delete" : type;
+}
+
+function onBeforeInput(event: InputEvent): void {
+  if (event.inputType === "historyUndo" || event.inputType === "historyRedo") {
+    event.preventDefault();
+    if (event.inputType === "historyUndo") {
+      undo();
+    } else {
+      redo();
+    }
     return;
   }
+  before(inputKind(event.inputType));
+}
+
+function onShortcut(event: KeyboardEvent): void {
+  if (!root.value || event.isComposing) {
+    return;
+  }
+  const mod = event.metaKey || event.ctrlKey;
   const key = event.key.toLowerCase();
+  const z = key === "z" || event.code === "KeyZ";
+  const y = key === "y" || event.code === "KeyY";
+  if (mod && !event.altKey && (z || (y && !event.shiftKey))) {
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    if (z && !event.shiftKey) {
+      undo();
+    } else {
+      redo();
+    }
+    return;
+  }
+  if (MOVES.has(event.key)) {
+    history.seal();
+  } else if (EDITING_KEYS[event.key] && !mod) {
+    before(EDITING_KEYS[event.key]);
+  } else if (mod && key.length === 1 && !NOT_EDITING.has(key) && !(key === "v" || key === "x")) {
+    before("shortcut");
+  }
+  if (!mod) {
+    return;
+  }
   if (key === "k") {
     event.preventDefault();
     event.stopPropagation();
@@ -280,9 +381,11 @@ function onMousedown(event: MouseEvent): void {
   if (!element) {
     return;
   }
+  history.seal();
   const section = target.closest(".collapsible-toggle")?.closest<HTMLElement>("[data-collapsible]");
   if (section) {
     event.preventDefault();
+    before("section");
     toggleSection(section);
     decorate(element, previews, props.dark);
     notify(element);
@@ -291,6 +394,7 @@ function onMousedown(event: MouseEvent): void {
   const photoButton = target.closest(".editor-image-tools button");
   if (photoButton) {
     event.preventDefault();
+    before("photo");
     photoTool(element, photoButton);
     return;
   }
@@ -308,6 +412,7 @@ function onMousedown(event: MouseEvent): void {
   const task = target.closest<HTMLElement>("li[data-checked]");
   if (task && task === target && event.clientX - task.getBoundingClientRect().left < TASK_BOX_PX) {
     event.preventDefault();
+    before("task");
     toggleTask(element, task);
   }
 }
@@ -353,6 +458,9 @@ function addVideos(sources: VideoSource[], spot: DropSpot | null = null, replaci
       if (!here) {
         return false;
       }
+      if (here === element) {
+        before("video");
+      }
       const old = here === element ? replacing : here.querySelector<HTMLElement>(`[data-embed][data-id="${CSS.escape(replaced)}"]`);
       if (!replacing) {
         (here === element ? put : embedLater(here))(embed);
@@ -374,7 +482,14 @@ function addImages(files: File[], spot: DropSpot | null = null): void {
     return;
   }
   const mine = epoch;
-  void insertImages(element, files, () => mine === epoch && element.isConnected, spot).catch((error: unknown) => {
+  const stillHere = () => {
+    const here = mine === epoch && element.isConnected;
+    if (here) {
+      before("images");
+    }
+    return here;
+  };
+  void insertImages(element, files, stillHere, spot).catch((error: unknown) => {
     window.alert(
       `Could not store the image${files.length === 1 ? "" : "s"}: ${error instanceof Error ? error.message : String(error)}`,
     );
@@ -382,6 +497,7 @@ function addImages(files: File[], spot: DropSpot | null = null): void {
 }
 
 function onPaste(event: ClipboardEvent): void {
+  before("paste");
   const own = copiedBlocks(event.clipboardData?.getData("text/html") ?? "", event.clipboardData?.getData("text/plain") ?? "");
   if (own) {
     event.preventDefault();
@@ -432,6 +548,7 @@ function onClipboard(event: ClipboardEvent): void {
   if (event.type !== "cut") {
     return;
   }
+  before("cut");
   if (photo?.closest("[data-gallery]")) {
     editPhoto(0);
   } else if (photo) {
@@ -480,6 +597,7 @@ function onDrop(event: DragEvent): void {
   if (!element) {
     return;
   }
+  before("drop");
   const spot = dropSpot(element, event.clientX, event.clientY, dragged);
   const moving = dragged;
   endDrag();
@@ -508,6 +626,7 @@ function run(command: (element: HTMLElement) => unknown): void {
   if (!element) {
     return;
   }
+  before("command");
   command(element);
   refreshTools();
 }
@@ -573,7 +692,16 @@ const openEditors = new Map<string, HTMLElement>();
   </div>
   <SelectionBubble :root="root" :tools="tools" :run="run" />
   <Teleport v-if="toolbar" defer to="#dock-tools">
-    <Toolbar :tools="tools" :run="run" @images="addImages" @videos="addVideos" />
+    <Toolbar
+      :tools="tools"
+      :run="run"
+      :can-undo="undoable.undo"
+      :can-redo="undoable.redo"
+      @undo="undo"
+      @redo="redo"
+      @images="addImages"
+      @videos="addVideos"
+    />
   </Teleport>
 
 </template>
