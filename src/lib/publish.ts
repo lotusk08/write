@@ -1,6 +1,7 @@
 import type { JSONContent } from "../editor/doc.ts";
 import type { PostMeta, PublishResult, SitePhoto } from "../../shared/types.ts";
 import { fetchSitePhotos, publish, uploadPhoto } from "./api.ts";
+import { becomesWebp, toWebp } from "./webp.ts";
 import type { Draft, StoredImage } from "./db.ts";
 import { draftStore, imageStore, isLocalSrc, localId } from "./db.ts";
 import { blobToBase64, extensionFor, keepsLocation, MAX_UPLOAD_BYTES, shrinkImage, tooBig, withoutLocation } from "./images.ts";
@@ -15,6 +16,7 @@ interface PlannedPhoto {
   blob: Blob;
   src: string;
   alt: string;
+  webp: boolean;
 }
 
 export interface PublishWarning {
@@ -142,8 +144,12 @@ function followsAlt(name: string, slug: string, words: string): boolean {
   );
 }
 
+export function namedSlug(draft: Pick<Draft, "slug" | "meta">): string {
+  return draft.slug.replace(/-+$/, "") || slugify(draft.meta.title);
+}
+
 export function draftSlug(draft: Draft): string {
-  return draft.slug.replace(/-+$/, "") || slugify(draft.meta.title) || "untitled";
+  return namedSlug(draft) || "untitled";
 }
 
 function fileOf(src: string, dir: string): string | null {
@@ -294,8 +300,9 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
       skippedImages.push(image.src);
       continue;
     }
-    const file = `${image.baseName}.${extensionFor(image.stored.type, image.stored.name)}`;
-    photos.push({ path: `${images.dir}/${file}`, blob: image.stored.blob, src: image.src, alt: image.alt ?? "" });
+    const webp = becomesWebp(image.stored.blob.type);
+    const file = `${image.baseName}.${webp ? "webp" : extensionFor(image.stored.type, image.stored.name)}`;
+    photos.push({ path: `${images.dir}/${file}`, blob: image.stored.blob, src: image.src, alt: image.alt ?? "", webp });
     imageUrls.set(image.src, `/${images.url}/${file}`);
   }
 
@@ -327,6 +334,17 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
   };
 }
 
+async function ready(photo: PlannedPhoto): Promise<Blob> {
+  if (!photo.webp) {
+    return withoutLocation(await shrinkImage(photo.blob));
+  }
+  try {
+    return await toWebp(photo.blob);
+  } catch (cause) {
+    throw new Error(`Could not turn ${fileName(photo.path)} into WebP: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
+  }
+}
+
 export async function sendPlan(
   plan: PublishPlan,
   message: string,
@@ -347,7 +365,7 @@ export async function sendPlan(
   for (const photo of plan.photos) {
     progress(uploaded.length);
     signal?.throwIfAborted();
-    const sha = await uploadPhoto(await withoutLocation(await shrinkImage(photo.blob)), signal);
+    const sha = await uploadPhoto(await ready(photo), signal);
     uploaded.push({ path: photo.path, sha });
   }
   progress(uploaded.length);

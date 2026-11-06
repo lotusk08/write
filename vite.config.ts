@@ -3,4 +3,6 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [vue()],
+  optimizeDeps: { exclude: ["@jsquash/webp"] },
+  worker: { format: "es" },
 });

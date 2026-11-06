@@ -363,7 +363,7 @@ const committing = computed(() => Boolean(plan.value && sent.value >= plan.value
             />
             <span class="mono" :title="fileName(photo.path)">{{ fileName(photo.path) }}</span>
             <span class="hint">
-              {{ megabytes(photo.blob.size) }}<template v-if="shrinks(photo.blob, widths.get(photo.src))"> · reduced</template>
+              {{ megabytes(photo.blob.size) }}<template v-if="photo.webp"> · to WebP</template><template v-else-if="shrinks(photo.blob, widths.get(photo.src))"> · reduced</template>
             </span>
           </li>
         </ul>

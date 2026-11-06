@@ -3,7 +3,15 @@ import type { Draft } from "./db.ts";
 import type { Settings } from "./settings.ts";
 
 const sitePhotos = vi.hoisted(() => vi.fn());
-vi.mock("./api.ts", () => ({ fetchSitePhotos: sitePhotos }));
+const uploaded = vi.hoisted(() => vi.fn(async (_photo: Blob) => "c".repeat(40)));
+const converted = vi.hoisted(() => vi.fn(async (_photo: Blob) => new Blob(["webp"], { type: "image/webp" })));
+const stored = vi.hoisted(() => new Map<string, { blob: Blob; type: string; name: string }>());
+vi.mock("./api.ts", () => ({ fetchSitePhotos: sitePhotos, uploadPhoto: uploaded, publish: vi.fn(async () => ({})) }));
+vi.mock("./webp.ts", async (original) => ({ ...(await original<typeof import("./webp.ts")>()), toWebp: converted }));
+vi.mock("./db.ts", async (original) => ({
+  ...(await original<typeof import("./db.ts")>()),
+  imageStore: { get: async (id: string) => stored.get(id) },
+}));
 
 const { buildPublishPlan, sendPlan } = await import("./publish.ts");
 
@@ -128,7 +136,7 @@ describe("buildPublishPlan", () => {
     const gif = new Blob([new Uint8Array(9 * 1024 * 1024)], { type: "image/gif" });
     const plan = {
       ...(await buildPublishPlan(draft({}), settings)),
-      photos: [{ path: "public/assets/img/post/trip-1.gif", blob: gif, src: "local:1", alt: "" }],
+      photos: [{ path: "public/assets/img/post/trip-1.gif", blob: gif, src: "local:1", alt: "", webp: false }],
     };
     await expect(sendPlan(plan, "m", () => {})).rejects.toThrow("trip-1.gif is 9.0 MB");
   });
@@ -137,8 +145,28 @@ describe("buildPublishPlan", () => {
     const heic = new Blob([new Uint8Array(64)], { type: "image/heic" });
     const plan = {
       ...(await buildPublishPlan(draft({}), settings)),
-      photos: [{ path: "public/assets/img/post/trip-1.heic", blob: heic, src: "local:1", alt: "" }],
+      photos: [{ path: "public/assets/img/post/trip-1.heic", blob: heic, src: "local:1", alt: "", webp: false }],
     };
     await expect(sendPlan(plan, "m", () => {})).rejects.toThrow("trip-1.heic may hold where it was taken");
+  });
+
+  it("names a new JPEG or PNG .webp in the post and the commit, and sends the WebP made of it", async () => {
+    sitePhotos.mockResolvedValueOnce({ files: [], redirected: [] });
+    const jpeg = new Blob([new Uint8Array(8)], { type: "image/jpeg" });
+    const gif = new Blob([new Uint8Array(8)], { type: "image/gif" });
+    stored.set("sea", { blob: jpeg, type: "image/jpeg", name: "sea.jpg" });
+    stored.set("dance", { blob: gif, type: "image/gif", name: "dance.gif" });
+    const plan = await buildPublishPlan(draft({}, [["local:sea", "Biển"], ["local:dance", "Nhảy"]]), settings);
+    expect(plan.photos.map((photo) => [photo.path, photo.webp])).toEqual([
+      ["public/assets/img/post/bien.webp", true],
+      ["public/assets/img/post/nhay.gif", false],
+    ]);
+    expect(plan.markdown).toContain("![Biển](/assets/img/post/bien.webp)");
+    uploaded.mockClear();
+    await sendPlan(plan, "m", () => {});
+    expect(converted).toHaveBeenCalledWith(jpeg);
+    expect(uploaded.mock.calls.map(([photo]) => photo.type)).toEqual(["image/webp", "image/gif"]);
+    converted.mockRejectedValueOnce(new Error("no memory"));
+    await expect(sendPlan(plan, "m", () => {})).rejects.toThrow("Could not turn bien.webp into WebP: no memory");
   });
 });
