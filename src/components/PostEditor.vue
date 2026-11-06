@@ -228,8 +228,9 @@ function onShortcut(event: KeyboardEvent): void {
   }
   const mod = (event.metaKey || event.ctrlKey) && !event.getModifierState("AltGraph");
   const key = event.key.toLowerCase();
-  const z = key === "z" || event.code === "KeyZ";
-  const y = key === "y" || event.code === "KeyY";
+  const latin = /^[a-z]$/.test(key);
+  const z = latin ? key === "z" : event.code === "KeyZ";
+  const y = latin ? key === "y" : event.code === "KeyY";
   if (mod && !event.altKey && (z || (y && !event.shiftKey))) {
     event.preventDefault();
     event.stopImmediatePropagation();

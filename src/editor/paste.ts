@@ -90,7 +90,7 @@ function nestLists(body: HTMLElement): void {
   }
 }
 
-const CAPTION_TEXT = "[]`*_<~";
+const CAPTION_TEXT = "[]`*_<~&";
 
 function captionMarkdown(node: Node): string {
   if (node.nodeType === Node.TEXT_NODE) {
