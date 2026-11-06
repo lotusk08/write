@@ -4,7 +4,7 @@ import { fetchSitePhotos, publish, uploadPhoto } from "./api.ts";
 import { becomesWebp, toWebp } from "./webp.ts";
 import type { Draft, StoredImage } from "./db.ts";
 import { draftStore, imageStore, isLocalSrc, localId } from "./db.ts";
-import { blobToBase64, extensionFor, keepsLocation, MAX_UPLOAD_BYTES, shrinkImage, tooBig, withoutLocation } from "./images.ts";
+import { blobToBase64, extensionFor, keepsLocation, MAX_UPLOAD_BYTES, tooBig, withoutLocation } from "./images.ts";
 import { buildPostFile } from "./markdown.ts";
 import { videoKeysIn } from "../../shared/media.ts";
 import { decoded, servedName, stem, trimSlashes } from "../../shared/paths.ts";
@@ -338,7 +338,7 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
 
 async function ready(photo: PlannedPhoto): Promise<Blob> {
   if (!photo.webp) {
-    return withoutLocation(await shrinkImage(photo.blob));
+    return withoutLocation(photo.blob);
   }
   try {
     return await toWebp(photo.blob, photo.type);

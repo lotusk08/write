@@ -94,6 +94,9 @@ export async function toWebp(blob: Blob, type = blob.type): Promise<Blob> {
         width = Math.max(1, Math.round(width * 0.85));
       }
     }
+    if (smallest!.byteLength > MAX_UPLOAD_BYTES) {
+      throw new Error("It is still over 8 MB as WebP.");
+    }
     return new Blob([smallest!], { type: "image/webp" });
   } finally {
     image.close();
