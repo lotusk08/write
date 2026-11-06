@@ -156,16 +156,18 @@ describe("buildPublishPlan", () => {
     const gif = new Blob([new Uint8Array(8)], { type: "image/gif" });
     stored.set("sea", { blob: jpeg, type: "image/jpeg", name: "sea.jpg" });
     stored.set("dance", { blob: gif, type: "image/gif", name: "dance.gif" });
-    const plan = await buildPublishPlan(draft({}, [["local:sea", "Biển"], ["local:dance", "Nhảy"]]), settings);
-    expect(plan.photos.map((photo) => [photo.path, photo.webp])).toEqual([
-      ["public/assets/img/post/bien.webp", true],
-      ["public/assets/img/post/nhay.gif", false],
+    stored.set("pasted", { blob: new Blob([new Uint8Array(8)]), type: "image/png", name: "image.png" });
+    const plan = await buildPublishPlan(draft({}, [["local:sea", "Biển"], ["local:dance", "Nhảy"], ["local:pasted", "Chụp"]]), settings);
+    expect(plan.photos.map((photo) => [photo.path, photo.webp, photo.type])).toEqual([
+      ["public/assets/img/post/bien.webp", true, "image/jpeg"],
+      ["public/assets/img/post/nhay.gif", false, "image/gif"],
+      ["public/assets/img/post/chup.webp", true, "image/png"],
     ]);
     expect(plan.markdown).toContain("![Biển](/assets/img/post/bien.webp)");
     uploaded.mockClear();
     await sendPlan(plan, "m", () => {});
-    expect(converted).toHaveBeenCalledWith(jpeg);
-    expect(uploaded.mock.calls.map(([photo]) => photo.type)).toEqual(["image/webp", "image/gif"]);
+    expect(converted).toHaveBeenCalledWith(jpeg, "image/jpeg");
+    expect(uploaded.mock.calls.map(([photo]) => photo.type)).toEqual(["image/webp", "image/gif", "image/webp"]);
     converted.mockRejectedValueOnce(new Error("no memory"));
     await expect(sendPlan(plan, "m", () => {})).rejects.toThrow("Could not turn bien.webp into WebP: no memory");
   });

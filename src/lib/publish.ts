@@ -17,6 +17,7 @@ interface PlannedPhoto {
   src: string;
   alt: string;
   webp: boolean;
+  type?: string;
 }
 
 export interface PublishWarning {
@@ -70,7 +71,7 @@ function warningsFor(draft: Draft, photos: PlannedPhoto[], skipped: string[], gu
   return [
     ...(post ? frontMatterWarnings(draft.meta) : []),
     ...photos
-      .filter((photo) => tooBig(photo.blob))
+      .filter((photo) => !photo.webp && tooBig(photo.blob))
       .map((photo): PublishWarning => ({
         kind: "size",
         src: photo.src,
@@ -300,9 +301,10 @@ export async function buildPublishPlan(draft: Draft, settings: Settings): Promis
       skippedImages.push(image.src);
       continue;
     }
-    const webp = becomesWebp(image.stored.blob.type);
+    const type = image.stored.blob.type || image.stored.type;
+    const webp = becomesWebp(type);
     const file = `${image.baseName}.${webp ? "webp" : extensionFor(image.stored.type, image.stored.name)}`;
-    photos.push({ path: `${images.dir}/${file}`, blob: image.stored.blob, src: image.src, alt: image.alt ?? "", webp });
+    photos.push({ path: `${images.dir}/${file}`, blob: image.stored.blob, src: image.src, alt: image.alt ?? "", webp, type });
     imageUrls.set(image.src, `/${images.url}/${file}`);
   }
 
@@ -339,7 +341,7 @@ async function ready(photo: PlannedPhoto): Promise<Blob> {
     return withoutLocation(await shrinkImage(photo.blob));
   }
   try {
-    return await toWebp(photo.blob);
+    return await toWebp(photo.blob, photo.type);
   } catch (cause) {
     throw new Error(`Could not turn ${fileName(photo.path)} into WebP: ${cause instanceof Error ? cause.message : String(cause)}`, { cause });
   }
@@ -351,11 +353,11 @@ export async function sendPlan(
   progress: (done: number) => void,
   signal?: AbortSignal,
 ): Promise<PublishResult> {
-  const big = plan.photos.find((photo) => tooBig(photo.blob));
+  const big = plan.photos.find((photo) => !photo.webp && tooBig(photo.blob));
   if (big) {
     throw new Error(`${fileName(big.path)} is ${megabytes(big.blob.size)}; one photo can be ${megabytes(MAX_UPLOAD_BYTES)} at most.`);
   }
-  const placed = plan.photos.find((photo) => keepsLocation(photo.blob));
+  const placed = plan.photos.find((photo) => !photo.webp && keepsLocation(photo.blob));
   if (placed) {
     throw new Error(
       `${fileName(placed.path)} may hold where it was taken, which the app can take out of JPEG, PNG and WebP photos only: save it as one of those and add it again.`,

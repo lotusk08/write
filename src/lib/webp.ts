@@ -56,8 +56,8 @@ function encode(pixels: ImageData, lossless: boolean): Promise<ArrayBuffer> {
 
 function pixelsAt(image: ImageBitmap, width: number): ImageData {
   const height = Math.max(1, Math.round((image.height / image.width) * width));
-  const canvas = new OffscreenCanvas(width, height);
-  const context = canvas.getContext("2d");
+  const canvas = typeof OffscreenCanvas === "function" ? new OffscreenCanvas(width, height) : Object.assign(document.createElement("canvas"), { width, height });
+  const context = canvas.getContext("2d") as OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D | null;
   if (!context) {
     throw new Error("This browser cannot draw the photo.");
   }
@@ -66,7 +66,7 @@ function pixelsAt(image: ImageBitmap, width: number): ImageData {
   return context.getImageData(0, 0, width, height);
 }
 
-export async function toWebp(blob: Blob): Promise<Blob> {
+export async function toWebp(blob: Blob, type = blob.type): Promise<Blob> {
   const image = await createImageBitmap(blob, { imageOrientation: "from-image" }).catch((cause: unknown) => {
     if (cause instanceof TypeError) {
       return createImageBitmap(blob);
@@ -78,7 +78,7 @@ export async function toWebp(blob: Blob): Promise<Blob> {
       throw new Error("The photo has no size.");
     }
     let width = Math.min(image.width, Math.floor(Math.sqrt((MAX_PIXELS * image.width) / image.height)));
-    let lossless = blob.type === "image/png";
+    let lossless = type === "image/png";
     let smallest: ArrayBuffer | null = null;
     for (let tries = 0; tries < TRIES; tries++) {
       const webp = await encode(pixelsAt(image, width), lossless);

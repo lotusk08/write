@@ -501,8 +501,11 @@ async function handlePhoto(request: Request, env: Env): Promise<Response> {
   if (!request.headers.get("content-type")?.startsWith("application/json")) {
     return json({ error: "This page is out of date: reload it, then publish again." }, 400);
   }
-  const length = Number(request.headers.get("content-length"));
-  if (!request.body || !Number.isInteger(length) || length < 1) {
+  const length = Number(request.headers.get("content-length") ?? NaN);
+  if (!request.body || !Number.isInteger(length)) {
+    return json({ error: "The photo came without its size; try again." }, 400);
+  }
+  if (length < 1) {
     return json({ error: "The photo was empty." }, 400);
   }
   if (length > MAX_PHOTO_BODY_BYTES) {
