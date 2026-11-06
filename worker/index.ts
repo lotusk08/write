@@ -1172,7 +1172,7 @@ async function handleMediaPoster(request: Request, env: Env): Promise<Response> 
       return json({ error: "That video is not in the media bucket any more." }, 404);
     }
     await gate.bucket.put(target, bytes, { httpMetadata: { contentType: type, cacheControl: POSTER_CACHE } });
-    await gate.bucket.delete(posterKeys(key).filter((other) => other !== target));
+    await gate.bucket.delete(posterKeys(key).filter((other) => other !== target)).catch(() => undefined);
     return json({ key: target, url: `${gate.base}/${target}` });
   } catch (error) {
     return failed(error, "Could not upload the video's still.");

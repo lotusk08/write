@@ -229,7 +229,7 @@ const copy = async (video: MediaVideo) => {
             :aria-disabled="making !== ''"
             @click="addPoster(video)"
           >
-            {{ making === video.key ? (reading < 1 ? `Reading ${Math.round(reading * 100)}%` : "Uploading still…") : "Make poster" }}
+            {{ making === video.key ? (reading < 1 ? "Reading…" : "Uploading still…") : "Make poster" }}
           </button>
           <button v-if="making === video.key" type="button" class="btn tiny" @click="cancelPoster">Cancel</button>
           <button type="button" class="btn tiny" :title="'Copy its tag, to put it in a post'" @click="copy(video)">

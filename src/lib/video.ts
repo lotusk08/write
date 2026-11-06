@@ -125,7 +125,7 @@ function posterBlob(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<Blob |
     : canvas.convertToBlob({ type, quality: POSTER_QUALITY });
 }
 
-async function still(blob: Blob, signal?: AbortSignal): Promise<{ width: number; height: number; poster: Blob | null; problem: string }> {
+async function still(blob: Blob, signal?: AbortSignal): Promise<{ width: number; height: number; poster: Blob | null }> {
   const url = URL.createObjectURL(blob);
   const video = document.createElement("video");
   video.muted = true;
@@ -156,11 +156,10 @@ async function still(blob: Blob, signal?: AbortSignal): Promise<{ width: number;
     if (!poster) {
       throw new Error(CANNOT_DRAW);
     }
-    return { width, height, poster, problem: "" };
-  } catch (cause) {
+    return { width, height, poster };
+  } catch {
     signal?.throwIfAborted();
-    const known = cause instanceof Error && [CANNOT_DECODE, TOO_SLOW].includes(cause.message);
-    return { width: 0, height: 0, poster: null, problem: known ? cause.message : CANNOT_DRAW };
+    return { width: 0, height: 0, poster: null };
   } finally {
     video.removeAttribute("src");
     video.load();

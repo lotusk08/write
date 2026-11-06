@@ -84,8 +84,8 @@ it("keeps the video from being deleted while its poster is made, and cancels wit
   button("Make poster")!.click();
   await settle();
   expect(button("Delete")!.disabled).toBe(true);
-  expect(button("Reading 0%")!.getAttribute("aria-disabled")).toBe("true");
-  button("Reading 0%")!.click();
+  expect(button("Reading…")!.getAttribute("aria-disabled")).toBe("true");
+  button("Reading…")!.click();
   expect(making).toHaveLength(1);
   button("Cancel")!.click();
   await settle();
