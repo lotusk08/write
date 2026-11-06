@@ -384,11 +384,14 @@ async function newDraft() {
   window.setTimeout(() => postEditor.value?.focus(), 40);
 }
 
-async function importPost(path: string) {
+async function importPost(path: string): Promise<boolean> {
   try {
     await settle();
     const existing = drafts.value.find((draft) => draft.publishedPath === path);
     const fetched = await fetchPostSource(path).catch((cause: unknown) => {
+      if (cause instanceof PasswordRejected) {
+        forget();
+      }
       if (existing) {
         return null;
       }
@@ -405,7 +408,7 @@ async function importPost(path: string) {
       }
       currentId.value = existing.id;
       showToast(`Opened your local draft of ${path}.`);
-      return;
+      return true;
     }
     if (existing && mine !== existing.publishedPrint) {
       currentId.value = existing.id;
@@ -413,7 +416,7 @@ async function importPost(path: string) {
         `${path} changed on the site since you opened it, and this draft has edits that are not published, so it was kept. The site will refuse it: copy your edits, delete this draft and open the post again.`,
         "error",
       );
-      return;
+      return true;
     }
     const post = await sitePost(path, fetched!.markdown);
     const now = Date.now();
@@ -437,8 +440,13 @@ async function importPost(path: string) {
     drafts.value = sortDrafts([draft, ...drafts.value.filter((item) => item.id !== existing?.id)]);
     currentId.value = draft.id;
     showToast(existing ? `${path} changed on the site; opened the new version.` : `Opened ${path}.`);
+    return true;
   } catch (cause) {
+    if (cause instanceof PasswordRejected) {
+      forget();
+    }
     showToast(errorText(cause), "error");
+    return false;
   }
 }
 
@@ -836,7 +844,9 @@ async function reopenFromSite(draft: Draft) {
   }
   const copy: Draft = { ...draft, publishedPath: undefined, publishedSha: undefined, publishedPrint: undefined, updatedAt: Date.now() };
   await storeDraft(copy);
-  await importPost(path);
+  if (!(await importPost(path))) {
+    await storeDraft(draft);
+  }
 }
 
 async function openPublish() {

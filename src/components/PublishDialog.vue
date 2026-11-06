@@ -5,7 +5,6 @@ import { fetchPostSource, PasswordRejected } from "../lib/api.ts";
 import { isLocalSrc, resolveDisplaySrc, type Draft } from "../lib/db.ts";
 import { diffLines, type LineDiff } from "../lib/diff.ts";
 import { pinWords } from "../lib/home.ts";
-import { shrinks } from "../lib/images.ts";
 import { buildPublishPlan, defaultCommitMessage, sendPlan, type PublishPlan, type PublishWarning } from "../lib/publish.ts";
 import type { Settings } from "../lib/settings.ts";
 import { previewSrc } from "../lib/site.ts";
@@ -41,7 +40,6 @@ const error = ref<string | null>(null);
 const refused = ref(false);
 const result = ref<PublishResult | null>(null);
 const thumbs = reactive(new Map<string, string>());
-const widths = reactive(new Map<string, number>());
 const changes = ref<LineDiff | null>(null);
 const { password, rejected, asking, signIn: logIn, signedIn, forget } = useSignIn();
 const signIn = ref<InstanceType<typeof SignIn> | null>(null);
@@ -79,13 +77,12 @@ watch(
             plan.value = next;
             next.photos.forEach((photo) => {
               void thumb(photo.src);
-              measure(photo.src, photo.blob);
             });
           }
         })
         .catch((cause: unknown) => {
           if (mine === generation) {
-            error.value = cause instanceof Error ? cause.message : String(cause);
+            failed(cause);
           }
         });
     if (planned) {
@@ -115,19 +112,6 @@ watch(error, async (text) => {
     (warningList.value?.querySelector("button") ?? primary.value)?.focus();
   }
 });
-
-function measure(src: string, blob: Blob) {
-  if (widths.has(src)) {
-    return;
-  }
-  const url = URL.createObjectURL(blob);
-  const image = new Image();
-  image.onload = image.onerror = () => {
-    widths.set(src, image.naturalWidth);
-    URL.revokeObjectURL(url);
-  };
-  image.src = url;
-}
 
 async function thumb(src: string) {
   if (!thumbs.has(src)) {
@@ -209,9 +193,17 @@ const loadChanges = async (event: Event) => {
   try {
     changes.value = diffLines((await fetchPostSource(path)).markdown, plan.value.markdown);
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause);
+    failed(cause);
   }
 };
+
+function failed(cause: unknown) {
+  if (cause instanceof PasswordRejected) {
+    refused.value = true;
+    forget();
+  }
+  error.value = cause instanceof Error ? cause.message : String(cause);
+}
 
 const signInFirst = async () => {
   error.value = null;
@@ -219,11 +211,7 @@ const signInFirst = async () => {
   try {
     await logIn();
   } catch (cause) {
-    if (cause instanceof PasswordRejected) {
-      refused.value = true;
-      forget();
-    }
-    error.value = cause instanceof Error ? cause.message : String(cause);
+    failed(cause);
   }
 };
 
@@ -274,7 +262,7 @@ async function retry() {
   try {
     plan.value = await buildPublishPlan(props.draft, props.settings);
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : String(cause);
+    failed(cause);
     return;
   }
   await run();
@@ -363,7 +351,7 @@ const committing = computed(() => Boolean(plan.value && sent.value >= plan.value
             />
             <span class="mono" :title="fileName(photo.path)">{{ fileName(photo.path) }}</span>
             <span class="hint">
-              {{ megabytes(photo.blob.size) }}<template v-if="photo.webp"> · to WebP</template><template v-else-if="shrinks(photo.blob, widths.get(photo.src))"> · reduced</template>
+              {{ megabytes(photo.blob.size) }}<template v-if="photo.webp"> · to WebP</template>
             </span>
           </li>
         </ul>

@@ -1,13 +1,14 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref, watch } from "vue";
 import type { PostMeta, Topics } from "../../../shared/types.ts";
-import { fetchTopics } from "../../lib/api.ts";
+import { fetchTopics, PasswordRejected } from "../../lib/api.ts";
 import { isLocalSrc, resolveLocalSrc, storeImageFile } from "../../lib/db.ts";
 import type { Language } from "../../lib/draft.ts";
 import { choiceOf, PIN_CHOICES, pinOf } from "../../lib/home.ts";
 import { convertedSrc, displaySrc } from "../../lib/site.ts";
 import { rememberValue, tidyEdited } from "../../lib/text.ts";
 import Icon from "../Icon.vue";
+import SignIn from "../SignIn.vue";
 import Toggle from "../Toggle.vue";
 import TokenInput from "../TokenInput.vue";
 import type { ToggleOption } from "../types.ts";
@@ -28,19 +29,40 @@ const coverUrl = ref<string | null>(null);
 const coverInput = ref<HTMLInputElement | null>(null);
 const topics = ref<Topics | null>(null);
 
-const { asking } = useSignIn();
+const { password, rejected, asking, signIn, signedIn, forget } = useSignIn();
+const signInProblem = ref("");
 
 watch(
   asking,
   (now) => {
     if (!now) {
-      void fetchTopics().then((found) => {
-        topics.value = found;
-      });
+      signInProblem.value = "";
+      fetchTopics().then(
+        (found) => {
+          topics.value = found;
+        },
+        (cause: unknown) => {
+          if (cause instanceof PasswordRejected) {
+            forget();
+          }
+        },
+      );
     }
   },
   { immediate: true },
 );
+
+const submitSignIn = async () => {
+  signInProblem.value = "";
+  try {
+    await signIn();
+  } catch (cause) {
+    if (cause instanceof PasswordRejected) {
+      forget();
+    }
+    signInProblem.value = cause instanceof Error ? cause.message : String(cause);
+  }
+};
 
 watch(
   () => props.meta.cover?.path,
@@ -201,6 +223,15 @@ const onAltBlur = (event: FocusEvent) => {
         @change="(tags) => emit('change', { tags })"
       />
     </div>
+    <SignIn
+      v-if="asking && rejected > 0"
+      id="topics-password"
+      v-model="password"
+      @submit="submitSignIn"
+      @session="signedIn"
+      @error="(message) => (signInProblem = message)"
+    />
+    <p v-if="asking && signInProblem" class="notice warn">{{ signInProblem }}</p>
     <Toggle
       label="Language"
       :options="LANGUAGES"

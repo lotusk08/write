@@ -75,6 +75,9 @@ function topicList(value: unknown): Topic[] {
 export function fetchTopics(): Promise<Topics> {
   topics ??= fetch("/api/topics", { headers: headers() })
     .then(async (response) => {
+      if (response.status === 401) {
+        throw new PasswordRejected("Sign in first.");
+      }
       if (!answeredJson(response)) {
         throw new Error("No topics.");
       }
@@ -85,8 +88,11 @@ export function fetchTopics(): Promise<Topics> {
       }
       return found;
     })
-    .catch(() => {
+    .catch((cause: unknown) => {
       topics = null;
+      if (cause instanceof PasswordRejected) {
+        throw cause;
+      }
       return NO_TOPICS;
     });
   return topics;
