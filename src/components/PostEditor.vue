@@ -28,7 +28,7 @@ import {
   toggleTask,
 } from "../editor/commands.ts";
 import { dropSpot, markSpot } from "../editor/drag.ts";
-import { embedField, mergeExtra } from "../editor/blog.ts";
+import { embedField, mergeExtra, videoFields } from "../editor/blog.ts";
 import { editorInit } from "../editor/config.ts";
 import { decorate, Previews, releasePhotos } from "../editor/decorate.ts";
 import type { JSONContent } from "../editor/doc.ts";
@@ -362,7 +362,7 @@ function addVideos(sources: VideoSource[], spot: DropSpot | null = null, replaci
         return false;
       }
       const [poster, width, height] = ["poster", "width", "height"].map((name) => embedField(embed.extra, name));
-      const fields = { poster, ...(width && height ? { width, height } : {}), types: null };
+      const fields = { ...videoFields(poster, Number(width), Number(height)), types: null };
       return replaceEmbed(here, old, { ...embed, extra: mergeExtra(old.getAttribute("data-extra") ?? "", fields) });
     }, draft);
   }

@@ -55,3 +55,5 @@ export function tidyEdited(element: HTMLInputElement | HTMLTextAreaElement): str
   const tidy = tidyField(element.value);
   return tidy === element.value ? null : tidy;
 }
+
+export const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;

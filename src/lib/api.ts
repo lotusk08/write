@@ -185,10 +185,6 @@ async function mediaJson<T>(path: string, body: unknown, password: string, whenI
     body: JSON.stringify(body),
     signal,
   });
-  if (response.status >= 500) {
-    const payload = (await response.json().catch(() => ({}))) as { error?: string };
-    throw new HttpError(payload.error || `${whenItFails} (${response.status}).`, response.status);
-  }
   return readJson<T>(response, whenItFails);
 }
 

@@ -1,5 +1,6 @@
 import { MAX_VIDEO_BYTES, type MediaPart, PART_BYTES, VIDEO_TYPES } from "../../shared/media.ts";
 import { abortMedia, bucketVideoFetch, bucketVideoUrl, completeMedia, HttpError, PasswordRejected, sendMediaPart, startMedia, uploadPoster } from "./api.ts";
+import { megabytes } from "./text.ts";
 
 const MAX_EDGE = 1920;
 const COPY_BITRATE = 10_000_000;
@@ -27,8 +28,6 @@ export interface UploadedVideo {
   posterProblem: string;
   sent: boolean;
 }
-
-const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
 
 async function convert(
   file: File,

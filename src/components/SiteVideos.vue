@@ -2,11 +2,12 @@
 import { computed, nextTick, onBeforeUnmount, ref } from "vue";
 import type { MediaVideo } from "../../shared/media.ts";
 import { videoKeysIn } from "../../shared/media.ts";
-import { embedExtra, embedTag } from "../editor/blog.ts";
+import { embedExtra, embedTag, videoFields } from "../editor/blog.ts";
 import { deleteMediaVideos, fetchMediaVideos, PasswordRejected } from "../lib/api.ts";
 import { draftStore } from "../lib/db.ts";
 import { draftLabel } from "../lib/draft.ts";
 import { slugFromPath } from "../lib/paths.ts";
+import { megabytes } from "../lib/text.ts";
 import { makePoster } from "../lib/video.ts";
 import Icon from "./Icon.vue";
 import SignIn from "./SignIn.vue";
@@ -34,7 +35,6 @@ const { password, asking, credential, accepted, signedIn, forget } = useSignIn()
 
 useFloatingMenu(open, anchor, list);
 
-const megabytes = (bytes: number) => `${(bytes / 1024 / 1024).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
 const day = (time: number) => new Date(time).toISOString().slice(0, 10);
 const nameOf = (key: string) => key.replace(/^video\//, "").replace(/-[0-9a-f]{12}\.\w+$/, "");
 const usesOf = (video: MediaVideo) => [...video.used.map(slugFromPath), ...(local.value?.get(video.key) ?? []).map((title) => `${title} (on this device)`)];
@@ -160,7 +160,7 @@ const cancelPoster = () => stopMaking?.abort();
 onBeforeUnmount(cancelPoster);
 
 const copy = async (video: MediaVideo) => {
-  const tag = embedTag("video", video.url, embedExtra({ poster: video.poster, width: video.width, height: video.height }));
+  const tag = embedTag("video", video.url, embedExtra(videoFields(video.poster, video.width, video.height)));
   try {
     await navigator.clipboard.writeText(tag);
     copied.value = video.key;

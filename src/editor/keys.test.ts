@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { markdownToDoc } from "../lib/import.ts";
 import { docToMarkdown } from "../lib/markdown.ts";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
-import { embedExtra, embedField, embedFromUrl, embedTag, isPlayerLink, mergeExtra, playableUrl } from "./blog.ts";
+import { embedExtra, embedField, embedFromUrl, embedTag, isPlayerLink, mergeExtra, playableUrl, videoFields } from "./blog.ts";
 import { toggleCodeBlock, toggleFilepath, toggleInline, toggleList, togglePlainQuote } from "./commands.ts";
 import { sanitizerOptions } from "./config.ts";
 import { handleInput, handleKeydown } from "./keys.ts";
@@ -469,5 +469,13 @@ describe("a player's attributes after its address", () => {
     const extra = ` title='A "clip"' poster="old.webp" loop width="640"`;
     expect(mergeExtra(extra, { poster: "new.webp", width: 1920, height: 1080 })).toBe(` title='A "clip"' loop poster="new.webp" width="1920" height="1080"`);
     expect(mergeExtra(extra, { poster: null, width: null, height: null })).toBe(` title='A "clip"' loop`);
+  });
+
+  it("keeps a replaced video's size when the new one was not measured, and drops its old still", () => {
+    const extra = ` poster="old.webp" width="640" height="360"`;
+    expect(embedExtra(videoFields("new.webp", 1920, 1080))).toBe(` poster="new.webp" width="1920" height="1080"`);
+    expect(embedExtra(videoFields(null, 0, 0))).toBe("");
+    expect(mergeExtra(extra, videoFields(null, 0, 0))).toBe(` width="640" height="360"`);
+    expect(mergeExtra(extra, videoFields("new.webp", 1080, 1920))).toBe(` poster="new.webp" width="1080" height="1920"`);
   });
 });

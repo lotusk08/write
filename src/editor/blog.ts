@@ -101,6 +101,10 @@ export function embedExtra(fields: Record<string, string | number | null | undef
     .join("");
 }
 
+export function videoFields(poster: string | null, width: number | null, height: number | null): Record<string, string | number | null> {
+  return { poster, ...(width && height ? { width, height } : {}) };
+}
+
 const ATTRIBUTE_ITEM = /\s+([\w-]+)(?:=(?:"[^"]*"|'[^']*'))?/g;
 
 export function mergeExtra(extra: string | undefined, fields: Record<string, string | number | null | undefined>): string {

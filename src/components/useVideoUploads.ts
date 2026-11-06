@@ -1,5 +1,5 @@
 import { reactive, ref, watch } from "vue";
-import { type Embed, embedExtra, embedTag } from "../editor/blog.ts";
+import { type Embed, embedExtra, embedTag, videoFields } from "../editor/blog.ts";
 import { fetchAppConfig, fetchDropboxVideo, HttpError, PasswordRejected } from "../lib/api.ts";
 import { slugify } from "../lib/text.ts";
 import { type PreparedVideo, prepareVideo, type UploadedVideo, uploadVideo } from "../lib/video.ts";
@@ -137,7 +137,7 @@ async function run(job: VideoJob, source: VideoSource, place: (embed: Embed, sen
     const embed: Embed = {
       platform: "video",
       id: uploaded.url,
-      extra: embedExtra({ poster: uploaded.poster, width: video.width || null, height: video.height || null }),
+      extra: embedExtra(videoFields(uploaded.poster, video.width, video.height)),
     };
     job.stage = "done";
     job.fraction = 1;
