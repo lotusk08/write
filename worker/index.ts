@@ -29,6 +29,7 @@ import {
   PART_BYTES,
   POSTER_TYPES,
   posterKey,
+  posterKeys,
   VIDEO_KEY,
   VIDEO_TYPES,
   videoKey,
@@ -853,7 +854,7 @@ async function removeUnused(env: Env, sweep: Sweep): Promise<string[]> {
 }
 
 async function deleteVideos(bucket: R2Bucket, keys: string[]): Promise<string[]> {
-  await bucket.delete(keys.flatMap((key) => [key, posterKey(key, "webp"), posterKey(key, "jpg")]));
+  await bucket.delete(keys.flatMap((key) => [key, ...posterKeys(key)]));
   return keys;
 }
 
@@ -893,7 +894,7 @@ async function handleMediaList(request: Request, env: Env): Promise<Response> {
     const videos: MediaVideo[] = objects
       .filter((object) => VIDEO_KEY.test(object.key))
       .map((object) => {
-        const poster = ["webp", "jpg"].map((extension) => posterKey(object.key, extension)).find((key) => names.has(key));
+        const poster = posterKeys(object.key).find((key) => names.has(key));
         return {
           key: object.key,
           url: `${gate.base}/${object.key}`,
@@ -1156,6 +1157,7 @@ async function handleMediaPoster(request: Request, env: Env): Promise<Response> 
       return json({ error: "That video is not in the media bucket any more." }, 404);
     }
     await gate.bucket.put(target, bytes, { httpMetadata: { contentType: type, cacheControl: POSTER_CACHE } });
+    await gate.bucket.delete(posterKeys(key).filter((other) => other !== target));
     return json({ key: target, url: `${gate.base}/${target}` });
   } catch (error) {
     return failed(error, "Could not upload the video's still.");

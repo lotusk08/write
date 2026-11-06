@@ -516,6 +516,16 @@ describe("video uploads", () => {
     expect(pending.size).toBe(0);
   });
 
+  it("keeps one still per video, whichever browser made the last one", async () => {
+    const key = `video/clip-${fingerprint.slice(0, 12)}.mp4`;
+    objects.set(key, { bytes: new TextEncoder().encode("vid") });
+    await send(`/api/media/poster?key=${key}`, { method: "PUT", headers: { "content-type": "image/webp" }, body: "img" });
+    await send(`/api/media/poster?key=${key}`, { method: "PUT", headers: { "content-type": "image/jpeg" }, body: "img" });
+    expect([...objects.keys()]).toEqual([key, key.replace(".mp4", ".jpg")]);
+    await send(`/api/media/poster?key=${key}`, { method: "PUT", headers: { "content-type": "image/webp" }, body: "img" });
+    expect([...objects.keys()]).toEqual([key, key.replace(".mp4", ".webp")]);
+  });
+
   it("keeps no still for a video that is not in the bucket, so a deleted one leaves nothing behind", async () => {
     const key = `video/clip-${fingerprint.slice(0, 12)}.mp4`;
     const still = await send(`/api/media/poster?key=${key}`, { method: "PUT", headers: { "content-type": "image/webp" }, body: "img" });
@@ -620,6 +630,13 @@ describe("video uploads", () => {
       [shared, null, ["src/posts/2026-10-01-a.md", "src/drafts/b.md"]],
       [old, `https://media.test/${old.replace(".mp4", ".webp")}`, ["src/drafts/b.md"]],
     ]);
+  });
+
+  it("lists the WebP still of a video that has a JPEG one too", async () => {
+    stored(old, old.replace(".mp4", ".jpg"), old.replace(".mp4", ".webp"));
+    fakeSite({ "src/posts/2026-10-01-a.md": "Words" });
+    const { videos } = (await (await send("/api/media")).json()) as { videos: { poster: string | null }[] };
+    expect(videos.map(({ poster }) => poster)).toEqual([`https://media.test/${old.replace(".mp4", ".webp")}`]);
   });
 
   it("deletes only the videos no file uses, with their stills", async () => {

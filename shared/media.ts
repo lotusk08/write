@@ -37,6 +37,10 @@ export function posterKey(key: string, extension: string): string {
   return key.replace(/\.[a-z0-9]+$/, `.${extension}`);
 }
 
+export function posterKeys(key: string): string[] {
+  return Object.values(POSTER_TYPES).map((extension) => posterKey(key, extension!));
+}
+
 export interface MediaStart {
   key: string;
   url: string;
