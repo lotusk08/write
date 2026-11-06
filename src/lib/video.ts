@@ -1,5 +1,5 @@
 import { MAX_VIDEO_BYTES, type MediaPart, PART_BYTES, VIDEO_TYPES } from "../../shared/media.ts";
-import { abortMedia, completeMedia, fetchBucketVideo, HttpError, PasswordRejected, sendMediaPart, startMedia, uploadPoster } from "./api.ts";
+import { abortMedia, bucketVideoFetch, bucketVideoUrl, completeMedia, HttpError, PasswordRejected, sendMediaPart, startMedia, uploadPoster } from "./api.ts";
 
 const MAX_EDGE = 1920;
 const COPY_BITRATE = 10_000_000;
@@ -7,7 +7,6 @@ const POSTER_EDGE = 1280;
 const POSTER_QUALITY = 0.82;
 const STILL_WAIT_MS = 15_000;
 const SAMPLE_BYTES = 8 * 1024 * 1024;
-export const POSTER_READ_BYTES = 32 * 1024 * 1024;
 const PARALLEL_PARTS = 3;
 const PART_TRIES = 3;
 const PLAYABLE = new Set(["avc", "vp8", "vp9", "av1"]);
@@ -117,8 +116,14 @@ function settled(video: HTMLVideoElement, event: string, signal?: AbortSignal): 
   });
 }
 
-function canvasBlob(canvas: HTMLCanvasElement, type: string): Promise<Blob | null> {
-  return new Promise((resolve) => canvas.toBlob(resolve, type, POSTER_QUALITY));
+let webp: boolean | undefined;
+
+function posterBlob(canvas: HTMLCanvasElement | OffscreenCanvas): Promise<Blob | null> {
+  webp ??= Object.assign(document.createElement("canvas"), { width: 1, height: 1 }).toDataURL("image/webp").startsWith("data:image/webp");
+  const type = webp ? "image/webp" : "image/jpeg";
+  return canvas instanceof HTMLCanvasElement
+    ? new Promise((resolve) => canvas.toBlob(resolve, type, POSTER_QUALITY))
+    : canvas.convertToBlob({ type, quality: POSTER_QUALITY });
 }
 
 async function still(blob: Blob, signal?: AbortSignal): Promise<{ width: number; height: number; poster: Blob | null; problem: string }> {
@@ -148,8 +153,7 @@ async function still(blob: Blob, signal?: AbortSignal): Promise<{ width: number;
       throw new Error(CANNOT_DRAW);
     }
     context.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const webp = await canvasBlob(canvas, "image/webp");
-    const poster = webp?.type === "image/webp" ? webp : await canvasBlob(canvas, "image/jpeg");
+    const poster = await posterBlob(canvas);
     if (!poster) {
       throw new Error(CANNOT_DRAW);
     }
@@ -310,16 +314,46 @@ export async function makePoster(
   password: string,
   onProgress: (fraction: number) => void = () => {},
   signal: AbortSignal = new AbortController().signal,
-): Promise<string> {
-  const { file, whole } = await fetchBucketVideo(key, password, signal, POSTER_READ_BYTES, onProgress);
-  const { poster, problem } = await still(file, signal);
+): Promise<{ url: string; width: number; height: number }> {
+  const { CanvasSink, Input, MATROSKA, MP4, QTFF, UrlSource, WEBM } = await import("mediabunny");
   signal.throwIfAborted();
-  if (!poster) {
-    throw new Error(
-      whole
-        ? `${problem} Try another browser, such as Safari; the blog also takes a still from it when it builds.`
-        : `No still from the first ${megabytes(POSTER_READ_BYTES)} of this video here (its index may be at the end of the file). The blog takes a still from it when it builds.`,
+  const input = new Input({
+    source: new UrlSource(bucketVideoUrl(key), { fetchFn: bucketVideoFetch(password), getRetryDelay: () => null, handleUnhandledError: () => {} }),
+    formats: [MP4, QTFF, WEBM, MATROSKA],
+  });
+  const stop = () => input.dispose();
+  signal.addEventListener("abort", stop, { once: true });
+  let shot: { width: number; height: number; poster: Blob };
+  try {
+    const track = await input.getPrimaryVideoTrack();
+    if (!track || !(await track.canDecode())) {
+      throw new Error(CANNOT_DECODE);
+    }
+    const [width, height, first, end] = await Promise.all([track.getDisplayWidth(), track.getDisplayHeight(), track.getFirstTimestamp(), track.computeDuration()]);
+    const scale = Math.min(1, POSTER_EDGE / Math.max(width, height));
+    const frame = await new CanvasSink(track, { width: Math.round(width * scale), height: Math.round(height * scale), fit: "contain" }).getCanvas(
+      first + Math.min((end - first) / 4, 2),
     );
+    const poster = frame && (await posterBlob(frame.canvas));
+    if (!poster) {
+      throw new Error(CANNOT_DRAW);
+    }
+    shot = { width, height, poster };
+  } catch (cause) {
+    signal.throwIfAborted();
+    if (cause instanceof PasswordRejected || cause instanceof HttpError) {
+      throw cause;
+    }
+    if (cause instanceof TypeError) {
+      throw new Error("Could not read the video from the media bucket.", { cause });
+    }
+    const known = cause instanceof Error && cause.message === CANNOT_DRAW ? CANNOT_DRAW : CANNOT_DECODE;
+    throw new Error(`${known} Try another browser, such as Safari; the blog also takes a still from it when it builds.`, { cause });
+  } finally {
+    signal.removeEventListener("abort", stop);
+    input.dispose();
   }
-  return (await uploadPoster(key, poster, password, signal)).url;
+  onProgress(1);
+  const { url } = await uploadPoster(key, shot.poster, password, signal);
+  return { url, width: shot.width, height: shot.height };
 }

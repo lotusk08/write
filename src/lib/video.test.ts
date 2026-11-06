@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchBucketVideo } from "./api.ts";
+import { PasswordRejected } from "./api.ts";
 import { makePoster, type PreparedVideo, uploadVideo } from "./video.ts";
 
 const VIDEO: PreparedVideo = { blob: new Blob(["video bytes"], { type: "video/mp4" }), source: new Blob(["source bytes"]), type: "video/mp4", width: 1, height: 1, poster: async () => new Blob(["p"], { type: "image/webp" }), note: "" };
@@ -41,24 +41,8 @@ function stubNetwork(calls: string[], onPoster = () => {}, posterStatus = 200): 
   vi.stubGlobal("XMLHttpRequest", FakeXhr);
 }
 
-function browserCannotDecode(): () => void {
-  const src = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "src")!;
-  Object.defineProperty(HTMLMediaElement.prototype, "src", {
-    ...src,
-    set(this: HTMLMediaElement, value: string) {
-      src.set!.call(this, value);
-      setTimeout(() => this.dispatchEvent(new Event("error")));
-    },
-  });
-  return () => Object.defineProperty(HTMLMediaElement.prototype, "src", src);
-}
-
-let restore = () => {};
-
 afterEach(() => {
   vi.unstubAllGlobals();
-  restore();
-  restore = () => {};
 });
 
 describe("stopping a video's upload", () => {
@@ -148,7 +132,7 @@ describe("a video without its poster", () => {
     expect(calls.some((path) => path.includes("poster"))).toBe(false);
   });
 
-  it("reads the whole of a short video back through the app and says when this browser cannot decode it, sending no poster", async () => {
+  it("reads the video back through the app in ranges, and says when this browser cannot decode it, sending no poster", async () => {
     const calls: string[] = [];
     stubNetwork(calls);
     vi.stubGlobal("fetch", async (path: string, init?: RequestInit) => {
@@ -156,22 +140,14 @@ describe("a video without its poster", () => {
       calls.push(`${path} ${sent.get("x-write-password")} ${sent.get("range")}`);
       return new Response("not a video", { status: 206, headers: { "content-type": "video/mp4", "content-length": "11", "content-range": "bytes 0-10/11" } });
     });
-    restore = browserCannotDecode();
     await expect(makePoster("video/a-0123456789ab.mp4", "pw")).rejects.toThrow("This browser cannot decode this video. Try another browser");
-    expect(calls).toEqual(["/api/media/video?key=video%2Fa-0123456789ab.mp4 pw bytes=0-33554431"]);
+    expect(calls[0]).toBe("/api/media/video?key=video%2Fa-0123456789ab.mp4 pw bytes=0-");
+    expect(calls.some((call) => call.includes("poster"))).toBe(false);
   });
 
-  it("reads only the start of a long video, and says the blog takes a still when that start gives none", async () => {
-    stubNetwork([]);
-    vi.stubGlobal("fetch", async () => new Response("the first bytes", { status: 206, headers: { "content-type": "video/mp4", "content-range": "bytes 0-33554431/4000000000" } }));
-    restore = browserCannotDecode();
-    await expect(makePoster("video/a-0123456789ab.mp4", "pw")).rejects.toThrow(/first 32 MB .* The blog takes a still from it when it builds/);
-  });
-
-  it("stops reading at the limit when the server sends the whole video anyway", async () => {
-    vi.stubGlobal("fetch", async () => new Response("0123456789", { status: 200, headers: { "content-type": "video/mp4", "content-length": "10" } }));
-    const read = await fetchBucketVideo("video/a-0123456789ab.mp4", "pw", new AbortController().signal, 4);
-    expect([await read.file.text(), read.whole]).toEqual(["0123", false]);
+  it("says the password was refused when the app will not read the video back", async () => {
+    vi.stubGlobal("fetch", async () => new Response(JSON.stringify({ error: "Wrong password." }), { status: 401 }));
+    await expect(makePoster("video/a-0123456789ab.mp4", "pw")).rejects.toBeInstanceOf(PasswordRejected);
   });
 
   it("says the media bucket could not be reached when the connection fails", async () => {

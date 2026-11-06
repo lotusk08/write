@@ -5,7 +5,7 @@ import type { MediaVideo } from "../../shared/media.ts";
 
 const KEY = "video/clip-0123456789ab.mp4";
 const STILL = "https://m/video/clip-0123456789ab.webp";
-const making: { signal: AbortSignal; finish: (url: string) => void }[] = [];
+const making: { signal: AbortSignal; finish: (still: { url: string; width: number; height: number }) => void }[] = [];
 let loads = 0;
 
 vi.mock("../lib/api.ts", async (original) => ({
@@ -18,7 +18,7 @@ vi.mock("../lib/api.ts", async (original) => ({
 vi.mock("../lib/db.ts", () => ({ draftStore: { all: async () => [] } }));
 vi.mock("../lib/video.ts", () => ({
   makePoster: (_key: string, _password: string, _progress: unknown, signal: AbortSignal) =>
-    new Promise<string>((resolve, reject) => {
+    new Promise<{ url: string; width: number; height: number }>((resolve, reject) => {
       making.push({ signal, finish: resolve });
       signal.addEventListener("abort", () => reject(signal.reason), { once: true });
     }),
@@ -66,9 +66,14 @@ it("shows the poster on the row even when the list was read again while it was b
   toggle.click();
   await settle();
   expect(loads).toBe(2);
-  making[0].finish(STILL);
+  making[0].finish({ url: STILL, width: 1080, height: 1920 });
   await settle();
   expect(document.body.querySelector<HTMLImageElement>(".video-row img")?.src).toBe(STILL);
+  const written: string[] = [];
+  Object.defineProperty(navigator, "clipboard", { value: { writeText: async (text: string) => void written.push(text) }, configurable: true });
+  button("Tag")!.click();
+  await settle();
+  expect(written).toEqual([`<EmbedVideo src="https://m/${KEY}" poster="${STILL}" width="1080" height="1920" />`]);
   expect(button("Make poster")).toBeUndefined();
 });
 

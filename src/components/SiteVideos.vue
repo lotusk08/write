@@ -127,11 +127,15 @@ const addPoster = async (video: MediaVideo) => {
   const { [key]: _, ...others } = posterProblems.value;
   posterProblems.value = others;
   try {
-    const poster = await makePoster(key, credential(), (fraction) => (reading.value = fraction), controller.signal);
+    const still = await makePoster(key, credential(), (fraction) => (reading.value = fraction), controller.signal);
     accepted();
     const row = videos.value?.find((entry) => entry.key === key);
     if (row) {
-      row.poster = poster;
+      row.poster = still.url;
+      if (!row.width || !row.height) {
+        row.width = still.width || null;
+        row.height = still.height || null;
+      }
     }
     made.value = `Poster made for ${nameOf(key)}.`;
   } catch (cause) {
