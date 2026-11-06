@@ -55,18 +55,30 @@ describe("fetchSitePhotos", () => {
 });
 
 describe("uploadPhoto", () => {
-  it("tries once more after a server error", async () => {
-    const calls = answers(502, 200);
-    expect(await uploadPhoto("aGk=")).toBe("a".repeat(40));
-    expect(calls).toHaveBeenCalledTimes(2);
+  const photo = new Blob([new Uint8Array([1, 2, 3])], { type: "image/jpeg" });
+
+  it("sends the photo's own bytes, and tries once more a moment after a server error", async () => {
+    vi.useFakeTimers();
+    try {
+      const calls = answers(503, 200);
+      const sha = uploadPhoto(photo);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(calls).toHaveBeenCalledTimes(1);
+      await vi.advanceTimersByTimeAsync(1000);
+      expect(await sha).toBe("a".repeat(40));
+      expect(calls).toHaveBeenCalledTimes(2);
+      expect((calls.mock.calls[0] as unknown as [string, RequestInit])[1].body).toBe(photo);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("does not resend a photo the worker refused, or a wrong password", async () => {
     let calls = answers(400, 200);
-    await expect(uploadPhoto("aGk=")).rejects.toThrow("failed 400");
+    await expect(uploadPhoto(photo)).rejects.toThrow("failed 400");
     expect(calls).toHaveBeenCalledTimes(1);
     calls = answers(401, 200);
-    await expect(uploadPhoto("aGk=")).rejects.toBeInstanceOf(PasswordRejected);
+    await expect(uploadPhoto(photo)).rejects.toBeInstanceOf(PasswordRejected);
     expect(calls).toHaveBeenCalledTimes(1);
   });
 });

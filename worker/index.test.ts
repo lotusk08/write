@@ -174,11 +174,19 @@ describe("worker", () => {
     }
   });
 
-  it("caps a photo at 8 MB and takes only base64", async () => {
-    const big = "A".repeat(Math.ceil((8 * 1024 * 1024 * 4) / 3) + 8);
+  it("caps a photo at 8 MB, refuses an empty one, and hands GitHub the bytes as base64", async () => {
+    const big = new Uint8Array(8 * 1024 * 1024 + 1);
     expect((await call("/api/publish/photo", { method: "POST", signed: true, body: big })).status).toBe(400);
-    expect((await call("/api/publish/photo", { method: "POST", signed: true, body: "not base64!" })).status).toBe(400);
     expect((await call("/api/publish/photo", { method: "POST", signed: true, body: "" })).status).toBe(400);
+    let sent = "";
+    vi.stubGlobal("fetch", async (_input: string, init?: RequestInit) => {
+      sent = (JSON.parse(String(init?.body)) as { content: string }).content;
+      return Response.json({ sha: "b".repeat(40) });
+    });
+    const photo = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 1, 2]);
+    const response = await call("/api/publish/photo", { method: "POST", signed: true, body: photo, headers: { "content-length": "3" } });
+    expect(await response.json()).toEqual({ sha: "b".repeat(40) });
+    expect(sent).toBe(Buffer.from(photo).toString("base64"));
   });
 
   it("tells which photos another file still uses, without naming the drafts", async () => {

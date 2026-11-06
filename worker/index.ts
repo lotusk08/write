@@ -20,6 +20,7 @@ import type {
   Topics,
 } from "../shared/types.ts";
 
+import { bytesToBase64 } from "../shared/base64.ts";
 import { frontField, frontMatter } from "../shared/front.ts";
 import {
   MAX_POSTER_BYTES,
@@ -79,7 +80,7 @@ export interface Env {
 }
 
 const MAX_REQUEST_BYTES = 4 * 1024 * 1024;
-const MAX_PHOTO_BYTES = Math.ceil((8 * 1024 * 1024 * 4) / 3) + 4;
+const MAX_PHOTO_BYTES = 8 * 1024 * 1024;
 const SHA = /^[0-9a-f]{40}$/;
 const MARKDOWN = /\.(md|markdown)$/i;
 
@@ -136,28 +137,28 @@ async function readCapped(request: Request, max: number): Promise<Uint8Array | n
   if (!request.body) {
     return new Uint8Array();
   }
-  const reader = request.body.getReader();
-  const chunks: Uint8Array[] = [];
+  const declared = Number(request.headers.get("content-length"));
+  let body = new Uint8Array(Number.isInteger(declared) && declared > 0 ? declared : Math.min(max, 64 * 1024));
   let size = 0;
+  const reader = request.body.getReader();
   for (;;) {
     const { done, value } = await reader.read();
     if (done) {
       break;
     }
-    size += value.byteLength;
-    if (size > max) {
+    if (size + value.byteLength > max) {
       await reader.cancel();
       return null;
     }
-    chunks.push(value);
+    if (size + value.byteLength > body.byteLength) {
+      const grown = new Uint8Array(Math.min(max, Math.max(size + value.byteLength, body.byteLength * 2)));
+      grown.set(body.subarray(0, size));
+      body = grown;
+    }
+    body.set(value, size);
+    size += value.byteLength;
   }
-  const body = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    body.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return body;
+  return body.subarray(0, size);
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
@@ -502,12 +503,11 @@ async function handlePhoto(request: Request, env: Env): Promise<Response> {
   if (!raw) {
     return json({ error: "This photo is too large to publish (max 8 MB)." }, 400);
   }
-  const content = new TextDecoder().decode(raw);
-  if (!content || !/^[A-Za-z0-9+/]+={0,2}$/.test(content)) {
-    return json({ error: "The photo was not sent as base64." }, 400);
+  if (!raw.byteLength) {
+    return json({ error: "The photo was empty." }, 400);
   }
   try {
-    return json({ sha: await createBlob(githubToken(env), env.BLOG_REPO!, content) });
+    return json({ sha: await createBlob(githubToken(env), env.BLOG_REPO!, bytesToBase64(raw)) });
   } catch (error) {
     return failed(error, "Upload failed.");
   }

@@ -347,7 +347,7 @@ export async function sendPlan(
   for (const photo of plan.photos) {
     progress(uploaded.length);
     signal?.throwIfAborted();
-    const sha = await uploadPhoto(await blobToBase64(await withoutLocation(await shrinkImage(photo.blob))), signal);
+    const sha = await uploadPhoto(await withoutLocation(await shrinkImage(photo.blob)), signal);
     uploaded.push({ path: photo.path, sha });
   }
   progress(uploaded.length);

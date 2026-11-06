@@ -142,14 +142,16 @@ export function fetchSitePhotos(own: string[]): Promise<SitePhotos> {
   return read;
 }
 
-export async function uploadPhoto(contentBase64: string, signal?: AbortSignal): Promise<string> {
+const PHOTO_RETRY_MS = 2000;
+
+export async function uploadPhoto(photo: Blob, signal?: AbortSignal): Promise<string> {
   let status = 0;
   const send = async () => {
     status = 0;
     const response = await fetch("/api/publish/photo", {
       method: "POST",
-      headers: headers({ "content-type": "text/plain" }),
-      body: contentBase64,
+      headers: headers({ "content-type": "application/octet-stream" }),
+      body: photo,
       signal,
     });
     status = response.status;
@@ -163,7 +165,10 @@ export async function uploadPhoto(contentBase64: string, signal?: AbortSignal): 
     if ((status >= 400 && status < 500) || signal?.aborted) {
       throw cause;
     }
-    return send();
+    return new Promise<void>((resolve) => setTimeout(resolve, PHOTO_RETRY_MS)).then(() => {
+      signal?.throwIfAborted();
+      return send();
+    });
   });
 }
 
