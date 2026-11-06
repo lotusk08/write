@@ -11,13 +11,13 @@ vi.mock("../lib/api.ts", async (original) => ({ ...(await original<typeof import
 vi.mock("../lib/video.ts", async () => {
   const { PasswordRejected } = await import("../lib/api.ts");
   return {
-    prepareVideo: async (file: File) => ({
+    prepareVideo: async () => ({
       blob: new Blob(["x"]),
       source: new Blob(["x"]),
       type: "video/mp4",
       width: 1,
       height: 1,
-      poster: stills.has(file.name.replace(".mp4", "")) ? new Blob(["p"], { type: "image/webp" }) : null,
+      poster: async () => null,
       note: "",
     }),
     uploadVideo: async (_video: unknown, name: string, password: string, signal: AbortSignal, _progress: unknown, authorized: () => void) => {
@@ -33,7 +33,7 @@ vi.mock("../lib/video.ts", async () => {
       signal.throwIfAborted();
       return {
         url: `https://m/video/${name}-0123456789ab.mp4`,
-        poster: noPoster.has(name) ? null : `https://m/video/${name}-0123456789ab.webp`,
+        poster: stills.has(name) && !noPoster.has(name) ? `https://m/video/${name}-0123456789ab.webp` : null,
         posterProblem: noPoster.has(name) ? "Its still did not upload: The connection dropped." : "",
         sent: !skipped.has(name),
       };

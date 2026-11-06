@@ -41,21 +41,9 @@ it("stops before converting when Stop is pressed while the file is still being o
   expect(log).not.toContain("execute");
 });
 
-it("keeps the size it read from a video this browser can neither encode nor decode", async () => {
+it("keeps the size it read from a video this browser cannot encode, without decoding it", async () => {
   encodes = false;
-  const src = Object.getOwnPropertyDescriptor(HTMLMediaElement.prototype, "src")!;
-  Object.defineProperty(HTMLMediaElement.prototype, "src", {
-    ...src,
-    set(this: HTMLMediaElement, value: string) {
-      src.set!.call(this, value);
-      setTimeout(() => this.dispatchEvent(new Event("error")));
-    },
-  });
-  try {
-    const { prepareVideo } = await import("./video.ts");
-    const video = await prepareVideo(new File(["x"], "a.mp4", { type: "video/mp4" }), new AbortController().signal, () => {});
-    expect([video.width, video.height, video.poster]).toEqual([3840, 2160, null]);
-  } finally {
-    Object.defineProperty(HTMLMediaElement.prototype, "src", src);
-  }
+  const { prepareVideo } = await import("./video.ts");
+  const video = await prepareVideo(new File(["x"], "a.mp4", { type: "video/mp4" }), new AbortController().signal, () => {});
+  expect([video.width, video.height]).toEqual([3840, 2160]);
 });

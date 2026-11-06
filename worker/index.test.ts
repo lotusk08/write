@@ -448,8 +448,12 @@ describe("video uploads", () => {
     expect(await done.json()).toEqual({ key, url, size: 7 });
     expect(new TextDecoder().decode(objects.get(key)!.bytes)).toBe("abcdefg");
     expect(objects.get(key)!.type).toBe("video/mp4");
-    const again = (await (await start({ name: "Ngày tuyển hôn!", fingerprint, size: 9, type: "video/mp4" })).json()) as { upload?: string };
-    expect(again.upload).toBeUndefined();
+    const again = (await (await start({ name: "Ngày tuyển hôn!", fingerprint, size: 9, type: "video/mp4" })).json()) as { upload?: string; poster?: string };
+    expect(again).not.toHaveProperty("upload");
+    expect(again).not.toHaveProperty("poster");
+    objects.set(key.replace(".mp4", ".jpg"), { bytes: new Uint8Array(1) });
+    const still = (await (await start({ name: "Ngày tuyển hôn!", fingerprint, size: 9, type: "video/mp4" })).json()) as { poster?: string };
+    expect(still.poster).toBe(`https://media.test/${key.replace(".mp4", ".jpg")}`);
   });
 
   it("keeps the size measured on upload with the video and lists it, and lists a video without one unsized", async () => {

@@ -18,7 +18,7 @@ export interface PreparedVideo {
   type: string;
   width: number;
   height: number;
-  poster: Blob | null;
+  poster: (signal: AbortSignal) => Promise<Blob | null>;
   note: string;
 }
 
@@ -189,10 +189,10 @@ export async function prepareVideo(file: File, signal: AbortSignal, onProgress: 
   if (blob.size > MAX_VIDEO_BYTES) {
     throw new Error(`${file.name} is ${megabytes(blob.size)}; a video can be ${megabytes(MAX_VIDEO_BYTES)} at most.`);
   }
-  const shot = await still(blob, signal);
+  const shot = made.width && made.height ? null : await still(blob, signal);
   signal.throwIfAborted();
   const shrink = smaller ? made.scale : 1;
-  const [width, height] = shot.width ? [shot.width, shot.height] : [Math.round(made.width * shrink), Math.round(made.height * shrink)];
+  const [width, height] = shot ? [shot.width, shot.height] : [Math.round(made.width * shrink), Math.round(made.height * shrink)];
   const note = smaller
     ? made.copied
       ? `Repacked to start playing at once, ${megabytes(blob.size)}.`
@@ -200,7 +200,7 @@ export async function prepareVideo(file: File, signal: AbortSignal, onProgress: 
     : playable
       ? `Sent as it came, ${megabytes(blob.size)}.`
       : `Sent as it came, ${megabytes(blob.size)}: its ${made.codec ?? "codec"} may not play in every browser.`;
-  return { blob, source: file, type: smaller ? "video/mp4" : file.type, width, height, poster: shot.poster, note };
+  return { blob, source: file, type: smaller ? "video/mp4" : file.type, width, height, poster: shot ? async () => shot.poster : async (stop) => (await still(blob, stop)).poster, note };
 }
 
 async function fingerprint(blob: Blob, made: boolean): Promise<string> {
@@ -290,11 +290,13 @@ export async function uploadVideo(
     }
   }
   onProgress(1);
-  let poster: string | null = null;
+  let poster = started.poster ?? null;
   let posterProblem = "";
-  if (video.poster) {
+  const picture = poster ? null : await video.poster(signal);
+  signal.throwIfAborted();
+  if (picture) {
     try {
-      poster = (await uploadPoster(started.key, video.poster, password, signal)).url;
+      poster = (await uploadPoster(started.key, picture, password, signal)).url;
     } catch (cause) {
       posterProblem = `Its still did not upload: ${cause instanceof Error ? cause.message : String(cause)}`;
     }

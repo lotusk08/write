@@ -1055,7 +1055,9 @@ async function handleMediaStart(request: Request, env: Env): Promise<Response> {
   try {
     const kept = await gate.bucket.head(key);
     if (kept?.customMetadata?.fingerprint === fingerprint) {
-      return json({ key, url } satisfies MediaStart);
+      const stills = await Promise.all(posterKeys(key).map((still) => gate.bucket.head(still)));
+      const poster = posterKeys(key).find((_, at) => stills[at]);
+      return json({ key, url, ...(poster ? { poster: `${gate.base}/${poster}` } : {}) } satisfies MediaStart);
     }
     const upload = await gate.bucket.createMultipartUpload(key, {
       httpMetadata: { contentType: type, cacheControl: VIDEO_CACHE },

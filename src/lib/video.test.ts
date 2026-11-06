@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { fetchBucketVideo } from "./api.ts";
 import { makePoster, type PreparedVideo, uploadVideo } from "./video.ts";
 
-const VIDEO: PreparedVideo = { blob: new Blob(["video bytes"], { type: "video/mp4" }), source: new Blob(["source bytes"]), type: "video/mp4", width: 1, height: 1, poster: new Blob(["p"], { type: "image/webp" }), note: "" };
+const VIDEO: PreparedVideo = { blob: new Blob(["video bytes"], { type: "video/mp4" }), source: new Blob(["source bytes"]), type: "video/mp4", width: 1, height: 1, poster: async () => new Blob(["p"], { type: "image/webp" }), note: "" };
 
 function stubNetwork(calls: string[], onPoster = () => {}, posterStatus = 200): void {
   vi.stubGlobal("fetch", async (path: string) => {
@@ -88,8 +88,8 @@ describe("stopping a video's upload", () => {
       return new Response(JSON.stringify({ key: "video/a-0123456789ab.mp4", url: "https://m/video/a-0123456789ab.mp4" }), { status: 200 });
     });
     const source = new Blob(["the file given"]);
-    const sentAsIs = await uploadVideo({ ...VIDEO, blob: source, source, poster: null }, "a", "pw", new AbortController().signal, () => undefined);
-    await uploadVideo({ ...VIDEO, source, poster: null }, "a", "pw", new AbortController().signal, () => undefined);
+    const sentAsIs = await uploadVideo({ ...VIDEO, blob: source, source, poster: async () => null }, "a", "pw", new AbortController().signal, () => undefined);
+    await uploadVideo({ ...VIDEO, source, poster: async () => null }, "a", "pw", new AbortController().signal, () => undefined);
     expect(bodies[0].fingerprint).not.toBe(bodies[1].fingerprint);
     expect(sentAsIs.sent).toBe(false);
   });
@@ -100,8 +100,21 @@ describe("stopping a video's upload", () => {
       bodies.push(JSON.parse(String(init?.body)));
       return new Response(JSON.stringify({ key: "video/a-0123456789ab.mp4", url: "https://m/video/a-0123456789ab.mp4" }), { status: 200 });
     });
-    await uploadVideo({ ...VIDEO, width: 1080, height: 1920, poster: null }, "a", "pw", new AbortController().signal, () => undefined);
+    await uploadVideo({ ...VIDEO, width: 1080, height: 1920, poster: async () => null }, "a", "pw", new AbortController().signal, () => undefined);
     expect(bodies[0]).toMatchObject({ width: 1080, height: 1920 });
+  });
+
+  it("takes no still of a video already stored with one, and hands that one back", async () => {
+    const calls: string[] = [];
+    stubNetwork(calls);
+    vi.stubGlobal("fetch", async () =>
+      new Response(JSON.stringify({ key: "video/a-0123456789ab.mp4", url: "https://m/video/a-0123456789ab.mp4", poster: "https://m/video/a-0123456789ab.jpg" }), { status: 200 }),
+    );
+    const shoot = vi.fn(async () => new Blob(["p"], { type: "image/webp" }));
+    const uploaded = await uploadVideo({ ...VIDEO, poster: shoot }, "a", "pw", new AbortController().signal, () => undefined);
+    expect(uploaded).toEqual({ url: "https://m/video/a-0123456789ab.mp4", poster: "https://m/video/a-0123456789ab.jpg", posterProblem: "", sent: false });
+    expect(shoot).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
   });
 
   it("goes through when nothing stops it", async () => {
@@ -130,7 +143,7 @@ describe("a video without its poster", () => {
   it("leaves a video without a still unflagged, as the blog takes one when it builds", async () => {
     const calls: string[] = [];
     stubNetwork(calls);
-    const uploaded = await uploadVideo({ ...VIDEO, poster: null }, "a", "pw", new AbortController().signal, () => undefined);
+    const uploaded = await uploadVideo({ ...VIDEO, poster: async () => null }, "a", "pw", new AbortController().signal, () => undefined);
     expect([uploaded.poster, uploaded.posterProblem]).toEqual([null, ""]);
     expect(calls.some((path) => path.includes("poster"))).toBe(false);
   });

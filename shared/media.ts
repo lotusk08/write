@@ -45,6 +45,7 @@ export interface MediaStart {
   key: string;
   url: string;
   upload?: string;
+  poster?: string;
 }
 
 export interface MediaPart {

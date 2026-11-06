@@ -143,7 +143,7 @@ async function run(job: VideoJob, source: VideoSource, place: (embed: Embed, sen
     job.fraction = 1;
     const noPoster = uploaded.posterProblem
       ? ` No poster: ${uploaded.posterProblem}${uploaded.sent ? " Use Make poster in Videos to add one." : ""}`
-      : video.poster || !uploaded.sent
+      : uploaded.poster || !uploaded.sent
         ? ""
         : " No still from this browser; the blog takes one at build.";
     if (place(embed, uploaded.sent)) {
