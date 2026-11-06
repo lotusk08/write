@@ -15,22 +15,35 @@ export class GitHubError extends Error {
   }
 }
 
+const PASSING = new Set([502, 503, 504]);
+const RETRY_DELAYS_MS = [400, 1200];
+
 async function gh<T>(
   token: string,
   path: string,
-  init?: { method?: string; body?: unknown },
+  init?: { method?: string; body?: unknown; once?: boolean },
 ): Promise<T> {
-  const res = await fetch(`${API}${path}`, {
-    method: init?.method ?? "GET",
-    headers: {
-      accept: "application/vnd.github+json",
-      authorization: `Bearer ${token}`,
-      "x-github-api-version": "2022-11-28",
-      "user-agent": "write-editor",
-      ...(init?.body ? { "content-type": "application/json" } : {}),
-    },
-    body: init?.body ? JSON.stringify(init.body) : undefined,
-  });
+  const send = () =>
+    fetch(`${API}${path}`, {
+      method: init?.method ?? "GET",
+      headers: {
+        accept: "application/vnd.github+json",
+        authorization: `Bearer ${token}`,
+        "x-github-api-version": "2022-11-28",
+        "user-agent": "write-editor",
+        ...(init?.body ? { "content-type": "application/json" } : {}),
+      },
+      body: init?.body ? JSON.stringify(init.body) : undefined,
+    });
+  let res = await send();
+  for (const delay of init?.once ? [] : RETRY_DELAYS_MS) {
+    if (!PASSING.has(res.status)) {
+      break;
+    }
+    await res.body?.cancel();
+    await new Promise((resolve) => setTimeout(resolve, delay));
+    res = await send();
+  }
 
   if (!res.ok) {
     const detail = await res.text().catch(() => "");
@@ -281,6 +294,7 @@ export async function commitFiles(options: CommitOptions): Promise<PublishResult
     await gh(token, `/repos/${repo}/git/refs/heads/${encodeSegments(branch)}`, {
       method: "PATCH",
       body: { sha: commit.sha },
+      once: true,
     });
   } catch (error) {
     if (error instanceof GitHubError && error.status === 422) {

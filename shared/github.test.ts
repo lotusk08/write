@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { bytesToBase64 } from "./base64.ts";
-import { commitFiles } from "./github.ts";
+import { commitFiles, createBlob, GitHubError } from "./github.ts";
 
 type Tree = { path: string; sha: string | null }[];
 
@@ -66,7 +66,44 @@ function fakeGitHub(repo: Record<string, string>, { push = 200 }: { push?: numbe
 const base = { token: "t", repo: "o/r", branch: "blog", message: "m" };
 const markdown = { path: "src/posts/2026-10-11-trip.md", contentBase64: bytesToBase64(new TextEncoder().encode("# hi")) };
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
+describe("createBlob", () => {
+  const answering = (statuses: number[]) => {
+    const calls: number[] = [];
+    vi.stubGlobal("fetch", async () => {
+      const status = statuses[calls.length] ?? 200;
+      calls.push(status);
+      return new Response(JSON.stringify(status === 200 ? { sha: "abc" } : { message: "Service Unavailable" }), { status });
+    });
+    return calls;
+  };
+
+  it("tries again when GitHub is briefly unavailable", async () => {
+    vi.useFakeTimers();
+    const calls = answering([503, 502]);
+    const sha = createBlob("t", "o/r", "aGk=");
+    await vi.runAllTimersAsync();
+    expect(await sha).toBe("abc");
+    expect(calls).toEqual([503, 502, 200]);
+  });
+
+  it("gives up after three tries with GitHub's status, and does not retry a refusal", async () => {
+    vi.useFakeTimers();
+    const calls = answering([503, 503, 503, 503]);
+    const failed = createBlob("t", "o/r", "aGk=").catch((error: unknown) => error);
+    await vi.runAllTimersAsync();
+    expect(await failed).toMatchObject({ status: 503 });
+    expect(await failed).toBeInstanceOf(GitHubError);
+    expect(calls).toHaveLength(3);
+    const refused = answering([422]);
+    await expect(createBlob("t", "o/r", "aGk=")).rejects.toMatchObject({ status: 422 });
+    expect(refused).toHaveLength(1);
+  });
+});
 
 describe("commitFiles", () => {
   it("renames, removes and records the redirect in one tree", async () => {

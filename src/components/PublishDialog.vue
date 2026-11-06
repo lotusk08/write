@@ -332,7 +332,13 @@ const committing = computed(() => Boolean(plan.value && sent.value >= plan.value
       </p>
 
       <div class="publish-card">
-        <img v-if="cover && thumbs.get(cover)" :src="thumbs.get(cover)" alt="" class="publish-cover" />
+        <img
+          v-if="cover && thumbs.get(cover)"
+          :src="thumbs.get(cover)"
+          :data-local-src="isLocalSrc(cover) ? cover : undefined"
+          alt=""
+          class="publish-cover"
+        />
         <div>
           <p class="publish-title">{{ draft.meta.title || "Untitled" }}</p>
           <p class="hint">{{ [date, pinned].filter(Boolean).join(" · ") }}</p>
@@ -349,7 +355,12 @@ const committing = computed(() => Boolean(plan.value && sent.value >= plan.value
         </span>
         <ul v-if="plan.photos.length" class="publish-photos">
           <li v-for="(photo, index) in plan.photos" :key="photo.path" :class="{ 'is-sent': state === 'sending' && index < sent }">
-            <img v-if="thumbs.get(photo.src)" :src="thumbs.get(photo.src)" alt="" />
+            <img
+              v-if="thumbs.get(photo.src)"
+              :src="thumbs.get(photo.src)"
+              :data-local-src="isLocalSrc(photo.src) ? photo.src : undefined"
+              alt=""
+            />
             <span class="mono" :title="fileName(photo.path)">{{ fileName(photo.path) }}</span>
             <span class="hint">
               {{ megabytes(photo.blob.size) }}<template v-if="shrinks(photo.blob, widths.get(photo.src))"> · reduced</template>
