@@ -23,6 +23,7 @@ async function gh<T>(
   path: string,
   init?: { method?: string; body?: unknown; once?: boolean },
 ): Promise<T> {
+  const body = init?.body ? JSON.stringify(init.body) : undefined;
   const send = () =>
     fetch(`${API}${path}`, {
       method: init?.method ?? "GET",
@@ -33,7 +34,7 @@ async function gh<T>(
         "user-agent": "write-editor",
         ...(init?.body ? { "content-type": "application/json" } : {}),
       },
-      body: init?.body ? JSON.stringify(init.body) : undefined,
+      body,
     });
   let res = await send();
   for (const delay of init?.once ? [] : RETRY_DELAYS_MS) {

@@ -158,7 +158,7 @@ async function readCapped(request: Request, max: number): Promise<Uint8Array | n
     body.set(value, size);
     size += value.byteLength;
   }
-  return body.subarray(0, size);
+  return size === body.byteLength ? body : body.slice(0, size);
 }
 
 const SECURITY_HEADERS: Record<string, string> = {
