@@ -361,7 +361,8 @@ function addVideos(sources: VideoSource[], spot: DropSpot | null = null, replaci
       if (!old) {
         return false;
       }
-      const fields = { ...Object.fromEntries(["poster", "width", "height"].map((name) => [name, embedField(embed.extra, name)])), types: null };
+      const [poster, width, height] = ["poster", "width", "height"].map((name) => embedField(embed.extra, name));
+      const fields = { poster, ...(width && height ? { width, height } : {}), types: null };
       return replaceEmbed(here, old, { ...embed, extra: mergeExtra(old.getAttribute("data-extra") ?? "", fields) });
     }, draft);
   }

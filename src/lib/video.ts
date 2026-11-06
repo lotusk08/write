@@ -35,7 +35,7 @@ async function convert(
   file: File,
   signal: AbortSignal,
   onProgress: (fraction: number) => void,
-): Promise<{ blob: Blob | null; codec: string | null; copied: boolean }> {
+): Promise<{ blob: Blob | null; codec: string | null; copied: boolean; width: number; height: number; scale: number }> {
   const { BlobSource, BufferTarget, canEncodeAudio, canEncodeVideo, Conversion, Input, MATROSKA, MP4, Mp4OutputFormat, Output, QTFF, QUALITY_HIGH, WEBM } =
     await import("mediabunny");
   const input = new Input({ source: new BlobSource(file), formats: [MP4, QTFF, WEBM, MATROSKA] });
@@ -51,13 +51,13 @@ async function convert(
       track.getAverageBitrate().catch(() => null),
     ]);
     if (typeof VideoEncoder === "undefined") {
-      return { blob: null, codec, copied: false };
+      return { blob: null, codec, copied: false, width, height, scale: 1 };
     }
     const scale = Math.min(1, MAX_EDGE / Math.max(width, height));
     const fits = codec === "avc" && scale === 1 && bitrate !== null && bitrate <= COPY_BITRATE;
     const size = scale < 1 ? (width >= height ? { width: Math.round(width * scale) } : { height: Math.round(height * scale) }) : {};
     if (!fits && !(await canEncodeVideo("avc", { width: Math.round(width * scale), height: Math.round(height * scale) }))) {
-      return { blob: null, codec, copied: false };
+      return { blob: null, codec, copied: false, width, height, scale };
     }
     const aac = await canEncodeAudio("aac");
     const output = new Output({ format: new Mp4OutputFormat({ fastStart: "in-memory" }), target: new BufferTarget() });
@@ -68,7 +68,7 @@ async function convert(
       audio: async (audio) => ((await audio.getCodec()) === "aac" || !aac ? {} : { codec: "aac", quality: QUALITY_HIGH }),
     });
     if (!conversion.isValid || !conversion.utilizedTracks.some((used) => used.isVideoTrack())) {
-      return { blob: null, codec, copied: false };
+      return { blob: null, codec, copied: false, width, height, scale };
     }
     conversion.onProgress = onProgress;
     signal.throwIfAborted();
@@ -81,7 +81,7 @@ async function convert(
     }
     signal.throwIfAborted();
     const buffer = output.target.buffer;
-    return { blob: buffer ? new Blob([buffer], { type: "video/mp4" }) : null, codec, copied: fits };
+    return { blob: buffer ? new Blob([buffer], { type: "video/mp4" }) : null, codec, copied: fits, width, height, scale };
   } finally {
     input.dispose();
   }
@@ -166,7 +166,7 @@ async function still(blob: Blob, signal?: AbortSignal): Promise<{ width: number;
 }
 
 export async function prepareVideo(file: File, signal: AbortSignal, onProgress: (fraction: number) => void): Promise<PreparedVideo> {
-  let made: Awaited<ReturnType<typeof convert>> = { blob: null, codec: null, copied: false };
+  let made: Awaited<ReturnType<typeof convert>> = { blob: null, codec: null, copied: false, width: 0, height: 0, scale: 1 };
   try {
     made = await convert(file, signal, onProgress);
   } catch (cause) {
@@ -189,8 +189,10 @@ export async function prepareVideo(file: File, signal: AbortSignal, onProgress: 
   if (blob.size > MAX_VIDEO_BYTES) {
     throw new Error(`${file.name} is ${megabytes(blob.size)}; a video can be ${megabytes(MAX_VIDEO_BYTES)} at most.`);
   }
-  const { width, height, poster } = await still(blob, signal);
+  const shot = await still(blob, signal);
   signal.throwIfAborted();
+  const shrink = smaller ? made.scale : 1;
+  const [width, height] = shot.width ? [shot.width, shot.height] : [Math.round(made.width * shrink), Math.round(made.height * shrink)];
   const note = smaller
     ? made.copied
       ? `Repacked to start playing at once, ${megabytes(blob.size)}.`
@@ -198,7 +200,7 @@ export async function prepareVideo(file: File, signal: AbortSignal, onProgress: 
     : playable
       ? `Sent as it came, ${megabytes(blob.size)}.`
       : `Sent as it came, ${megabytes(blob.size)}: its ${made.codec ?? "codec"} may not play in every browser.`;
-  return { blob, source: file, type: smaller ? "video/mp4" : file.type, width, height, poster, note };
+  return { blob, source: file, type: smaller ? "video/mp4" : file.type, width, height, poster: shot.poster, note };
 }
 
 async function fingerprint(blob: Blob, made: boolean): Promise<string> {
