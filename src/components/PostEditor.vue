@@ -368,7 +368,7 @@ function photoTool(element: HTMLElement, button: Element): void {
       setImageAlt(element, figure, value);
     }
   } else {
-    const value = window.prompt("Caption, shown under the photo", img.getAttribute("title") ?? "");
+    const value = window.prompt("Caption, shown under the photo. For a link, write [words](https://…)",img.getAttribute("title") ?? "");
     if (value !== null) {
       setImageCaption(element, figure, value);
     }

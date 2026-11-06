@@ -74,6 +74,15 @@ describe("paste", () => {
     expect(markdown(html)).toBe("# Title\n\nText with big and **bold** bad [rel](/rel)\n\n![](https://x.com/a.jpg \"Cap\")");
   });
 
+  it("keeps a photo caption's safe links as Markdown in the caption", () => {
+    const caption = (inner: string) =>
+      markdown(pastedHtml(`<figure><img src="https://x.com/a.jpg" alt=""><figcaption>${inner}</figcaption></figure>`, "") ?? "");
+    expect(caption('By <a href="https://bob.com/a b">Bob [B]</a>, <a href="javascript:alert(1)">bad</a>, <a href="/p">here</a>')).toBe('![](https://x.com/a.jpg "By [Bob \\\\[B\\\\]](<https://bob.com/a%20b>), bad, [here](/p)")');
+    expect(caption('Wow!<a href="https://a.com">here</a> C:\\<a href="https://a.com/x\\)y">a`b *c*</a> [x](y) <em>_u_</em>')).toBe(
+      '![](https://x.com/a.jpg "Wow\\\\![here](https://a.com) C:\\\\\\\\[a\\\\`b \\\\*c\\\\*](<https://a.com/x%5C)y>) \\\\[x\\\\](y) \\\\_u\\\\_")',
+    );
+  });
+
   it("reads the editor's hidden markup only in a copy made here, which any page could otherwise write", () => {
     const hidden =
       '<p data-block-ial="{onmouseover=&quot;alert(1)&quot;}"><b>Hello</b></p>' +

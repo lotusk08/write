@@ -3,6 +3,7 @@ import { embedFromTag, embedFromUrl, isPlayerLink } from "./blog.ts";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
 import { copiedHere } from "./clipboard.ts";
 import { insertEmbed, notify } from "./commands.ts";
+import { escapeChars } from "../lib/inline.ts";
 import { loadReader, loadedReader } from "../lib/reader.ts";
 
 const BLOCKS = "address, article, aside, blockquote, details, div, dl, figure, footer, h1, h2, h3, h4, h5, h6, header, hr, li, ol, p, pre, section, table, ul";
@@ -89,6 +90,24 @@ function nestLists(body: HTMLElement): void {
   }
 }
 
+const CAPTION_TEXT = "[]`*_<~";
+
+function captionMarkdown(node: Node): string {
+  if (node.nodeType === Node.TEXT_NODE) {
+    return escapeChars(node.textContent ?? "", CAPTION_TEXT);
+  }
+  const inner = [...node.childNodes].reduce((out, child) => {
+    const piece = captionMarkdown(child);
+    return (piece.startsWith("[") && out.endsWith("!") ? `${out.slice(0, -1)}\\!` : out) + piece;
+  }, "");
+  const href = node instanceof Element && node.matches("a[href]") ? (node.getAttribute("href") ?? "") : "";
+  if (!href || !SAFE_HREF.test(href) || !inner.trim()) {
+    return inner;
+  }
+  const target = /[\s()<>\\]/.test(href) ? `<${href.replace(/[\s<>\\]/g, encodeURIComponent)}>` : href;
+  return `[${inner.trim()}](${target})`;
+}
+
 function clipboardBody(html: string, own: boolean): HTMLElement {
   const body = new DOMParser().parseFromString(html, "text/html").body;
   if (!own) {
@@ -136,7 +155,8 @@ function clipboardBody(html: string, own: boolean): HTMLElement {
   }
   for (const figure of [...body.querySelectorAll("figure")]) {
     const img = figure.querySelector("img");
-    const caption = figure.querySelector("figcaption")?.textContent?.trim();
+    const found = figure.querySelector("figcaption");
+    const caption = found ? captionMarkdown(found).trim() : "";
     if (img && caption) {
       img.setAttribute("title", caption);
     }
