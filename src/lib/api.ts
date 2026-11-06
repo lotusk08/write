@@ -7,7 +7,7 @@ import type {
   Topic,
   Topics,
 } from "../../shared/types.ts";
-import { MAX_VIDEO_BYTES, type MediaPart, type MediaStart, type MediaVideo } from "../../shared/media.ts";
+import { MAX_VIDEO_BYTES, type MediaPart, type MediaStart, type MediaVideo, PART_BYTES } from "../../shared/media.ts";
 import { sessionToken } from "./password.ts";
 
 export class PasswordRejected extends Error {
@@ -225,7 +225,9 @@ async function streamVideo(
   onAuthorized();
   const expected = Number(response.headers.get("content-length") ?? "0");
   const reader = response.body.getReader();
-  const chunks: Uint8Array[] = [];
+  const parts: Blob[] = [];
+  let chunks: Uint8Array[] = [];
+  let held = 0;
   let loaded = 0;
   try {
     for (;;) {
@@ -234,7 +236,13 @@ async function streamVideo(
         break;
       }
       chunks.push(value);
+      held += value.byteLength;
       loaded += value.byteLength;
+      if (held >= PART_BYTES) {
+        parts.push(new Blob(chunks as BlobPart[]));
+        chunks = [];
+        held = 0;
+      }
       if (loaded > MAX_VIDEO_BYTES) {
         await reader.cancel();
         throw new Error(`This video is too large (max ${MAX_VIDEO_BYTES / 1024 ** 3} GB).`);
@@ -247,7 +255,7 @@ async function streamVideo(
     throw unreachable(cause);
   }
   onProgress(1);
-  return new File(chunks as BlobPart[], name, { type: response.headers.get("content-type") ?? "" });
+  return new File([...parts, ...(chunks as BlobPart[])], name, { type: response.headers.get("content-type") ?? "" });
 }
 
 export function fetchDropboxVideo(
