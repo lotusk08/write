@@ -25,24 +25,11 @@ export function convertedSrc(src: string): string {
 }
 
 export function previewSrc(src: string): string {
-  const rest = /^\/assets\/img\/(?!resized\/)([^?#]+\.(?:jpe?g|png|webp|tiff?))$/i.exec(convertedSrc(src))?.[1];
-  if (!site || shown.has(src) || !rest) {
-    return displaySrc(src);
-  }
-  return `${site}/assets/img/resized/960/${/\.webp$/i.test(rest) ? rest : `${rest}.webp`}`;
-}
-
-export function fullSrc(url: string): string {
-  return url.replace(/\/assets\/img\/resized\/\d+\/([^?#]+?)(\.(?:jpe?g|png|tiff?))?\.webp$/i, (_, rest: string, ext?: string) =>
-    `/assets/img/${rest}${ext ?? ".webp"}`,
-  );
+  return shown.get(src) ?? siteSrc(convertedSrc(src));
 }
 
 export function originalSrc(src: string): string {
   const path = site && src.startsWith(`${site}/`) ? src.slice(site.length) : src;
-  if (!path.startsWith("/assets/img/resized/")) {
-    return src;
-  }
-  const full = fullSrc(path);
-  return full === path ? src : full;
+  const copy = /^\/assets\/img\/resized\/\d+\/([^?#]+?)(\.(?:jpe?g|png|tiff?))?\.webp$/i.exec(path);
+  return copy ? `/assets/img/${copy[1]}${copy[2] ?? ".webp"}` : src;
 }

@@ -209,7 +209,7 @@ describe("worker", () => {
       const url = new URL(input);
       if (url.pathname === "/graphql" && String(init?.body).includes("oid")) {
         return Response.json({
-          data: { repository: { files: { entries: ["a.webp", "b c.webp", "d.webp"].map((name) => ({ name, oid: name, type: "blob" })) } } },
+          data: { repository: { files: { entries: ["a.webp", "b c.webp"].map((name) => ({ name, oid: name, type: "blob" })) } } },
         });
       }
       if (url.pathname === "/graphql") {
@@ -218,7 +218,7 @@ describe("worker", () => {
             repository: {
               d0: { entries: [{ name: "2026-10-11-trip.md", object: { text: "![](/assets/img/post/a.webp) ![](/assets/img/post/b%20c.jpg)" } }] },
               d1: { entries: [{ name: "secret.md", object: { text: "![](/assets/img/post/b%20c.webp)" } }] },
-              d2: { entries: [{ name: "about.md", object: { text: '```gallery\n![](/assets/img/resized/960/post/d.webp "d")\n```' } }] },
+              d2: null,
             },
           },
         });
@@ -231,24 +231,20 @@ describe("worker", () => {
       files: [
         { name: "a.webp", sha: "a.webp", shared: false },
         { name: "b c.webp", sha: "b c.webp", shared: true },
-        { name: "d.webp", sha: "d.webp", shared: true },
       ],
       redirected: [],
     });
     expect(body).not.toContain("secret");
   });
 
-  it("counts a photo used through one of the blog's resized copies", () => {
+  it("counts a photo by its original link only", () => {
     const text = [
       "![](/assets/img/post/a.webp)",
-      '![x](/assets/img/resized/960/post/quan-s%E1%BB%B1.webp "t")',
-      "![](https://stevehoang.com/assets/img/resized/480/post/c.jpg.webp)",
-      "![](/assets/img/resized/960/post/v1.2.png.webp)",
-      "![](/assets/img/resized/960/avatar.png.webp)",
+      '![x](/assets/img/post/quan-s%E1%BB%B1.webp "t")',
+      "![](https://stevehoang.com/assets/img/post/c.jpg)",
       "![](/assets/img/postcard/e.webp)",
     ].join("\n");
-    expect(photoUses(text, "/assets/img/post/")).toEqual(["a", "quan-sự", "c", "v1.2"]);
-    expect(photoUses("![](/media/post/a.webp) ![](/media/resized/960/post/b.webp)", "/media/post/")).toEqual(["a"]);
+    expect(photoUses(text, "/assets/img/post/")).toEqual(["a", "quan-sự", "c"]);
   });
 });
 

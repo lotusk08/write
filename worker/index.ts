@@ -396,21 +396,9 @@ function servedDir(env: Env): string {
   return `/${dirs(env).imagesDir.replace(/^public\//, "")}/`;
 }
 
-const IMAGES_ROOT = "assets/img/";
-
-function escaped(text: string): string {
-  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 export function photoUses(text: string, served: string): string[] {
-  const dir = served.replace(/^\/+/, "");
-  const pattern = dir.startsWith(IMAGES_ROOT)
-    ? `${escaped(IMAGES_ROOT)}(resized/\\d+/)?${escaped(dir.slice(IMAGES_ROOT.length))}`
-    : `()${escaped(dir)}`;
-  return [...text.matchAll(new RegExp(`${pattern}([^\\s)"'<>?#]+)`, "g"))].map(([, resized, file]) => {
-    const name = decoded(file);
-    return stem(resized ? name.replace(/(\.(?:jpe?g|png|tiff?|bmp))\.webp$/i, "$1") : name);
-  });
+  const dir = served.replace(/^\/+/, "").replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return [...text.matchAll(new RegExp(`${dir}([^\\s)"'<>?#]+)`, "g"))].map(([, file]) => stem(decoded(file)));
 }
 
 function validList<T>(value: unknown, valid: (item: unknown) => item is T): value is T[] {
