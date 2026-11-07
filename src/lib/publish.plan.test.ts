@@ -84,6 +84,23 @@ describe("buildPublishPlan", () => {
     expect(plan.expect).toEqual([{ path: "src/posts/2026-10-11-trip.md", sha: "c".repeat(40) }]);
   });
 
+  it("writes a site photo linked through a resized copy as its original, renamed like any other", async () => {
+    sitePhotos.mockResolvedValueOnce({ files: [{ name: "quan-su.webp", sha: "a".repeat(40), shared: true }], redirected: [] });
+    const plan = await buildPublishPlan(
+      draft({
+        publishedPath: "src/posts/2026-10-11-trip.md",
+        publishedSha: "c".repeat(40),
+        meta: { ...draft({}).meta, cover: { path: "/assets/img/resized/1280/post/quan-su.webp", alt: "Lính kéo cờ" } },
+      }, [["/assets/img/resized/960/post/quan-su.webp", "Lính kéo cờ"]]),
+      settings,
+    );
+    expect(plan.renames.map((rename) => rename.path)).toEqual(["public/assets/img/post/linh-keo-co.webp"]);
+    expect(plan.remove).toEqual([]);
+    expect(plan.markdown).toContain("![Lính kéo cờ](/assets/img/post/linh-keo-co.webp)");
+    expect(plan.markdown).toContain("path: /assets/img/post/linh-keo-co.webp");
+    expect(plan.markdown).not.toContain("/resized/");
+  });
+
   it("counts a post moved to a new address as still using its photos", async () => {
     sitePhotos.mockResolvedValueOnce({ files: [], redirected: [] });
     await buildPublishPlan(draft({ publishedPath: "src/posts/2026-10-10-trip.md" }, [["/assets/img/post/a.webp", "A"]]), settings);

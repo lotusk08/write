@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { markdownToDoc } from "./import.ts";
 import { docToMarkdown } from "./markdown.ts";
-import { fullSrc, previewSrc, setSiteUrl } from "./site.ts";
+import { fullSrc, originalSrc, previewSrc, setSiteUrl } from "./site.ts";
 
 describe("photo text", () => {
   it.each([
@@ -68,6 +68,30 @@ describe("photo previews", () => {
     expect(fullSrc("https://stevehoang.com/assets/img/post/a.webp")).toBe("https://stevehoang.com/assets/img/post/a.webp");
     expect(previewSrc("/assets/img/resized/960/post/a.webp")).toBe("https://stevehoang.com/assets/img/resized/960/post/a.webp");
     expect(previewSrc("/assets/img/post/a.webp?v=2")).toBe("https://stevehoang.com/assets/img/post/a.webp?v=2");
+    setSiteUrl("");
+  });
+});
+
+describe("a site photo's address in the post", () => {
+  it("is always the original, never one of the blog's resized copies", () => {
+    setSiteUrl("https://stevehoang.com");
+    expect(originalSrc("/assets/img/resized/960/post/quan-su.webp")).toBe("/assets/img/post/quan-su.webp");
+    expect(originalSrc("https://stevehoang.com/assets/img/resized/480/post/b.jpg.webp")).toBe("/assets/img/post/b.jpg");
+    expect(originalSrc("/assets/img/resized/960/avatar.png.webp")).toBe("/assets/img/avatar.png");
+    for (const kept of [
+      "/assets/img/post/a.webp",
+      "https://stevehoang.com/assets/img/post/a.webp",
+      "https://example.com/assets/img/resized/960/post/a.webp",
+      "/assets/img/resized/960/post/a.webp?v=2",
+    ]) {
+      expect(originalSrc(kept)).toBe(kept);
+    }
+    const doc = markdownToDoc(
+      '```gallery\n![Quân sự](https://stevehoang.com/assets/img/resized/960/post/quan-su.webp "ở cổng")\n![b](/assets/img/post/b.webp)\n```\n\n![c](/assets/img/resized/1280/post/c.webp)',
+    );
+    expect(docToMarkdown(doc)).toBe(
+      '```gallery\n![Quân sự](/assets/img/post/quan-su.webp "ở cổng")\n![b](/assets/img/post/b.webp)\n```\n\n![c](/assets/img/post/c.webp)',
+    );
     setSiteUrl("");
   });
 });

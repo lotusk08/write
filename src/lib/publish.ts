@@ -6,6 +6,7 @@ import type { Draft, StoredImage } from "./db.ts";
 import { draftStore, imageStore, isLocalSrc, localId } from "./db.ts";
 import { blobToBase64, extensionFor, keepsLocation, MAX_UPLOAD_BYTES, tooBig, withoutLocation } from "./images.ts";
 import { buildPostFile } from "./markdown.ts";
+import { originalSrc } from "./site.ts";
 import { videoKeysIn } from "../../shared/media.ts";
 import { decoded, servedName, stem, trimSlashes } from "../../shared/paths.ts";
 import type { Settings } from "./settings.ts";
@@ -107,7 +108,7 @@ function collectImages(doc: JSONContent): Map<string, string> {
   const images = new Map<string, string>();
   const walk = (node: JSONContent) => {
     if (node.type === "image" && node.attrs?.src) {
-      const src = String(node.attrs.src);
+      const src = originalSrc(String(node.attrs.src));
       if (!images.has(src)) {
         images.set(src, String(node.attrs.alt ?? ""));
       }
@@ -169,7 +170,7 @@ export async function planImages(
   const cover = draft.meta.cover;
   const photos = new Map<string, string>();
   if (cover?.path) {
-    photos.set(cover.path, cover.alt);
+    photos.set(originalSrc(cover.path), cover.alt);
   }
   for (const [src, alt] of collectImages(draft.doc)) {
     if (!photos.has(src)) {
@@ -213,7 +214,8 @@ function metaWithCover(draft: Draft, imageUrls: Map<string, string>) {
   if (!cover?.path) {
     return draft.meta;
   }
-  const resolved = imageUrls.get(cover.path) ?? (isLocalSrc(cover.path) ? undefined : cover.path);
+  const path = originalSrc(cover.path);
+  const resolved = imageUrls.get(path) ?? (isLocalSrc(path) ? undefined : path);
   return { ...draft.meta, cover: resolved ? { ...cover, path: resolved } : null };
 }
 

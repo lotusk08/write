@@ -4,6 +4,7 @@ import type { PostMeta } from "../../shared/types.ts";
 import { ATTRIBUTES, NOTE_CLASSES, OLD_ATTRIBUTES, embedTag, isNoteType, pandocAttributes } from "../editor/blog.ts";
 import { ENTITY, autolinkFor, bareLinks, escapeChars } from "./inline.ts";
 import { isPlayerLine } from "./kramdown.ts";
+import { originalSrc } from "./site.ts";
 import { topicSlug } from "./topics.ts";
 
 export interface SerializeOptions {
@@ -300,7 +301,7 @@ function quotedTitle(title: unknown): string {
 }
 
 function image(node: JSONContent, options: SerializeOptions): string {
-  const rawSrc = String(node.attrs?.src ?? "");
+  const rawSrc = originalSrc(String(node.attrs?.src ?? ""));
   const src = options.resolveImage ? options.resolveImage(rawSrc) : rawSrc;
   const alt = escapeChars(String(node.attrs?.alt ?? "").replace(/\s*\n\s*/g, " "), "[]`*_<~");
   return `![${alt}](${oneLine(src)}${quotedTitle(node.attrs?.title)})${ialOf(node.attrs?.ial)}`;
@@ -649,7 +650,7 @@ export function buildFrontMatter(meta: PostMeta): string {
   lines.push(...yamlList("tags", uniqueNames(meta.tags)));
   lines.push(`pin: ${writtenPin(meta.pin)}`, `toc: ${Boolean(meta.toc)}`);
   if (meta.cover?.path) {
-    lines.push("image:", `  path: ${yamlString(meta.cover.path)}`);
+    lines.push("image:", `  path: ${yamlString(originalSrc(meta.cover.path))}`);
     if (meta.cover.alt.trim()) {
       lines.push(`  alt: ${yamlString(meta.cover.alt)}`);
     }

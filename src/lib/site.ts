@@ -37,3 +37,12 @@ export function fullSrc(url: string): string {
     `/assets/img/${rest}${ext ?? ".webp"}`,
   );
 }
+
+export function originalSrc(src: string): string {
+  const path = site && src.startsWith(`${site}/`) ? src.slice(site.length) : src;
+  if (!path.startsWith("/assets/img/resized/")) {
+    return src;
+  }
+  const full = fullSrc(path);
+  return full === path ? src : full;
+}
