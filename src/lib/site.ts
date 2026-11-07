@@ -25,11 +25,11 @@ export function convertedSrc(src: string): string {
 }
 
 export function previewSrc(src: string): string {
-  return shown.get(src) ?? siteSrc(convertedSrc(src));
+  return shown.get(src) ?? siteSrc(src.startsWith("/") && !src.startsWith("//") ? convertedSrc(src) : src);
 }
 
 export function originalSrc(src: string): string {
   const path = site && src.startsWith(`${site}/`) ? src.slice(site.length) : src;
-  const copy = /^\/assets\/img\/resized\/\d+\/([^?#]+?)(\.(?:jpe?g|png|tiff?))?\.webp$/i.exec(path);
-  return copy ? `/assets/img/${copy[1]}${copy[2] ?? ".webp"}` : src;
+  const copy = /^\/assets\/img\/resized\/\d+\/([^?#]+?)(\.(?:jpe?g|png|gif|avif|tiff?))?\.webp([?#].*)?$/i.exec(path);
+  return copy ? `/assets/img/${copy[1]}${copy[2] ?? ".webp"}${copy[3] ?? ""}` : src;
 }

@@ -132,6 +132,8 @@ describe("a site photo's preview", () => {
     expect(html).toContain('src="https://stevehoang.com/assets/img/post/a.webp" data-src="/assets/img/post/a.jpg"');
     expect(html).toContain('src="https://stevehoang.com/assets/img/post/b.webp" data-src="/assets/img/post/b.webp"');
     expect(html).not.toContain("/resized/");
+    const pasted = htmlToDoc('<p><img src="https://stevehoang.com/assets/img/resized/960/post/a.webp" alt="a"></p>');
+    expect(JSON.stringify(pasted)).toContain('"src":"/assets/img/post/a.webp"');
     setSiteUrl("");
   });
 });

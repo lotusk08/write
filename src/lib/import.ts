@@ -3,6 +3,7 @@ import { frontMatter } from "../../shared/front.ts";
 import { readPin } from "../../shared/pin.ts";
 import type { PostMeta } from "../../shared/types.ts";
 import { markdownToDoc } from "./read.ts";
+import { originalSrc } from "./site.ts";
 import { languageOf } from "./topics.ts";
 
 export { markdownToDoc };
@@ -376,7 +377,7 @@ function parseFrontMatter(yaml: string): Partial<PostMeta> {
       case "image":
         if (value.trim() && !value.trim().startsWith("#")) {
           const path = string(scalar(value, body, 0));
-          cover = path ? { path, alt: "" } : null;
+          cover = path ? { path: originalSrc(path), alt: "" } : null;
         } else {
           const first = body.find((line) => !blank(line));
           const indent = first === undefined ? 0 : indentOf(first);
@@ -386,7 +387,7 @@ function parseFrontMatter(yaml: string): Partial<PostMeta> {
           }
           if (nested.path) {
             cover = {
-              path: nested.path,
+              path: originalSrc(nested.path),
               alt: nested.alt ?? "",
               ...(nested.lqip ? { lqip: nested.lqip } : {}),
             };

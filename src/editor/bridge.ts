@@ -1,5 +1,5 @@
 import { isLocalSrc } from "../lib/db.ts";
-import { previewSrc } from "../lib/site.ts";
+import { originalSrc, previewSrc } from "../lib/site.ts";
 import { isNoteType, noteOfIal } from "./blog.ts";
 import type { DocMark, JSONContent } from "./doc.ts";
 
@@ -340,8 +340,9 @@ function imageFrom(element: Element): JSONContent | null {
     return null;
   }
   const figure = tagOf(element) === "figure" ? element : null;
-  const src =
-    img.getAttribute("data-local-src") ?? img.getAttribute("data-src") ?? img.getAttribute("src") ?? "";
+  const src = originalSrc(
+    img.getAttribute("data-local-src") ?? img.getAttribute("data-src") ?? img.getAttribute("src") ?? "",
+  );
   if (!src || src === BLANK_SRC) {
     return null;
   }

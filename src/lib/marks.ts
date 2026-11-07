@@ -2,6 +2,7 @@ import type { Token } from "markdown-it";
 import type { JSONContent } from "../editor/doc.ts";
 import { ATTRIBUTES } from "../editor/blog.ts";
 import { meta } from "./kramdown.ts";
+import { originalSrc } from "./site.ts";
 
 export const unbracketed = (href: string) => href.replace(/^<([^<>\n]*)>$/, "$1");
 
@@ -297,7 +298,7 @@ export function inlineContent(source: string, children: Token[], images: boolean
         out.push({
           type: "image",
           attrs: {
-            src: token.attrGet("src"),
+            src: originalSrc(String(token.attrGet("src") ?? "")),
             alt: token.content.replace(ESCAPE, "$1"),
             title: token.attrGet("title") || null,
           },

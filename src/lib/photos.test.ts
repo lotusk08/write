@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { markdownToDoc } from "./import.ts";
+import { markdownToDoc, parsePost } from "./import.ts";
 import { docToMarkdown } from "./markdown.ts";
 import { originalSrc, previewSrc, setSiteUrl } from "./site.ts";
 
@@ -65,6 +65,7 @@ describe("photo previews", () => {
     expect(previewSrc("/assets/img/post/c.gif")).toBe("https://stevehoang.com/assets/img/post/c.gif");
     expect(previewSrc("/assets/img/post/a.webp?v=2")).toBe("https://stevehoang.com/assets/img/post/a.webp?v=2");
     expect(previewSrc("https://example.com/a.webp")).toBe("https://example.com/a.webp");
+    expect(previewSrc("https://example.com/assets/img/post/a.jpg")).toBe("https://example.com/assets/img/post/a.jpg");
     setSiteUrl("");
   });
 });
@@ -75,11 +76,12 @@ describe("a site photo's address in the post", () => {
     expect(originalSrc("/assets/img/resized/960/post/quan-su.webp")).toBe("/assets/img/post/quan-su.webp");
     expect(originalSrc("https://stevehoang.com/assets/img/resized/480/post/b.jpg.webp")).toBe("/assets/img/post/b.jpg");
     expect(originalSrc("/assets/img/resized/960/avatar.png.webp")).toBe("/assets/img/avatar.png");
+    expect(originalSrc("/assets/img/resized/960/banner.avif.webp")).toBe("/assets/img/banner.avif");
+    expect(originalSrc("/assets/img/resized/960/post/a.webp?v=2")).toBe("/assets/img/post/a.webp?v=2");
     for (const kept of [
       "/assets/img/post/a.webp",
       "https://stevehoang.com/assets/img/post/a.webp",
       "https://example.com/assets/img/resized/960/post/a.webp",
-      "/assets/img/resized/960/post/a.webp?v=2",
     ]) {
       expect(originalSrc(kept)).toBe(kept);
     }
@@ -89,6 +91,12 @@ describe("a site photo's address in the post", () => {
     expect(docToMarkdown(doc)).toBe(
       '```gallery\n![Quân sự](/assets/img/post/quan-su.webp "ở cổng")\n![b](/assets/img/post/b.webp)\n```\n\n![c](/assets/img/post/c.webp)',
     );
+    expect(JSON.stringify(doc)).not.toContain("/resized/");
+    const post = parsePost(
+      "---\ntitle: T\nimage:\n  path: /assets/img/resized/1280/post/cover.webp\n  alt: Cover\n---\n![a](/assets/img/resized/960/post/a.webp)\n",
+    );
+    expect(post.meta.cover?.path).toBe("/assets/img/post/cover.webp");
+    expect(JSON.stringify(post.doc)).toContain('"src":"/assets/img/post/a.webp"');
     setSiteUrl("");
   });
 });
