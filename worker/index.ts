@@ -396,6 +396,23 @@ function servedDir(env: Env): string {
   return `/${dirs(env).imagesDir.replace(/^public\//, "")}/`;
 }
 
+const IMAGES_ROOT = "assets/img/";
+
+function escaped(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function photoUses(text: string, served: string): string[] {
+  const dir = served.replace(/^\/+/, "");
+  const pattern = dir.startsWith(IMAGES_ROOT)
+    ? `${escaped(IMAGES_ROOT)}(resized/\\d+/)?${escaped(dir.slice(IMAGES_ROOT.length))}`
+    : `()${escaped(dir)}`;
+  return [...text.matchAll(new RegExp(`${pattern}([^\\s)"'<>?#]+)`, "g"))].map(([, resized, file]) => {
+    const name = decoded(file);
+    return stem(resized ? name.replace(/(\.(?:jpe?g|png|tiff?|bmp))\.webp$/i, "$1") : name);
+  });
+}
+
 function validList<T>(value: unknown, valid: (item: unknown) => item is T): value is T[] {
   return Array.isArray(value) && value.length <= 50 && value.every(valid);
 }
@@ -531,7 +548,7 @@ async function handleImages(request: Request, env: Env): Promise<Response> {
   const { imagesDir } = dirs(env);
   const branch = env.BLOG_BRANCH || "main";
   const token = githubToken(env);
-  const served = servedDir(env).slice(1).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const served = servedDir(env);
   try {
     const [files, texts, redirects] = await Promise.all([
       listFiles(token, env.BLOG_REPO!, branch, imagesDir),
@@ -541,8 +558,8 @@ async function handleImages(request: Request, env: Env): Promise<Response> {
     const shared = new Set<string>();
     for (const { path, text } of texts) {
       if (!own.includes(path)) {
-        for (const [, file] of text.matchAll(new RegExp(`${served}([^\\s)"'<>?#]+)`, "g"))) {
-          shared.add(stem(decoded(file)));
+        for (const name of photoUses(text, served)) {
+          shared.add(name);
         }
       }
     }
