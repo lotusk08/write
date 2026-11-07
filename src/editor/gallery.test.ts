@@ -3,7 +3,7 @@ import { sanitizeHtml } from "@erag/text-editor-vue";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { markdownToDoc } from "../lib/import.ts";
 import { docToMarkdown } from "../lib/markdown.ts";
-import { setSiteUrl } from "../lib/site.ts";
+import { fullSrc, setSiteUrl } from "../lib/site.ts";
 import { docToHtml, htmlToDoc } from "./bridge.ts";
 import { clipboardOf, copiedBlocks } from "./clipboard.ts";
 import {
@@ -126,12 +126,13 @@ describe("a gallery of a hundred photos", () => {
 });
 
 describe("a site photo's preview", () => {
-  it("shows the original the post links, never one of the blog's resized copies", () => {
+  it("shows the 960px copy, keeps the original as the link, and falls back to it when there is no copy", () => {
     setSiteUrl("https://stevehoang.com");
     const html = docToHtml(markdownToDoc("```gallery\n![a](/assets/img/post/a.jpg)\n![b](/assets/img/post/b.webp)\n```"));
-    expect(html).toContain('src="https://stevehoang.com/assets/img/post/a.webp" data-src="/assets/img/post/a.jpg"');
-    expect(html).toContain('src="https://stevehoang.com/assets/img/post/b.webp" data-src="/assets/img/post/b.webp"');
-    expect(html).not.toContain("/resized/");
+    expect(html).toContain('src="https://stevehoang.com/assets/img/resized/960/post/a.webp" data-src="/assets/img/post/a.jpg"');
+    expect(html).toContain('src="https://stevehoang.com/assets/img/resized/960/post/b.webp" data-src="/assets/img/post/b.webp"');
+    expect(fullSrc("https://stevehoang.com/assets/img/resized/960/post/a.webp")).toBe("https://stevehoang.com/assets/img/post/a.webp");
+    expect(docToMarkdown(htmlToDoc(html))).not.toContain("/resized/");
     const pasted = htmlToDoc('<p><img src="https://stevehoang.com/assets/img/resized/960/post/a.webp" alt="a"></p>');
     expect(JSON.stringify(pasted)).toContain('"src":"/assets/img/post/a.webp"');
     setSiteUrl("");

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { markdownToDoc, parsePost } from "./import.ts";
 import { docToMarkdown } from "./markdown.ts";
-import { originalSrc, previewSrc, setSiteUrl } from "./site.ts";
+import { fullSrc, originalSrc, previewSrc, setSiteUrl } from "./site.ts";
 
 describe("photo text", () => {
   it.each([
@@ -57,11 +57,15 @@ describe("photo text, any characters", () => {
 });
 
 describe("photo previews", () => {
-  it("shows the original as the site serves it, never a resized copy", () => {
+  it("shows the site's small 960 copy, and the original only when there is no copy", () => {
     setSiteUrl("https://stevehoang.com");
-    expect(previewSrc("/assets/img/post/a.webp")).toBe("https://stevehoang.com/assets/img/post/a.webp");
-    expect(previewSrc("/assets/img/post/b.jpg")).toBe("https://stevehoang.com/assets/img/post/b.webp");
-    expect(previewSrc("/assets/img/avatar.png")).toBe("https://stevehoang.com/assets/img/avatar.png");
+    expect(previewSrc("/assets/img/post/a.webp")).toBe("https://stevehoang.com/assets/img/resized/960/post/a.webp");
+    expect(previewSrc("/assets/img/post/b.jpg")).toBe("https://stevehoang.com/assets/img/resized/960/post/b.webp");
+    expect(previewSrc("/assets/img/avatar.png")).toBe("https://stevehoang.com/assets/img/resized/960/avatar.png.webp");
+    expect(fullSrc(previewSrc("/assets/img/post/a.webp"))).toBe("https://stevehoang.com/assets/img/post/a.webp");
+    expect(fullSrc(previewSrc("/assets/img/post/b.jpg"))).toBe("https://stevehoang.com/assets/img/post/b.webp");
+    expect(fullSrc(previewSrc("/assets/img/avatar.png"))).toBe("https://stevehoang.com/assets/img/avatar.png");
+    expect(fullSrc("https://stevehoang.com/assets/img/post/a.webp")).toBe("https://stevehoang.com/assets/img/post/a.webp");
     expect(previewSrc("/assets/img/post/c.gif")).toBe("https://stevehoang.com/assets/img/post/c.gif");
     expect(previewSrc("/assets/img/post/a.webp?v=2")).toBe("https://stevehoang.com/assets/img/post/a.webp?v=2");
     expect(previewSrc("https://example.com/a.webp")).toBe("https://example.com/a.webp");

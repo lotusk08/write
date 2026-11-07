@@ -1,5 +1,5 @@
 import { isLocalSrc, localId, releaseDisplays, resolveDisplaySrc } from "../lib/db.ts";
-import { convertedSrc } from "../lib/site.ts";
+import { convertedSrc, fullSrc } from "../lib/site.ts";
 import { isDropbox } from "../../shared/media.ts";
 import { embedField, embedTag, embedUrl, playableUrl, youtubeOf } from "./blog.ts";
 import { BLANK_SRC, TRANSIENT } from "./bridge.ts";
@@ -27,6 +27,11 @@ function applyTheme(figure: HTMLElement): void {
 }
 
 function fallBackToWebp(this: HTMLImageElement): void {
+  const full = fullSrc(this.src);
+  if (full !== this.src) {
+    this.src = full;
+    return;
+  }
   const converted = convertedSrc(this.src);
   this.onerror = null;
   if (converted !== this.src) {

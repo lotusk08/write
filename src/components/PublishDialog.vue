@@ -7,7 +7,7 @@ import { diffLines, type LineDiff } from "../lib/diff.ts";
 import { pinWords } from "../lib/home.ts";
 import { buildPublishPlan, defaultCommitMessage, sendPlan, type PublishPlan, type PublishWarning } from "../lib/publish.ts";
 import type { Settings } from "../lib/settings.ts";
-import { previewSrc } from "../lib/site.ts";
+import { fullSrc, previewSrc } from "../lib/site.ts";
 import { datePrefix } from "../lib/text.ts";
 import Dialog from "./Dialog.vue";
 import SignIn from "./SignIn.vue";
@@ -112,6 +112,14 @@ watch(error, async (text) => {
     (warningList.value?.querySelector("button") ?? primary.value)?.focus();
   }
 });
+
+function fullThumb(event: Event): void {
+  const img = event.target as HTMLImageElement;
+  const full = fullSrc(img.src);
+  if (full !== img.src) {
+    img.src = full;
+  }
+}
 
 async function thumb(src: string) {
   if (!thumbs.has(src)) {
@@ -326,6 +334,7 @@ const committing = computed(() => Boolean(plan.value && sent.value >= plan.value
           :data-local-src="isLocalSrc(cover) ? cover : undefined"
           alt=""
           class="publish-cover"
+          @error="fullThumb"
         />
         <div>
           <p class="publish-title">{{ draft.meta.title || "Untitled" }}</p>

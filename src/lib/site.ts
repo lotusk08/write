@@ -24,8 +24,20 @@ export function convertedSrc(src: string): string {
   return src.replace(/(\/assets\/img\/post\/[^?#]+)\.(?:jpe?g|png|tiff?)$/i, "$1.webp");
 }
 
+const PREVIEW_WIDTH = 960;
+
 export function previewSrc(src: string): string {
-  return shown.get(src) ?? siteSrc(src.startsWith("/") && !src.startsWith("//") ? convertedSrc(src) : src);
+  const path = src.startsWith("/") && !src.startsWith("//") ? convertedSrc(src) : src;
+  const rest = /^\/assets\/img\/(?!resized\/)([^?#]+\.(?:jpe?g|png|webp|tiff?))$/i.exec(path)?.[1];
+  if (!site || shown.has(src) || !rest) {
+    return shown.get(src) ?? siteSrc(path);
+  }
+  return `${site}/assets/img/resized/${PREVIEW_WIDTH}/${/\.webp$/i.test(rest) ? rest : `${rest}.webp`}`;
+}
+
+export function fullSrc(url: string): string {
+  const original = originalSrc(url);
+  return original === url ? url : siteSrc(original);
 }
 
 export function originalSrc(src: string): string {
